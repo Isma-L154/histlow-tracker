@@ -49,8 +49,27 @@ class TestFormatMoney:
     def test_regional_conventions(self, minor: int, currency: str, expected: str) -> None:
         assert format_money(Money(minor, currency)) == expected
 
-    def test_large_amounts_keep_both_decimals(self) -> None:
-        assert format_money(Money(123456, "EUR")) == "1234,56 €"
+    def test_thousands_are_grouped(self) -> None:
+        assert format_money(Money(123456, "EUR")) == "1.234,56 €"
+        assert format_money(Money(123456789, "USD")) == "$1,234,567.89"
+
+    @pytest.mark.parametrize(
+        ("minor", "expected"),
+        [
+            # Live Steam values for the Costa Rica storefront. Steam reports
+            # colones in hundredths, but they are never written that way.
+            (1500000, "₡15.000"),
+            (864000, "₡8.640"),
+            (2112000, "₡21.120"),
+            (3750000, "₡37.500"),
+            (0, "₡0"),
+        ],
+    )
+    def test_colones_drop_the_unused_decimals(self, minor: int, expected: str) -> None:
+        assert format_money(Money(minor, "CRC")) == expected
+
+    def test_colones_keep_decimals_when_they_are_not_zero(self) -> None:
+        assert format_money(Money(1500050, "CRC")) == "₡15.000,50"
 
 
 class TestBuildPayload:
