@@ -54,7 +54,7 @@
       "record_marker prefixes games whose sale beat every earlier price. It is empty by default because require_new_record is on, so every reported game is already a record and the marker would be noise. Set it to something like \"🔥 \" if you turn that rule off."
     ],
     "headline_template": "🔥 {count} en nuevo mínimo histórico",
-    "separator": " · ",
+    "separator": "\n",
     "record_marker": ""
   },
 

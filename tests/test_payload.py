@@ -100,8 +100,21 @@ class TestBuildPayload:
             [deal(title="Silksong"), deal(app_id=2, title="Hades II")],
             generated_at=GENERATED_AT,
             headline_template=HEADLINE,
+            separator="\n",
         )
-        assert payload["summary"] == "Silksong 9,99 € · Hades II 9,99 €"
+        assert payload["summary"] == "Silksong 9,99 €\nHades II 9,99 €"
+
+    def test_one_game_per_line_stays_readable_as_the_list_grows(self) -> None:
+        payload = build_payload(
+            [deal(app_id=i, title=f"Game {i}") for i in range(1, 6)],
+            generated_at=GENERATED_AT,
+            headline_template=HEADLINE,
+            separator="\n",
+        )
+
+        lines = payload["summary"].split("\n")
+        assert len(lines) == 5
+        assert lines[0] == "Game 1 9,99 €"
 
     def test_a_matched_low_is_not_flagged_as_a_record(self) -> None:
         payload = build_payload(
