@@ -75,7 +75,10 @@ class ScheduleConfig:
     one. Changing the cadence means editing the cron and this together.
     """
 
-    min_interval_hours: int = 3
+    #: 20 rather than 24 for a once-daily cron: GitHub delays scheduled runs
+    #: by minutes to hours, and a strict 24 would skip a whole day whenever one
+    #: firing ran late and the next ran on time.
+    min_interval_hours: int = 20
 
     def __post_init__(self) -> None:
         if not 1 <= self.min_interval_hours <= 24:
