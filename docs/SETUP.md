@@ -52,7 +52,12 @@ tracker with nothing to report.
 2. Verify the account email. Unverified accounts get a lower rate limit.
 3. Create an application at
    [isthereanydeal.com/apps/my](https://isthereanydeal.com/apps/my/).
-4. Copy the key into `.env`.
+4. Copy the value labelled **API key** into `.env`.
+
+> Registering an app issues three credentials at once: an **API key**, an OAuth
+> **Client ID** and an OAuth **Client Secret**. Only the API key works here.
+> Supplying either OAuth value returns `403 Invalid or expired api key`, which
+> reads like an expiry problem but is really the wrong credential.
 
 ### `GIST_TOKEN`
 
@@ -116,7 +121,7 @@ At **Settings → Secrets and variables → Actions**, add:
 | `ITAD_API_KEY` | the ITAD key |
 | `GIST_ID` | from step 3 |
 | `GIST_TOKEN` | the `gist`-scoped token |
-| `STORE_COUNTRY` | optional, defaults to `ES` |
+| `STORE_COUNTRY` | optional, defaults to `CR` |
 
 Then run the workflow once by hand: **Actions → tracker → Run workflow**,
 leaving **force** checked.

@@ -17,18 +17,44 @@ whatever language the user configured.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 
 from .domain import Deal, Money
 
 PAYLOAD_VERSION = 1
 
-#: Rendered before the amount for these currencies, after it for the rest.
-_SYMBOL_PREFIX = {"USD": "$", "GBP": "£"}
-_SYMBOL_SUFFIX = {"EUR": "€"}
 
-#: Currencies conventionally written with a decimal comma.
-_COMMA_DECIMAL = frozenset({"EUR"})
+@dataclass(frozen=True, slots=True)
+class CurrencyFormat:
+    """How one currency is conventionally written.
+
+    `hide_zero_minor` covers currencies whose smallest denomination is not used
+    in practice. Steam still reports colones in hundredths, so ₡15.000,00 is
+    technically accurate but nobody writes it that way.
+    """
+
+    symbol: str
+    symbol_leads: bool
+    decimal_mark: str
+    group_mark: str
+    hide_zero_minor: bool = False
+
+
+_FORMATS = {
+    "EUR": CurrencyFormat("€", False, ",", "."),
+    "GBP": CurrencyFormat("£", True, ".", ","),
+    "USD": CurrencyFormat("$", True, ".", ","),
+    "CRC": CurrencyFormat("₡", True, ",", ".", hide_zero_minor=True),
+    "MXN": CurrencyFormat("$", True, ".", ","),
+    "BRL": CurrencyFormat("R$", True, ",", "."),
+    "ARS": CurrencyFormat("$", True, ",", ".", hide_zero_minor=True),
+    "CLP": CurrencyFormat("$", True, ",", ".", hide_zero_minor=True),
+    "COP": CurrencyFormat("$", True, ",", ".", hide_zero_minor=True),
+}
+
+#: Anything unlisted renders as `1234.56 XYZ`: unambiguous, if unpolished.
+_FALLBACK = CurrencyFormat("", False, ".", ",")
 
 
 def format_money(money: Money) -> str:
@@ -37,15 +63,16 @@ def format_money(money: Money) -> str:
     Display only. The integer minor units remain the single source of truth for
     every comparison; this string never feeds back into one.
     """
-    units, cents = divmod(money.minor_units, 100)
-    separator = "," if money.currency in _COMMA_DECIMAL else "."
-    number = f"{units}{separator}{cents:02d}"
+    spec = _FORMATS.get(money.currency, _FALLBACK)
+    units, minor = divmod(money.minor_units, 100)
 
-    if money.currency in _SYMBOL_PREFIX:
-        return f"{_SYMBOL_PREFIX[money.currency]}{number}"
-    if money.currency in _SYMBOL_SUFFIX:
-        return f"{number} {_SYMBOL_SUFFIX[money.currency]}"
-    return f"{number} {money.currency}"
+    number = f"{units:,}".replace(",", spec.group_mark)
+    if not (spec.hide_zero_minor and minor == 0):
+        number = f"{number}{spec.decimal_mark}{minor:02d}"
+
+    if not spec.symbol:
+        return f"{number} {money.currency}"
+    return f"{spec.symbol}{number}" if spec.symbol_leads else f"{number} {spec.symbol}"
 
 
 def build_payload(

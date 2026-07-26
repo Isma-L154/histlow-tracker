@@ -65,7 +65,7 @@ jobs:
           STEAM_ID64: ${{ secrets.STEAM_ID64 }}
           # Not sensitive, but kept overridable as a secret so the region can
           # be changed without a commit. Falls back rather than failing the run.
-          STORE_COUNTRY: ${{ secrets.STORE_COUNTRY || 'ES' }}
+          STORE_COUNTRY: ${{ secrets.STORE_COUNTRY || 'CR' }}
           ITAD_API_KEY: ${{ secrets.ITAD_API_KEY }}
           GIST_ID: ${{ secrets.GIST_ID }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
