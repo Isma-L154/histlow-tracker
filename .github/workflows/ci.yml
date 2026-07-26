@@ -1,0 +1,60 @@
+name: ci
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the floor declared in pyproject; 3.12 is what the tracker
+        # workflow runs. Both are exercised so neither can drift.
+        python-version: ["3.11", "3.12"]
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install development dependencies
+        run: python -m pip install --disable-pip-version-check -e ".[dev]"
+
+      - name: Lint
+        run: python -m ruff check .
+
+      - name: Test
+        run: python -m pytest
+
+      # The runtime must stay dependency-free. Importing the whole package on a
+      # bare interpreter is what proves it, rather than trusting pyproject.
+      - name: Verify the runtime has no third-party dependencies
+        env:
+          PYTHONPATH: src
+        run: |
+          python -m venv /tmp/bare
+          /tmp/bare/bin/python -c "
+          import importlib, pkgutil, sys
+          sys.path.insert(0, 'src')
+          import histlow
+          for module in pkgutil.iter_modules(histlow.__path__):
+              importlib.import_module(f'histlow.{module.name}')
+          print('all modules import on a bare interpreter')
+          "

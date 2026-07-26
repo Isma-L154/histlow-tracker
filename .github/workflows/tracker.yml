@@ -1,0 +1,82 @@
+name: tracker
+
+# Fires every three hours. Whether a given firing does real work is decided in
+# config.json, not here: GitHub cron expressions are static, so changing the
+# cadence would otherwise mean editing this file. Outside a sale window the
+# script exits in milliseconds without making a single request.
+on:
+  schedule:
+    - cron: "15 */3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Bypass the schedule gate and run now"
+        type: boolean
+        default: true
+      dry_run:
+        description: "Print the payload instead of publishing it"
+        type: boolean
+        default: false
+
+# The job reads the repository and nothing else. Publishing uses a separate
+# gist-scoped token, so a compromised workflow cannot touch this repository.
+permissions:
+  contents: read
+
+# Two runs must never interleave: they would race on the shared state cache and
+# could double-notify. Queue rather than cancel, so a scheduled run already in
+# flight is allowed to finish.
+concurrency:
+  group: tracker
+  cancel-in-progress: false
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Secrets are never exposed to a fork, and this makes that structural
+    # rather than incidental.
+    if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'Isma-L154'
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Restores the identity cache and alert state from the previous run.
+      # A miss is harmless: the tracker rebuilds both, at the cost of one
+      # round of lookups and possibly one repeated notification.
+      - name: Restore state
+        uses: actions/cache/restore@v4
+        with:
+          path: var
+          key: histlow-state-${{ github.run_id }}
+          restore-keys: |
+            histlow-state-
+
+      - name: Run tracker
+        env:
+          PYTHONPATH: src
+          STEAM_ID64: ${{ secrets.STEAM_ID64 }}
+          STORE_COUNTRY: ${{ secrets.STORE_COUNTRY }}
+          ITAD_API_KEY: ${{ secrets.ITAD_API_KEY }}
+          GIST_ID: ${{ secrets.GIST_ID }}
+          GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: |
+          python -m histlow \
+            ${{ inputs.force && '--force' || '' }} \
+            ${{ inputs.dry_run && '--dry-run' || '' }}
+
+      # Runs even on failure so that identity lookups already paid for are not
+      # discarded. The key is unique per run; restore-keys picks the newest.
+      - name: Save state
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: var
+          key: histlow-state-${{ github.run_id }}
