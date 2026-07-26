@@ -211,22 +211,28 @@ day outside sale windows.
 
 ### Cadence
 
-Fully controlled by `config.json`; the workflow YAML never changes.
+Every three hours, all year round, with no seasonal calendar to maintain. A
+discount appearing on an ordinary weekday is picked up within hours.
 
-- Outside a sale window: once a day, anchored to `daily_run_hours_utc`.
-- Inside a window listed in `sale_windows`: every `interval_hours`.
-
-Sale dates are estimates. Update them when Valve announces the real ones.
+`schedule.min_interval_hours` in `config.json` only prevents the same work
+happening twice; keep it equal to the cron in `tracker.yml`.
 
 ### Cost
 
-Roughly three HTTP requests and a few seconds of runtime per run, well inside
-the free tier for a private repository.
+About 14 seconds and a handful of HTTP requests per run, so roughly 240 billed
+minutes a month against the 2000-minute free tier for private repositories.
 
 ### Scheduled workflows get disabled
 
-GitHub disables cron workflows in repositories with no activity for 60 days,
-after sending a warning email. A single commit resets the clock.
+GitHub disables cron workflows in repositories with no commit on the default
+branch for 60 days. The tracker writes to a gist and never to this repository,
+so a quiet stretch would switch the cron off silently and the alerts would
+simply stop.
+
+`keepalive.yml` handles this. It runs on the 1st and 15th of each month and
+commits a timestamp only when the last commit is more than 45 days old, so an
+active month adds nothing to the history. It is the only workflow with
+`contents: write`, and deliberately holds no secrets.
 
 ### Troubleshooting
 

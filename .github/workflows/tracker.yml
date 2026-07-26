@@ -1,9 +1,13 @@
 ﻿name: tracker
 
-# Fires every three hours. Whether a given firing does real work is decided in
-# config.json, not here: GitHub cron expressions are static, so changing the
-# cadence would otherwise mean editing this file. Outside a sale window the
-# script exits in milliseconds without making a single request.
+# Every three hours, all year round. There is no seasonal calendar: no
+# official Steam API publishes the sale dates, hand-maintained ones rot, and
+# the schedule optimised the wrong thing anyway - a discount appearing on an
+# ordinary Tuesday is exactly what this exists to catch.
+#
+# At 14 seconds a run this costs about 240 billed minutes a month against a
+# 2000-minute free tier. `schedule.min_interval_hours` in config.json guards
+# against a duplicated firing and should match the cron below.
 on:
   schedule:
     - cron: "15 */3 * * *"

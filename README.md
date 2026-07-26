@@ -99,8 +99,11 @@ Steam sales run for days, so this costs nothing in practice.
 
 ## Repository layout
 
+Runs every three hours, year round. Worst-case latency between a price drop
+and the notification is one polling interval on each side.
+
 ```
-.github/workflows/     CI and the scheduled tracker run
+.github/workflows/     CI, the scheduled tracker run, and the cron keepalive
 src/histlow/
   domain.py            Frozen dataclasses. No I/O.
   config.py            Environment + config.json loading and validation
@@ -110,7 +113,7 @@ src/histlow/
   state.py             Alert de-duplication across runs
   selector.py          Pure decision logic: which deals qualify
   publisher.py         Payload rendering and gist upload
-  scheduling.py        Sale-window gate
+  scheduling.py        Guard against running the same work twice
   pipeline.py          Orchestration
 tests/                 Unit tests; no network access required
 docs/                  iOS Shortcut setup, operations runbook

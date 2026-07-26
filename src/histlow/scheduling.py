@@ -1,13 +1,21 @@
 """Decides whether a given cron firing should do real work.
 
-GitHub Actions cron expressions are static, so the workflow fires on one fixed
-frequent cadence and this module gates it. Changing how often the tracker runs
-is therefore a `config.json` edit, never a YAML edit.
+The workflow fires every few hours and every firing does real work. There is no
+seasonal schedule, and that is a deliberate simplification.
 
-The gate keys off elapsed time since the last real run rather than matching the
-clock exactly. GitHub routinely delays scheduled runs by minutes and
-occasionally drops one entirely; an exact hour match would silently skip a day
-each time that happened.
+An earlier design ran once a day normally and escalated to every three hours
+during hand-maintained sale windows. It had two problems. The dates had to be
+kept current by hand, since no official Steam API publishes them and the one
+site that tracks them accurately is off limits. Worse, it optimised the wrong
+thing: a discount appearing on an ordinary Tuesday would wait up to a day,
+which is the case the tracker exists for.
+
+Running always costs about 240 billed minutes a month against a 2000-minute
+free tier, and roughly thirteen HTTP requests per run. Paying that removes an
+entire class of maintenance and cuts worst-case latency from a day to hours.
+
+What remains is a single guard against doing the same work twice, which the
+elapsed-time check below provides.
 """
 
 from __future__ import annotations
@@ -17,18 +25,11 @@ from datetime import datetime, timedelta
 
 from .config import ScheduleConfig
 
-#: Absorbs GitHub's scheduling drift. Without it a run arriving 2 minutes shy
-#: of the interval would be skipped, pushing the real cadence out by a full
-#: cron slot every time.
+#: Absorbs GitHub's scheduling drift. Scheduled runs are routinely a few
+#: minutes late and occasionally early; without this, a firing arriving just
+#: shy of the interval would be skipped and the real cadence would slip by a
+#: whole cron slot every time it happened.
 DRIFT_GRACE = timedelta(minutes=20)
-
-#: Outside a sale window the daily run is anchored to a configured hour, and
-#: this guard stops two firings within that same hour from both proceeding.
-MIN_DAILY_GAP = timedelta(hours=20)
-
-#: Upper bound on silence. If the anchored hour is missed - a dropped cron, a
-#: long outage - the next firing runs anyway rather than waiting another day.
-STALE_AFTER = timedelta(hours=26)
 
 
 @dataclass(frozen=True, slots=True)
@@ -37,7 +38,6 @@ class RunDecision:
 
     should_run: bool
     reason: str
-    window_name: str | None = None
 
 
 def decide(
@@ -60,24 +60,15 @@ def decide(
         # is wrong. Running is the safe direction: at worst it repeats work.
         return RunDecision(True, "recorded last run is in the future")
 
-    window = schedule.active_window(now.date())
-    if window is not None:
-        interval = timedelta(hours=window.interval_hours)
-        if elapsed + DRIFT_GRACE >= interval:
-            return RunDecision(True, f"sale cadence every {window.interval_hours}h", window.name)
-        return RunDecision(
-            False,
-            f"{_format(elapsed)} since last run, sale cadence is {window.interval_hours}h",
-            window.name,
-        )
+    interval = timedelta(hours=schedule.min_interval_hours)
+    if elapsed + DRIFT_GRACE >= interval:
+        return RunDecision(True, f"{_format(elapsed)} since last run")
 
-    if elapsed >= STALE_AFTER:
-        return RunDecision(True, f"catch-up, {_format(elapsed)} since last run")
-
-    if now.hour in schedule.daily_run_hours_utc and elapsed >= MIN_DAILY_GAP:
-        return RunDecision(True, f"daily slot {now.hour:02d}:00 UTC")
-
-    return RunDecision(False, f"{_format(elapsed)} since last run, outside the daily slot")
+    return RunDecision(
+        False,
+        f"only {_format(elapsed)} since last run, minimum is "
+        f"{schedule.min_interval_hours}h",
+    )
 
 
 def _format(delta: timedelta) -> str:
