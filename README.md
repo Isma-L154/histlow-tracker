@@ -1,7 +1,8 @@
 # Steam HistLow Tracker
 
-Watches a public Steam wishlist and raises an alert only when a game is
-discounted **to or below its all-time low price on Steam**.
+Watches a public Steam wishlist and raises an alert only when a game's sale
+**beats its all-time low price on Steam** — a new record, not a return to an
+old one.
 
 Runs as a GitHub Actions cron job. Zero runtime dependencies, zero servers,
 zero cost. Notifications land on iOS through the pre-installed Shortcuts app,
@@ -19,7 +20,9 @@ GitHub Actions (cron)
         |             ^ filter: keep only discounted titles
         |  3. ITAD    - games/storelow/v2 (shops=[61]) -> all-time Steam low
         |             ^ filter: current <= historical low
-        |  4. State   - suppress anything already alerted
+        |  4. ITAD    - games/history/v2 -> did this sale set that low?
+        |             ^ filter: keep only new records
+        |  5. State   - suppress anything already alerted
         |
         v
   Secret GitHub Gist  (payload.json)
@@ -38,6 +41,48 @@ IsThereAnyDeal's generic `games/historylow/v1` returns the lowest price across
 price would essentially never match that figure and the tracker would never
 fire. `games/storelow/v2` scoped to `shops=[61]` (Steam) is the correct
 comparison and the reason this project works at all.
+
+### Why a new record, not just the all-time low
+
+Being *at* the all-time low and *setting* it are different events, and the
+stores label them differently. Steam tends to repeat a title's deepest
+discount, so a game can sit at its record price in sale after sale without ever
+going lower.
+
+`alerts.require_new_record` keeps only the sales that actually went lower.
+This makes alerts considerably rarer by design. Set it to `false` to be told
+whenever a game is merely at its low again.
+
+Deciding this needs `games/history/v2`, because the current price cannot answer
+it: ITAD records a new low the instant Steam drops the price, so by the time
+the tracker reads it, current and low are always equal. The test used instead
+is exact — the sale set the record precisely when the newest history entry
+carries the recorded low's timestamp, and ITAD stamps both identically.
+
+A game whose history cannot be loaded is dropped rather than assumed to be a
+record, and the run logs that distinctly so a lookup failure is not mistaken
+for a quiet day.
+
+### Why two regions
+
+ITAD does not carry price history in every currency Steam sells in. It reports
+the Costa Rican and Mexican storefronts in USD, not in colones or pesos, and
+comparing a colón price against a dollar low is meaningless.
+
+So the tracker splits the two jobs:
+
+- `STORE_COUNTRY` is where you buy. It sets the prices in the notification, in
+  the currency you actually pay.
+- `COMPARISON_COUNTRY` is a region ITAD does track. The at-or-below decision
+  happens there.
+
+Steam applies the same discount percentage worldwide, so a title at its
+all-time USD low is at its all-time local low too. When ITAD already tracks
+your currency, set the two to the same value and the extra request disappears.
+
+If every candidate fails the currency check the run raises rather than
+returning nothing, because "no deals" and "the comparison is broken" would
+otherwise look identical.
 
 ### Why the phone polls instead of receiving a push
 
