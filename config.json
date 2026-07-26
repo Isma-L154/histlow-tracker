@@ -1,0 +1,51 @@
+{
+  "$comment": [
+    "Non-secret runtime configuration. Safe to commit and to review in a diff.",
+    "Every secret lives in .env / GitHub Actions secrets - never here.",
+    "The workflow cron fires every 3 hours; this file decides whether a given",
+    "firing does real work, so the cadence changes without touching any YAML."
+  ],
+
+  "schedule": {
+    "$comment": "All hours are UTC. Steam flips prices at 10:00 America/Los_Angeles, i.e. 17:00 UTC in summer and 18:00 UTC in winter.",
+    "daily_run_hours_utc": [18],
+    "sale_windows": [
+      {
+        "name": "Steam Autumn Sale 2026",
+        "start": "2026-11-24",
+        "end": "2026-12-01",
+        "interval_hours": 3
+      },
+      {
+        "name": "Steam Winter Sale 2026",
+        "start": "2026-12-18",
+        "end": "2027-01-05",
+        "interval_hours": 3
+      },
+      {
+        "name": "Steam Spring Sale 2027",
+        "start": "2027-03-11",
+        "end": "2027-03-18",
+        "interval_hours": 3
+      },
+      {
+        "name": "Steam Summer Sale 2027",
+        "start": "2027-06-24",
+        "end": "2027-07-08",
+        "interval_hours": 3
+      }
+    ]
+  },
+
+  "alerts": {
+    "$comment": "A deal qualifies when the current Steam price is at or below the historical Steam low. Comparisons run on integer minor units, never floats.",
+    "min_discount_percent": 1,
+    "reprice_threshold_minor": 1,
+    "max_items_in_payload": 25
+  },
+
+  "state": {
+    "$comment": "Entries older than this are purged so the state file cannot grow without bound.",
+    "retention_days": 180
+  }
+}
