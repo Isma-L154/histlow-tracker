@@ -56,6 +56,7 @@ class RunResult:
     wishlist_size: int = 0
     discounted: int = 0
     qualifying: int = 0
+    record_setting: int = 0
     alerted: int = 0
     published_url: str = ""
 
@@ -64,7 +65,8 @@ class RunResult:
             return f"skipped: {self.reason}"
         return (
             f"{self.wishlist_size} wishlisted -> {self.discounted} discounted -> "
-            f"{self.qualifying} at all-time low -> {self.alerted} newly alerted"
+            f"{self.qualifying} at all-time low -> {self.record_setting} beat it -> "
+            f"{self.alerted} newly alerted"
         )
 
 
@@ -160,14 +162,21 @@ def _execute(
         settings, reference_steam, store_quotes, discounted
     )
 
-    qualifying = selector.qualifying_deals(store_quotes, reference_quotes, identities, lows)
-    log.info("%d discounted apps are at or below their all-time Steam low", len(qualifying))
+    at_low = selector.qualifying_deals(store_quotes, reference_quotes, identities, lows)
+    log.info("%d discounted apps are at or below their all-time Steam low", len(at_low))
 
-    fresh = selector.unreported_deals(qualifying, state, settings.alerts)
+    # History distinguishes a sale that beat every earlier price from one
+    # merely returning to an old record. It runs on this set only - already
+    # narrowed to games at their low - so it costs a handful of requests.
+    at_low = selector.annotate_records(at_low, _record_statuses(itad, identities, lows, at_low))
+
+    candidates = at_low
+    if settings.alerts.require_new_record:
+        candidates = selector.record_setting_deals(at_low)
+        _log_record_filter(at_low, candidates)
+
+    fresh = selector.unreported_deals(candidates, state, settings.alerts)
     ranked = selector.rank_for_payload(fresh, settings.alerts)
-    # History is loaded last, for the capped set only: it costs one request per
-    # game and answers a labelling question, not a "should we alert" one.
-    ranked = selector.annotate_records(ranked, _record_statuses(itad, identities, lows, ranked))
 
     payload = build_payload(
         ranked,
@@ -188,7 +197,8 @@ def _execute(
         reason=reason,
         wishlist_size=len(wishlist),
         discounted=len(discounted),
-        qualifying=len(qualifying),
+        qualifying=len(at_low),
+        record_setting=sum(1 for deal in at_low if deal.record.sets_new_record),
         alerted=len(ranked),
         published_url=published_url,
     )
@@ -212,10 +222,28 @@ def _record_statuses(
             itad.fetch_price_history(identity.itad_id), low
         )
 
-    new_records = sum(1 for status in statuses.values() if status.sets_new_record)
-    if statuses:
-        log.info("%d of %d alerted games set a new record", new_records, len(statuses))
     return statuses
+
+
+def _log_record_filter(at_low: Sequence[Deal], kept: Sequence[Deal]) -> None:
+    """Explains the record filter's decision, naming anything it could not judge.
+
+    An unknown status is dropped, so a failed history lookup silently costs an
+    alert. That has to be visible in the log, because it is indistinguishable
+    from "nothing beat its record" otherwise.
+    """
+    log.info("%d of %d beat their previous record", len(kept), len(at_low))
+
+    unknown = [
+        deal.app_id
+        for deal in at_low
+        if not deal.record.sets_new_record and deal.record.previous_low is None
+    ]
+    matched = len(at_low) - len(kept)
+    if matched:
+        log.info("%d were at their low but did not beat it", matched)
+    if unknown:
+        log.debug("record status could not be established for apps %s", unknown)
 
 
 def _reference_quotes(

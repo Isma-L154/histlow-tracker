@@ -38,17 +38,24 @@
   },
 
   "alerts": {
-    "$comment": "A deal qualifies when the current Steam price is at or below the historical Steam low. Comparisons run on integer minor units, never floats.",
+    "$comment": [
+      "A deal reaches the shortlist when the current Steam price is at or below the historical Steam low. Comparisons run on integer minor units, never floats.",
+      "require_new_record then narrows that shortlist to sales that BEAT every earlier price. A game returning to a record set by an earlier sale stays silent. This makes alerts much rarer on purpose: Steam tends to repeat a title's deepest discount, so a game can sit at its all-time low again and again without ever going lower. Set it to false to hear about those too."
+    ],
+    "require_new_record": true,
     "min_discount_percent": 1,
     "reprice_threshold_minor": 1,
     "max_items_in_payload": 25
   },
 
   "notification": {
-    "$comment": "Wording shown on the phone. Kept out of the source so it can be any language. The only placeholder is {count}. record_marker prefixes games whose current sale beat every earlier price, as opposed to matching a record set previously.",
-    "headline_template": "💸 {count} en mínimo histórico",
+    "$comment": [
+      "Wording shown on the phone. Kept out of the source so it can be any language. The only placeholder is {count}.",
+      "record_marker prefixes games whose sale beat every earlier price. It is empty by default because require_new_record is on, so every reported game is already a record and the marker would be noise. Set it to something like \"🔥 \" if you turn that rule off."
+    ],
+    "headline_template": "🔥 {count} en nuevo mínimo histórico",
     "separator": " · ",
-    "record_marker": "🔥 "
+    "record_marker": ""
   },
 
   "state": {

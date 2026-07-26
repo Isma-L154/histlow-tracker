@@ -118,6 +118,15 @@ class AlertRules:
     reprice_threshold_minor: int = 1
     max_items_in_payload: int = 25
 
+    #: When true, only a sale that beats every earlier price is reported.
+    #: Returning to a record set by an earlier sale stays silent.
+    #:
+    #: This makes alerts considerably rarer, and deliberately so. Steam tends
+    #: to repeat a title's deepest discount, so a game can sit at its all-time
+    #: low repeatedly without ever going lower. Set to false to be told about
+    #: those too.
+    require_new_record: bool = True
+
     def __post_init__(self) -> None:
         if not 0 <= self.min_discount_percent <= 100:
             raise ConfigError(
@@ -138,11 +147,12 @@ class NotificationConfig:
     alert would have fired.
     """
 
-    headline_template: str = "\U0001f4b8 {count} en minimo historico"
+    headline_template: str = "\U0001f525 {count} en nuevo minimo historico"
     separator: str = " · "
-    #: Prefixed to games whose current sale beat every earlier price, as
-    #: opposed to returning to a record set previously.
-    record_marker: str = "\U0001f525 "
+    #: Prefixed to games whose sale beat every earlier price. Empty by default:
+    #: `AlertRules.require_new_record` already restricts reports to records, so
+    #: marking every entry would be noise. Useful when that rule is turned off.
+    record_marker: str = ""
 
     def __post_init__(self) -> None:
         try:
@@ -310,6 +320,9 @@ def _parse_alerts(section: Mapping) -> AlertRules:
         ),
         max_items_in_payload=int(
             section.get("max_items_in_payload", defaults.max_items_in_payload)
+        ),
+        require_new_record=bool(
+            section.get("require_new_record", defaults.require_new_record)
         ),
     )
 

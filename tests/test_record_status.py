@@ -14,7 +14,7 @@ from datetime import UTC, datetime, timedelta
 
 from helpers import make_deal
 from histlow.domain import HistoricalLow, Money, PricePoint, RecordStatus
-from histlow.selector import annotate_records, classify_record
+from histlow.selector import annotate_records, classify_record, record_setting_deals
 
 JULY_14 = datetime(2026, 7, 14, 19, 16, 38, tzinfo=UTC)
 JULY_20 = datetime(2026, 7, 20, 19, 27, 57, tzinfo=UTC)
@@ -94,6 +94,43 @@ class TestClassifyRecord:
 
     def test_a_low_without_a_timestamp_claims_nothing(self) -> None:
         assert classify_record([point(2799, JULY_14)], low(2799, None)).sets_new_record is False
+
+
+class TestRecordSettingDeals:
+    """The alert rule: only sales that beat the previous record are reported."""
+
+    def test_keeps_a_record_breaker(self) -> None:
+        deal = make_deal(app_id=1, record=RecordStatus(True, Money(3499, "EUR")))
+        assert record_setting_deals([deal]) == [deal]
+
+    def test_drops_a_game_merely_matching_its_record(self) -> None:
+        # Dispatch's case: genuinely at its all-time low, but it did not go
+        # lower than the record set in March.
+        matching = make_deal(app_id=2, record=RecordStatus(sets_new_record=False))
+        assert record_setting_deals([matching]) == []
+
+    def test_drops_a_game_whose_history_could_not_be_loaded(self) -> None:
+        # Unknown must never be treated as a record; that would fabricate one.
+        assert record_setting_deals([make_deal(app_id=3)]) == []
+
+    def test_a_first_ever_discount_counts_as_beating_the_record(self) -> None:
+        first = make_deal(app_id=4, record=RecordStatus(sets_new_record=True))
+        assert record_setting_deals([first]) == [first]
+
+    def test_filters_a_mixed_set(self) -> None:
+        breaker = make_deal(app_id=1, title="Beat it", record=RecordStatus(True))
+        matcher = make_deal(app_id=2, title="Matched", record=RecordStatus(False))
+        unknown = make_deal(app_id=3, title="Unknown")
+
+        kept = record_setting_deals([breaker, matcher, unknown])
+        assert [d.title for d in kept] == ["Beat it"]
+
+    def test_order_is_preserved(self) -> None:
+        deals = [make_deal(app_id=i, record=RecordStatus(True)) for i in (3, 1, 2)]
+        assert [d.app_id for d in record_setting_deals(deals)] == [3, 1, 2]
+
+    def test_empty_input(self) -> None:
+        assert record_setting_deals([]) == []
 
 
 class TestAnnotateRecords:
