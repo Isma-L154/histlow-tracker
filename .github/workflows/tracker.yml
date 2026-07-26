@@ -1,4 +1,4 @@
-name: tracker
+﻿name: tracker
 
 # Fires every three hours. Whether a given firing does real work is decided in
 # config.json, not here: GitHub cron expressions are static, so changing the
@@ -41,10 +41,10 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
@@ -52,7 +52,7 @@ jobs:
       # A miss is harmless: the tracker rebuilds both, at the cost of one
       # round of lookups and possibly one repeated notification.
       - name: Restore state
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: var
           key: histlow-state-${{ github.run_id }}
@@ -63,12 +63,14 @@ jobs:
         env:
           PYTHONPATH: src
           STEAM_ID64: ${{ secrets.STEAM_ID64 }}
-          # Neither is sensitive, but both stay overridable as secrets so the
-          # region can change without a commit. They fall back rather than
-          # failing the run. COMPARISON_COUNTRY must be a region ITAD tracks;
-          # see .env.example for why it differs from STORE_COUNTRY.
-          STORE_COUNTRY: ${{ secrets.STORE_COUNTRY || 'CR' }}
-          COMPARISON_COUNTRY: ${{ secrets.COMPARISON_COUNTRY || 'US' }}
+          # Repository variables, not secrets. They are not sensitive, and as
+          # secrets GitHub would redact the literals "CR" and "US" everywhere
+          # they appear in a log - including inside unrelated words, which
+          # mangles the output. Still overridable without a commit.
+          # COMPARISON_COUNTRY must name a region ITAD tracks; see
+          # .env.example for why it differs from STORE_COUNTRY.
+          STORE_COUNTRY: ${{ vars.STORE_COUNTRY || 'CR' }}
+          COMPARISON_COUNTRY: ${{ vars.COMPARISON_COUNTRY || 'US' }}
           ITAD_API_KEY: ${{ secrets.ITAD_API_KEY }}
           GIST_ID: ${{ secrets.GIST_ID }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}
@@ -81,7 +83,7 @@ jobs:
       # discarded. The key is unique per run; restore-keys picks the newest.
       - name: Save state
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: var
           key: histlow-state-${{ github.run_id }}
