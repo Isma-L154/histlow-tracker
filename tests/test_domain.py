@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from histlow.domain import Deal, DomainError, Money, StorePrice
+from histlow.domain import Deal, DomainError, Money, PriceQuote
 
 
 class TestMoney:
@@ -44,12 +44,11 @@ class TestMoney:
         assert len({Money(999, "EUR"), Money(999, "EUR")}) == 1
 
 
-class TestStorePrice:
+class TestPriceQuote:
     def test_rejects_mixed_currencies(self) -> None:
         with pytest.raises(DomainError):
-            StorePrice(
+            PriceQuote(
                 app_id=1,
-                title="Mixed",
                 current=Money(999, "EUR"),
                 regular=Money(1999, "USD"),
                 discount_percent=50,
@@ -57,17 +56,16 @@ class TestStorePrice:
 
     def test_rejects_out_of_range_discount(self) -> None:
         with pytest.raises(DomainError, match="discount out of range"):
-            StorePrice(
+            PriceQuote(
                 app_id=1,
-                title="Bad",
                 current=Money(999, "EUR"),
                 regular=Money(1999, "EUR"),
                 discount_percent=101,
             )
 
     def test_is_discounted_reflects_percentage(self) -> None:
-        full = StorePrice(1, "Full", Money(1999, "EUR"), Money(1999, "EUR"), 0)
-        cut = StorePrice(2, "Cut", Money(999, "EUR"), Money(1999, "EUR"), 50)
+        full = PriceQuote(1, Money(1999, "EUR"), Money(1999, "EUR"), 0)
+        cut = PriceQuote(2, Money(999, "EUR"), Money(1999, "EUR"), 50)
         assert not full.is_discounted
         assert cut.is_discounted
 

@@ -93,11 +93,16 @@ class WishlistEntry:
 
 
 @dataclass(frozen=True, slots=True)
-class StorePrice:
-    """The live Steam price for one app in the configured region."""
+class PriceQuote:
+    """The live Steam price for one app in the configured region.
+
+    Carries no title on purpose. Steam's `appdetails` endpoint only accepts a
+    batch of app ids when the response is narrowed to `filters=price_overview`,
+    and that projection excludes the name. Titles are sourced from ITAD's
+    lookup instead, which the pipeline performs anyway and caches forever.
+    """
 
     app_id: int
-    title: str
     current: Money
     regular: Money
     discount_percent: int
@@ -110,6 +115,19 @@ class StorePrice:
     @property
     def is_discounted(self) -> bool:
         return self.discount_percent > 0
+
+
+@dataclass(frozen=True, slots=True)
+class GameIdentity:
+    """The mapping between a Steam app id and its ITAD record.
+
+    Resolution costs one request per game, so the pipeline caches this
+    permanently: a given app is looked up once in the project's lifetime.
+    """
+
+    app_id: int
+    itad_id: str
+    title: str
 
 
 @dataclass(frozen=True, slots=True)
