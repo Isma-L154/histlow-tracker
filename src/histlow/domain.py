@@ -8,7 +8,7 @@ trivially verifiable.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 STEAM_APP_URL_TEMPLATE = "https://store.steampowered.com/app/{app_id}"
@@ -140,6 +140,37 @@ class HistoricalLow:
 
 
 @dataclass(frozen=True, slots=True)
+class PricePoint:
+    """One entry in a game's Steam price history."""
+
+    price: Money
+    recorded_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class RecordStatus:
+    """Whether the current price run is the one that set the all-time low.
+
+    Distinguishes the two ways a game can be at its record price, which the
+    stores themselves label differently:
+
+    * a *new* historical low, where this sale beat everything before it
+    * *matching* a low set by some earlier sale
+
+    Both are worth an alert - the price is the lowest it has ever been either
+    way - but only the first is news.
+    """
+
+    sets_new_record: bool
+    previous_low: Money | None = None
+
+    @classmethod
+    def unknown(cls) -> RecordStatus:
+        """Used when history could not be loaded; never claims a record."""
+        return cls(sets_new_record=False)
+
+
+@dataclass(frozen=True, slots=True)
 class Deal:
     """A qualifying find: currently priced at or below its all-time Steam low.
 
@@ -166,6 +197,7 @@ class Deal:
     reference_current: Money
     reference_low: Money
     low_recorded_at: datetime | None
+    record: RecordStatus = field(default_factory=RecordStatus.unknown)
 
     def __post_init__(self) -> None:
         self.current._guard_same_currency(self.regular)
@@ -174,11 +206,6 @@ class Deal:
     @property
     def store_url(self) -> str:
         return STEAM_APP_URL_TEMPLATE.format(app_id=self.app_id)
-
-    @property
-    def beats_previous_low(self) -> bool:
-        """True when this price sets a new record rather than matching one."""
-        return self.reference_current < self.reference_low
 
     @property
     def is_cross_region(self) -> bool:

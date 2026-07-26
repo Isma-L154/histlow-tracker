@@ -81,18 +81,18 @@ class TestDiscountedAppIds:
 
 class TestQualifyingDeals:
     def test_matching_the_all_time_low_qualifies(self) -> None:
-        # The central rule: equalling the record still counts.
+        # The central rule: equalling the record still counts. Most alerts are
+        # of this kind, since ITAD records a new low the moment it happens.
         deals = qualifying_deals(
             *same_region({1: quote(1, 999, 1999, 50)}), {1: identity(1)}, {1: low(1, 999)}
         )
         assert [d.app_id for d in deals] == [1]
-        assert not deals[0].beats_previous_low
 
-    def test_beating_the_all_time_low_qualifies_as_a_record(self) -> None:
+    def test_undercutting_the_all_time_low_qualifies(self) -> None:
         deals = qualifying_deals(
             *same_region({1: quote(1, 899, 1999, 55)}), {1: identity(1)}, {1: low(1, 999)}
         )
-        assert deals[0].beats_previous_low
+        assert [d.app_id for d in deals] == [1]
 
     def test_a_price_above_the_low_does_not_qualify(self) -> None:
         assert (
@@ -242,16 +242,7 @@ class TestRankForPayload:
             {app_id: low(app_id, low_amount)},
         )[0]
 
-    def test_record_breakers_lead(self) -> None:
-        matcher = self._deal(1, 999, 999, 90, "Matches")
-        breaker = self._deal(2, 899, 999, 10, "Beats")
-
-        assert [d.title for d in rank_for_payload([matcher, breaker], RULES)] == [
-            "Beats",
-            "Matches",
-        ]
-
-    def test_deeper_discounts_come_first_within_a_group(self) -> None:
+    def test_deeper_discounts_come_first(self) -> None:
         small = self._deal(1, 999, 999, 20, "Small")
         large = self._deal(2, 999, 999, 80, "Large")
 
@@ -267,14 +258,14 @@ class TestRankForPayload:
         deals = [self._deal(i, 999, 999, 50, f"Game {i:02d}") for i in range(10)]
         assert len(rank_for_payload(deals, AlertRules(max_items_in_payload=3))) == 3
 
-    def test_the_cap_keeps_the_most_notable_entries(self) -> None:
+    def test_the_cap_keeps_the_deepest_discounts(self) -> None:
         deals = [
             self._deal(1, 999, 999, 10, "Shallow"),
-            self._deal(2, 999, 999, 90, "Deep"),
-            self._deal(3, 899, 999, 15, "Record"),
+            self._deal(2, 999, 999, 90, "Deepest"),
+            self._deal(3, 999, 999, 45, "Middling"),
         ]
         kept = rank_for_payload(deals, AlertRules(max_items_in_payload=2))
-        assert [d.title for d in kept] == ["Record", "Deep"]
+        assert [d.title for d in kept] == ["Deepest", "Middling"]
 
     def test_empty_input_is_handled(self) -> None:
         assert rank_for_payload([], RULES) == []

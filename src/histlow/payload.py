@@ -81,6 +81,7 @@ def build_payload(
     generated_at: datetime,
     headline_template: str,
     separator: str = " · ",
+    record_marker: str = "",
 ) -> dict:
     """Builds the complete document published to the gist.
 
@@ -89,20 +90,22 @@ def build_payload(
     "nothing on sale" apart from "the tracker has stopped working" by checking
     `generated_at`.
     """
-    rendered = [_render_deal(deal) for deal in deals]
+    rendered = [_render_deal(deal, record_marker) for deal in deals]
 
     return {
         "version": PAYLOAD_VERSION,
         "generated_at": generated_at.isoformat(),
         "count": len(rendered),
+        "new_record_count": sum(1 for item in rendered if item["is_new_record"]),
         "headline": headline_template.format(count=len(rendered)),
         "summary": separator.join(item["summary"] for item in rendered),
         "deals": rendered,
     }
 
 
-def _render_deal(deal: Deal) -> dict:
+def _render_deal(deal: Deal, record_marker: str = "") -> dict:
     price = format_money(deal.current)
+    marker = record_marker if deal.record.sets_new_record else ""
     return {
         "app_id": deal.app_id,
         "title": deal.title,
@@ -112,10 +115,16 @@ def _render_deal(deal: Deal) -> dict:
         "currency": deal.current.currency,
         "regular_price": format_money(deal.regular),
         "discount_percent": deal.discount_percent,
-        "is_new_record": deal.beats_previous_low,
+        # True only when this sale beat every earlier price, matching the
+        # "new historical low" wording the stores themselves use. A game
+        # returning to a record set months ago reports False.
+        "is_new_record": deal.record.sets_new_record,
+        "previous_low": (
+            format_money(deal.record.previous_low) if deal.record.previous_low else None
+        ),
         "low_recorded_at": deal.low_recorded_at.isoformat() if deal.low_recorded_at else None,
         "url": deal.store_url,
-        "summary": f"{deal.title} {price}",
+        "summary": f"{marker}{deal.title} {price}",
         # The pair the decision was actually made on. Exposed so the payload
         # can be audited without re-running the pipeline, and flagged when it
         # is a different currency than the one displayed.

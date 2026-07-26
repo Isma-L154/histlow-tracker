@@ -26,14 +26,22 @@ from collections.abc import Iterator, Sequence
 from datetime import datetime
 from typing import Any
 
-from .domain import ITAD_STEAM_SHOP_ID, DomainError, GameIdentity, HistoricalLow, Money
-from .net import HttpClient, PermanentHttpError
+from .domain import (
+    ITAD_STEAM_SHOP_ID,
+    DomainError,
+    GameIdentity,
+    HistoricalLow,
+    Money,
+    PricePoint,
+)
+from .net import HttpClient, HttpError, PermanentHttpError
 
 log = logging.getLogger(__name__)
 
 BASE_URL = "https://api.isthereanydeal.com"
 LOOKUP_URL = f"{BASE_URL}/games/lookup/v1"
 STORELOW_URL = f"{BASE_URL}/games/storelow/v2"
+HISTORY_URL = f"{BASE_URL}/games/history/v2"
 
 #: Documented maximum for the storelow request body.
 STORELOW_BATCH_SIZE = 200
@@ -120,9 +128,71 @@ class ItadClient:
         return lows
 
 
+    def fetch_price_history(self, itad_id: str) -> list[PricePoint]:
+        """Returns the Steam price log for one game, newest entry first.
+
+        Used only to tell a newly set record apart from a return to an older
+        one, and only for games that already qualified, so at most a handful of
+        calls per run.
+
+        A failure here degrades to an empty log rather than aborting: the alert
+        itself is already decided, and losing the "new record" label is a much
+        smaller loss than losing the notification.
+        """
+        try:
+            document = self._http.get_json(
+                HISTORY_URL,
+                params={
+                    "id": itad_id,
+                    "country": self._country,
+                    "shops": str(ITAD_STEAM_SHOP_ID),
+                },
+                headers=self._headers,
+            )
+        except HttpError as exc:
+            log.warning("could not load price history: %s", exc)
+            return []
+
+        points = _parse_history(document)
+        points.sort(key=lambda point: point.recorded_at, reverse=True)
+        return points
+
+
 # ---------------------------------------------------------------------------
 # Parsing
 # ---------------------------------------------------------------------------
+
+
+def _parse_history(document: Any) -> list[PricePoint]:
+    if not isinstance(document, list):
+        log.warning("price history returned an unexpected payload shape")
+        return []
+
+    points: list[PricePoint] = []
+    for entry in document:
+        if not isinstance(entry, dict):
+            continue
+        recorded_at = _parse_timestamp(entry.get("timestamp"))
+        deal = entry.get("deal")
+        if recorded_at is None or not isinstance(deal, dict):
+            continue
+
+        price = deal.get("price")
+        if not isinstance(price, dict):
+            continue
+        amount_int = price.get("amountInt")
+        currency = price.get("currency")
+        if not isinstance(amount_int, int) or not isinstance(currency, str):
+            continue
+
+        try:
+            points.append(
+                PricePoint(price=Money(amount_int, currency.upper()), recorded_at=recorded_at)
+            )
+        except DomainError:
+            continue
+
+    return points
 
 
 def _parse_storelow_batch(

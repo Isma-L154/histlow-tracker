@@ -16,9 +16,18 @@ The two filters correspond to the optimisation the whole design rests on:
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 
 from .config import AlertRules
-from .domain import Deal, DomainError, GameIdentity, HistoricalLow, PriceQuote
+from .domain import (
+    Deal,
+    DomainError,
+    GameIdentity,
+    HistoricalLow,
+    PricePoint,
+    PriceQuote,
+    RecordStatus,
+)
 from .state import TrackerState
 
 
@@ -126,17 +135,56 @@ def unreported_deals(
 def rank_for_payload(deals: Sequence[Deal], rules: AlertRules) -> list[Deal]:
     """Orders deals by how notable they are and applies the payload cap.
 
-    A price that beats the previous record leads, then the deepest discounts.
-    The cap exists so a storewide sale cannot produce an unreadable
-    notification; the ordering ensures the truncated tail is the least
-    interesting part.
+    Deepest discount first. The cap exists so a storewide sale cannot produce
+    an unreadable notification; the ordering ensures the truncated tail is the
+    least interesting part.
+
+    Record status is deliberately not a sort key here: it is not known until
+    after ranking, because the history lookup runs only on the games that
+    survive this cut.
     """
     ordered = sorted(
         deals,
-        key=lambda deal: (
-            not deal.beats_previous_low,
-            -deal.discount_percent,
-            deal.title.casefold(),
-        ),
+        key=lambda deal: (-deal.discount_percent, deal.title.casefold()),
     )
     return ordered[: rules.max_items_in_payload]
+
+
+def classify_record(
+    history: Sequence[PricePoint], low: HistoricalLow
+) -> RecordStatus:
+    """Decides whether the current sale set the all-time low or merely met it.
+
+    The test is exact rather than heuristic: ITAD stamps the recorded low and
+    the corresponding history entry with the same instant, so the current price
+    run is the record-setting one precisely when the newest history entry
+    carries the low's timestamp.
+
+    Comparing the current price against the recorded low cannot answer this.
+    ITAD updates that low the moment Steam drops the price, so by the time the
+    tracker reads it the two are always equal - which is why the previous
+    version of this check could never report a new record at all.
+    """
+    if not history or low.recorded_at is None:
+        return RecordStatus.unknown()
+
+    newest = max(history, key=lambda point: point.recorded_at)
+    if newest.recorded_at != low.recorded_at:
+        return RecordStatus(sets_new_record=False)
+
+    earlier = [
+        point.price
+        for point in history
+        if point.recorded_at < low.recorded_at and point.price.currency == low.low.currency
+    ]
+    return RecordStatus(sets_new_record=True, previous_low=min(earlier) if earlier else None)
+
+
+def annotate_records(
+    deals: Sequence[Deal], statuses: Mapping[int, RecordStatus]
+) -> list[Deal]:
+    """Attaches record status to each deal, leaving anything unknown alone."""
+    return [
+        replace(deal, record=statuses[deal.app_id]) if deal.app_id in statuses else deal
+        for deal in deals
+    ]

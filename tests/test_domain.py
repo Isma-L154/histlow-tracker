@@ -83,11 +83,10 @@ class TestDeal:
             low_recorded_at=None,
         )
 
-    def test_matching_the_low_is_not_a_new_record(self) -> None:
-        assert not self._deal(999, 999).beats_previous_low
-
-    def test_undercutting_the_low_is_a_new_record(self) -> None:
-        assert self._deal(899, 999).beats_previous_low
+    def test_record_status_defaults_to_claiming_nothing(self) -> None:
+        # Whether a sale set the record needs price history, which the Deal
+        # does not have. Deciding it lives in selector.classify_record.
+        assert self._deal(999, 999).record.sets_new_record is False
 
     def test_store_url_points_at_the_app(self) -> None:
         assert self._deal(999, 999).store_url.endswith("/app/1030300")
@@ -108,7 +107,6 @@ class TestDeal:
             low_recorded_at=None,
         )
         assert deal.is_cross_region
-        assert not deal.beats_previous_low
 
     def test_display_currencies_must_agree_with_each_other(self) -> None:
         with pytest.raises(DomainError):

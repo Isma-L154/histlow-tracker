@@ -51,5 +51,7 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+# `tests` is on the path so shared fixtures live in an ordinary module rather
+# than being imported relatively, which requires a package.
+pythonpath = ["src", "tests"]
 addopts = "-q --strict-markers"

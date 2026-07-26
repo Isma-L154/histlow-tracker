@@ -63,6 +63,7 @@ class FakeItad:
         self._lows = lows
         self.lookups: list[int] = []
         self.low_requests: list[list[int]] = []
+        self.history_requests: list[str] = []
 
     def lookup(self, app_id: int) -> GameIdentity | None:
         self.lookups.append(app_id)
@@ -77,6 +78,12 @@ class FakeItad:
             for i in identities
             if i.app_id in self._lows
         }
+
+    def fetch_price_history(self, itad_id: str) -> list:
+        # Lows above carry no timestamp, so record status stays unknown. The
+        # classification itself is covered in test_record_status.py.
+        self.history_requests.append(itad_id)
+        return []
 
 
 class FakePublisher:
