@@ -211,16 +211,25 @@ day outside sale windows.
 
 ### Cadence
 
-Every three hours, all year round, with no seasonal calendar to maintain. A
-discount appearing on an ordinary weekday is picked up within hours.
+Once a day at `00:17 UTC`, which is `18:17` in Costa Rica year round — the
+country sits at UTC-6 and does not observe daylight saving, so the local time
+never drifts. Sale seasons get no special treatment.
 
-`schedule.min_interval_hours` in `config.json` only prevents the same work
-happening twice; keep it equal to the cron in `tracker.yml`.
+`schedule.min_interval_hours` is 20, not 24, and that is deliberate. GitHub
+delays scheduled runs by minutes to hours; a strict 24 would skip an entire day
+whenever one firing ran late and the next ran on time.
 
 ### Cost
 
-About 14 seconds and a handful of HTTP requests per run, so roughly 240 billed
+About 14 seconds and a handful of HTTP requests per run, so roughly 30 billed
 minutes a month against the 2000-minute free tier for private repositories.
+
+### Re-alerting
+
+A game reported once is not reported again at the same price, or a worse one.
+It alerts again only when it goes strictly cheaper than the price last
+reported. Records are forgotten after `state.retention_days`, so the same game
+can alert afresh years later.
 
 ### Scheduled workflows get disabled
 

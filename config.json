@@ -8,10 +8,10 @@
 
   "schedule": {
     "$comment": [
-      "The workflow fires every 3 hours and every firing does real work, all year round. There is no seasonal calendar to maintain, and a discount appearing on an ordinary weekday is picked up within hours rather than within a day.",
-      "min_interval_hours only guards against doing the same work twice, from a duplicated firing or a manual dispatch landing beside a scheduled one. Keep it equal to the cron interval in .github/workflows/tracker.yml."
+      "The workflow fires once a day at 00:17 UTC, which is 18:17 in Costa Rica year round. Sale seasons get no special treatment: an ordinary Tuesday discount matters just as much.",
+      "min_interval_hours only guards against doing the same work twice, from a duplicated firing or a manual dispatch landing beside a scheduled one. It is deliberately 20 rather than 24: GitHub delays scheduled runs by minutes to hours, and a strict 24 would skip a whole day whenever one firing ran late and the next ran on time."
     ],
-    "min_interval_hours": 3
+    "min_interval_hours": 20
   },
 
   "alerts": {

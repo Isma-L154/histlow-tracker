@@ -1,16 +1,16 @@
 ﻿name: tracker
 
-# Every three hours, all year round. There is no seasonal calendar: no
-# official Steam API publishes the sale dates, hand-maintained ones rot, and
-# the schedule optimised the wrong thing anyway - a discount appearing on an
-# ordinary Tuesday is exactly what this exists to catch.
+# Once a day, every day, with no seasonal calendar. No official Steam API
+# publishes the sale dates, hand-maintained ones rot, and a discount appearing
+# on an ordinary Tuesday is exactly what this exists to catch - so a sale
+# season gets no special treatment.
 #
-# At 14 seconds a run this costs about 240 billed minutes a month against a
-# 2000-minute free tier. `schedule.min_interval_hours` in config.json guards
-# against a duplicated firing and should match the cron below.
+# 00:17 UTC is 18:17 in Costa Rica (UTC-6 all year, no DST). The odd minute is
+# deliberate: GitHub queues scheduled runs hardest on the hour, and a job
+# asking for 00:00 is routinely delayed.
 on:
   schedule:
-    - cron: "15 */3 * * *"
+    - cron: "17 0 * * *"
   workflow_dispatch:
     inputs:
       force:
