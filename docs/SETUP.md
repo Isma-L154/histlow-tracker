@@ -142,34 +142,29 @@ Add these actions in order:
 | 1 | **Get Contents of URL** | the raw gist URL from step 3, method `GET` |
 | 2 | **Get Dictionary from Input** | — |
 | 3 | **Set Variable** | name `payload`, value: *Dictionary* |
-| 4 | **Get Dictionary Value** | get `Value` for key `count` in `payload` |
-| 5 | **Set Variable** | name `count`, value: *Dictionary Value* |
-| 6 | **If** | `count` **is greater than** `0` |
-| 7 | ↳ **Get Dictionary Value** | key `headline` in `payload` |
-| 8 | ↳ **Set Variable** | name `title` |
-| 9 | ↳ **Get Dictionary Value** | key `summary` in `payload` |
-| 10 | ↳ **Set Variable** | name `body` |
-| 11 | ↳ **Show Notification** | Title: `title`, Body: `body` |
-| 12 | **End If** | — |
+| 4 | **Get Dictionary Value** | get `Value` for key `headline` in `payload` |
+| 5 | **Set Variable** | name `title` |
+| 6 | **Get Dictionary Value** | get `Value` for key `summary` in `payload` |
+| 7 | **Set Variable** | name `body` |
+| 8 | **If** | `title` **has any value** |
+| 9 | ↳ **Show Notification** | Title: `title`, Body: `body` |
+| 10 | **End If** | — |
 
-Two steps exist purely to work around Shortcuts behaviour and are not
-optional.
+No numeric comparison appears anywhere, and that is deliberate. Shortcuts
+infers the type of a dictionary value and frequently refuses to treat one as a
+number, leaving *has any value* as the only offered condition — or worse,
+file properties such as *File Size*. Rather than fight that, the payload omits
+`headline` and `summary` entirely when there is nothing to report, so *has any
+value* becomes an exact test.
 
-**Step 2.** Gist raw URLs are served as `text/plain`, so **Get Contents of
-URL** hands back a string rather than a parsed dictionary, and every
-**Get Dictionary Value** after it would fail.
+**Step 2 is not optional.** Gist raw URLs are served as `text/plain`, so
+**Get Contents of URL** hands back a string rather than a parsed dictionary,
+and every **Get Dictionary Value** after it would fail.
 
-**Step 5.** Dropping an **If** directly after **Get Dictionary Value** lets
-Shortcuts infer the operand's type, and it frequently guesses wrong — the
-condition row then offers file properties such as *File Size* instead of a
-numeric comparison. Naming the value first removes the guesswork. If the row
-already shows *File Size*, tap the blue chip and pick the plain value rather
-than a property, or delete the chip and select the `count` variable from the
-**Variables** section.
-
-Run the shortcut with only steps 1-5 in place to check the wiring: the result
-of step 4 should be a bare number. The whole JSON document means step 2 is
-missing; an empty result means the key in step 4 is misspelled.
+To check the wiring, run the shortcut with only steps 1-4 in place. The result
+of step 4 should be the headline text. The whole JSON document instead means
+step 2 is missing; an empty result while the tracker has published a deal
+means the key is misspelled.
 
 Run it once with the play button. If the tracker found a new record, a
 notification appears naming the games and their prices. If not, nothing
