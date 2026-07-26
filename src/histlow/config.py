@@ -267,7 +267,11 @@ def _load_secrets(env: Mapping[str, str]) -> tuple[Secrets, list[str]]:
 
 def _read_config_file(path: Path) -> dict:
     try:
-        raw = path.read_text(encoding="utf-8")
+        # utf-8-sig strips a byte order mark if present and behaves exactly
+        # like utf-8 otherwise. Windows editors and PowerShell's Set-Content
+        # add one silently, and json.loads rejects it outright - a confusing
+        # startup failure for what looks like an untouched file.
+        raw = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError as exc:
         raise ConfigError(f"configuration file not found: {path}") from exc
     except OSError as exc:

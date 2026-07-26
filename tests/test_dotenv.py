@@ -44,6 +44,14 @@ class TestReadDotenv:
     def test_a_missing_file_is_not_an_error(self, tmp_path: Path) -> None:
         assert read_dotenv(tmp_path / "absent.env") == {}
 
+    def test_a_byte_order_mark_does_not_corrupt_the_first_key(self, tmp_path: Path) -> None:
+        # Without utf-8-sig the mark glues to the first key name, which loses
+        # that value silently rather than failing.
+        path = tmp_path / ".env"
+        path.write_bytes(b"\xef\xbb\xbfSTEAM_ID64=76561199094002095\n")
+
+        assert read_dotenv(path) == {"STEAM_ID64": "76561199094002095"}
+
     def test_a_malformed_line_is_skipped(self, tmp_path: Path) -> None:
         path = write(tmp_path, "GOOD=1\nthis line has no equals sign\nALSO_GOOD=2\n")
         assert read_dotenv(path) == {"GOOD": "1", "ALSO_GOOD": "2"}
