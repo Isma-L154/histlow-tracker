@@ -148,7 +148,10 @@ class NotificationConfig:
     """
 
     headline_template: str = "\U0001f525 {count} en nuevo minimo historico"
-    separator: str = " · "
+    #: Joins the per-game lines in the notification body. A newline keeps the
+    #: list readable as it grows; a run reporting eight games is 200 characters
+    #: of unbroken text otherwise.
+    separator: str = "\n"
     #: Prefixed to games whose sale beat every earlier price. Empty by default:
     #: `AlertRules.require_new_record` already restricts reports to records, so
     #: marking every entry would be noise. Useful when that rule is turned off.
