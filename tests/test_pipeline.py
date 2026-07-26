@@ -20,7 +20,14 @@ from histlow.config import (
     Settings,
     StateConfig,
 )
-from histlow.domain import GameIdentity, HistoricalLow, Money, PriceQuote, WishlistEntry
+from histlow.domain import (
+    GameIdentity,
+    HistoricalLow,
+    Money,
+    PricePoint,
+    PriceQuote,
+    WishlistEntry,
+)
 from histlow.pipeline import Paths, run
 from histlow.publisher import PublishError
 
@@ -57,10 +64,28 @@ class FakeSteam:
         return {app_id: self._quotes[app_id] for app_id in app_ids if app_id in self._quotes}
 
 
+RECORD_SET_AT = datetime(2026, 7, 14, 19, 16, 38, tzinfo=UTC)
+LATER_SALE_AT = datetime(2026, 7, 20, 19, 27, 57, tzinfo=UTC)
+EARLIER_AT = datetime(2026, 3, 1, tzinfo=UTC)
+
+
 class FakeItad:
-    def __init__(self, titles: dict[int, str], lows: dict[int, int]) -> None:
+    """Serves identities, lows and a price history consistent with them.
+
+    By default every game's current sale set its record. `matching` names the
+    ones that instead returned to a record from an earlier sale, mirroring the
+    Dispatch case: the low is stamped months before the newest history entry.
+    """
+
+    def __init__(
+        self,
+        titles: dict[int, str],
+        lows: dict[int, int],
+        matching: frozenset[int] = frozenset(),
+    ) -> None:
         self._titles = titles
         self._lows = lows
+        self._matching = matching
         self.lookups: list[int] = []
         self.low_requests: list[list[int]] = []
         self.history_requests: list[str] = []
@@ -74,16 +99,31 @@ class FakeItad:
     def fetch_steam_lows(self, identities) -> dict[int, HistoricalLow]:
         self.low_requests.append([i.app_id for i in identities])
         return {
-            i.app_id: HistoricalLow(i.app_id, Money(self._lows[i.app_id], "EUR"), None)
+            i.app_id: HistoricalLow(
+                i.app_id,
+                Money(self._lows[i.app_id], "EUR"),
+                EARLIER_AT if i.app_id in self._matching else RECORD_SET_AT,
+            )
             for i in identities
             if i.app_id in self._lows
         }
 
-    def fetch_price_history(self, itad_id: str) -> list:
-        # Lows above carry no timestamp, so record status stays unknown. The
-        # classification itself is covered in test_record_status.py.
+    def fetch_price_history(self, itad_id: str) -> list[PricePoint]:
         self.history_requests.append(itad_id)
-        return []
+        app_id = int(itad_id.removeprefix("uuid-"))
+        low = self._lows.get(app_id, 0)
+
+        if app_id in self._matching:
+            # Newest entry is later than the recorded low: matching, not new.
+            return [
+                PricePoint(Money(low, "EUR"), LATER_SALE_AT),
+                PricePoint(Money(low, "EUR"), EARLIER_AT),
+            ]
+        # Newest entry carries the low's own timestamp: this sale set it.
+        return [
+            PricePoint(Money(low, "EUR"), RECORD_SET_AT),
+            PricePoint(Money(low + 500, "EUR"), EARLIER_AT),
+        ]
 
 
 class FakePublisher:
@@ -314,6 +354,78 @@ class TestScheduleGate:
         )
 
         assert result.ran
+
+
+class TestRecordFilter:
+    """With require_new_record on, only sales that beat the record are sent."""
+
+    def _steam(self) -> FakeSteam:
+        return FakeSteam(
+            wishlist=[1, 2],
+            quotes={1: quote(1, 999, 1999, 50), 2: quote(2, 899, 1999, 55)},
+        )
+
+    def test_a_game_only_matching_its_record_is_not_alerted(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # App 1 returns to an old record, app 2 beats its own.
+        itad = FakeItad(
+            titles={1: "Matched", 2: "Beat it"},
+            lows={1: 999, 2: 899},
+            matching=frozenset({1}),
+        )
+        publisher = FakePublisher()
+
+        result = execute(paths, self._steam(), itad, publisher, monkeypatch=monkeypatch)
+
+        assert result.qualifying == 2  # both are at their all-time low
+        assert result.record_setting == 1  # only one beat it
+        assert [d["title"] for d in publisher.published[0]["deals"]] == ["Beat it"]
+
+    def test_nothing_is_alerted_when_no_record_is_beaten(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        itad = FakeItad(
+            titles={1: "Matched", 2: "Also matched"},
+            lows={1: 999, 2: 899},
+            matching=frozenset({1, 2}),
+        )
+        publisher = FakePublisher()
+
+        result = execute(paths, self._steam(), itad, publisher, monkeypatch=monkeypatch)
+
+        assert result.qualifying == 2
+        assert result.alerted == 0
+        assert publisher.published[0]["count"] == 0
+
+    def test_disabling_the_rule_reports_matches_too(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        itad = FakeItad(
+            titles={1: "Matched", 2: "Beat it"},
+            lows={1: 999, 2: 899},
+            matching=frozenset({1}),
+        )
+        publisher = FakePublisher()
+        settings = make_settings(alerts=AlertRules(require_new_record=False))
+
+        execute(paths, self._steam(), itad, publisher, settings=settings, monkeypatch=monkeypatch)
+
+        assert publisher.published[0]["count"] == 2
+
+    def test_history_is_only_requested_for_games_at_their_low(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # App 2 is discounted but above its low, so it never reaches history.
+        steam = FakeSteam(
+            wishlist=[1, 2],
+            quotes={1: quote(1, 999, 1999, 50), 2: quote(2, 1500, 1999, 25)},
+        )
+        itad = FakeItad(titles={1: "At low", 2: "Above low"}, lows={1: 999, 2: 500})
+
+        execute(paths, steam, itad, FakePublisher(), monkeypatch=monkeypatch)
+
+        assert itad.history_requests == ["uuid-1"]
 
 
 class TestDryRun:

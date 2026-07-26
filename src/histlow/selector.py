@@ -188,3 +188,17 @@ def annotate_records(
         replace(deal, record=statuses[deal.app_id]) if deal.app_id in statuses else deal
         for deal in deals
     ]
+
+
+def record_setting_deals(deals: Sequence[Deal]) -> list[Deal]:
+    """Keeps only sales that beat every earlier price.
+
+    A game returning to a record set by an earlier sale is dropped, even though
+    it is genuinely at its all-time low right now.
+
+    A deal whose history could not be loaded is dropped too, since its status
+    is unknown and claiming a record would be a fabrication. That errs towards
+    silence, which is the safe direction for a false-positive but not for a
+    missed alert - so `pipeline` logs the distinction loudly.
+    """
+    return [deal for deal in deals if deal.record.sets_new_record]
