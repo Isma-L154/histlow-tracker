@@ -100,8 +100,10 @@ class TestSecrets:
 
 
 class TestScheduleConfig:
-    def test_defaults_to_three_hours(self) -> None:
-        assert ScheduleConfig().min_interval_hours == 3
+    def test_the_default_matches_the_shipped_once_daily_cron(self) -> None:
+        # Kept in step with config.json and the cron in tracker.yml, so a
+        # missing schedule section behaves the same as the shipped one.
+        assert ScheduleConfig().min_interval_hours == 20
 
     @pytest.mark.parametrize("hours", [0, -1, 25])
     def test_rejects_an_interval_outside_a_day(self, hours: int) -> None:
@@ -111,7 +113,7 @@ class TestScheduleConfig:
     def test_a_missing_section_uses_the_default(self, tmp_path: Path) -> None:
         path = tmp_path / "config.json"
         path.write_text(json.dumps({}), encoding="utf-8")
-        assert load_settings(VALID_ENV, path).schedule.min_interval_hours == 3
+        assert load_settings(VALID_ENV, path).schedule.min_interval_hours == 20
 
     def test_a_non_numeric_interval_is_reported(self, tmp_path: Path) -> None:
         path = tmp_path / "config.json"
