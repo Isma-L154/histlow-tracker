@@ -1,0 +1,7 @@
+# Normalize to LF in the repository. The tracker runs on ubuntu-latest in CI,
+# so stored line endings stay LF regardless of the checkout platform.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
