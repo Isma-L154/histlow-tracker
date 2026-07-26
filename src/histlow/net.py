@@ -46,11 +46,19 @@ _RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
 class HttpError(Exception):
-    """Base class for every failure raised by :class:`HttpClient`."""
+    """Base class for every failure raised by :class:`HttpClient`.
+
+    `status` carries the HTTP status when one was received, so callers can
+    branch on it structurally instead of pattern-matching error text.
+    """
+
+    status: int | None = None
 
 
 class TransientHttpError(HttpError):
     """The endpoint may succeed later: timeout, throttling or a 5xx."""
+
+    retry_after: float | None = None
 
 
 class PermanentHttpError(HttpError):
@@ -236,11 +244,14 @@ class HttpClient:
 
 def _classify_http_error(exc: urllib.error.HTTPError, url: str) -> HttpError:
     detail = f"{exc.code} {exc.reason} for {_safe_url(url)}"
+    error: HttpError
     if exc.code in _RETRYABLE_STATUS:
         error = TransientHttpError(detail)
-        error.retry_after = _parse_retry_after(exc.headers.get("Retry-After"))  # type: ignore[attr-defined]
-        return error
-    return PermanentHttpError(detail)
+        error.retry_after = _parse_retry_after(exc.headers.get("Retry-After"))
+    else:
+        error = PermanentHttpError(detail)
+    error.status = exc.code
+    return error
 
 
 def _parse_retry_after(value: str | None) -> float | None:
