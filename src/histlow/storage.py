@@ -30,7 +30,9 @@ def read_json(path: Path, default: Any) -> Any:
     intervened manually.
     """
     try:
-        raw = path.read_text(encoding="utf-8")
+        # utf-8-sig for the same reason as elsewhere: these files are written
+        # by this program, but a user may open and re-save one while debugging.
+        raw = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         return default
     except OSError as exc:

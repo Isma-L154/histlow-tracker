@@ -20,7 +20,9 @@ log = logging.getLogger(__name__)
 def read_dotenv(path: Path) -> dict[str, str]:
     """Parses `path`, returning an empty mapping when it does not exist."""
     try:
-        raw = path.read_text(encoding="utf-8")
+        # utf-8-sig so a Windows editor's byte order mark does not end up
+        # glued to the first key name, which would silently lose that value.
+        raw = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         return {}
     except OSError as exc:

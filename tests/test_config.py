@@ -84,6 +84,14 @@ class TestLoadSettings:
         with pytest.raises(ConfigError, match="not valid JSON"):
             load_settings(VALID_ENV, path)
 
+    def test_a_byte_order_mark_is_tolerated(self, tmp_path: Path) -> None:
+        # Windows editors and PowerShell's Set-Content add one silently, and
+        # json.loads rejects it outright.
+        path = tmp_path / "config.json"
+        path.write_bytes(b"\xef\xbb\xbf" + json.dumps(CONFIG_DOCUMENT).encode("utf-8"))
+
+        assert load_settings(VALID_ENV, path).country == "ES"
+
 
 class TestSecrets:
     def test_repr_does_not_leak(self) -> None:
