@@ -95,11 +95,13 @@ schedule gate, which would otherwise decide it is not time yet.
 Expect a summary like:
 
 ```
-12 wishlisted -> 3 discounted -> 1 at all-time low -> 1 newly alerted
+12 wishlisted -> 3 discounted -> 3 at all-time low -> 1 beat it -> 1 newly alerted
 ```
 
-Zero at the last step is a perfectly normal result. It means nothing on the
-wishlist is currently at its record price.
+Zero at the last step is a perfectly normal result, and the usual one. Note
+the two distinct stages: several games can sit *at* their all-time low while
+none of them *beat* it, and by default only the latter is reported. See
+`alerts.require_new_record` in `config.json`.
 
 Once the output looks right, publish for real:
 
@@ -138,17 +140,26 @@ Add these actions in order:
 | # | Action | Configuration |
 | --- | --- | --- |
 | 1 | **Get Contents of URL** | the raw gist URL from step 3, method `GET` |
-| 2 | **Set Variable** | name `payload`, value: *Contents of URL* |
-| 3 | **Get Dictionary Value** | get `Value` for key `count` in `payload` |
-| 4 | **If** | *Dictionary Value* **is greater than** `0` |
-| 5 | ↳ **Get Dictionary Value** | key `headline` in `payload` → **Set Variable** `title` |
-| 6 | ↳ **Get Dictionary Value** | key `summary` in `payload` → **Set Variable** `body` |
-| 7 | ↳ **Show Notification** | Title: `title`, Body: `body` |
-| 8 | **End If** | — |
+| 2 | **Get Dictionary from Input** | — |
+| 3 | **Set Variable** | name `payload`, value: *Dictionary* |
+| 4 | **Get Dictionary Value** | get `Value` for key `count` in `payload` |
+| 5 | **If** | *Dictionary Value* **is greater than** `0` |
+| 6 | ↳ **Get Dictionary Value** | key `headline` in `payload` → **Set Variable** `title` |
+| 7 | ↳ **Get Dictionary Value** | key `summary` in `payload` → **Set Variable** `body` |
+| 8 | ↳ **Show Notification** | Title: `title`, Body: `body` |
+| 9 | **End If** | — |
 
-Run it once with the play button. If the tracker found something, a
+Step 2 is not optional. Gist raw URLs are served as `text/plain`, so
+**Get Contents of URL** hands back a string rather than a parsed dictionary
+and every **Get Dictionary Value** after it would fail.
+
+Run it once with the play button. If the tracker found a new record, a
 notification appears naming the games and their prices. If not, nothing
 happens, which is the intended quiet path.
+
+Raw gist responses carry `Cache-Control: max-age=300`, so a change can take up
+to five minutes to become visible. That is far below the polling interval and
+never matters in practice.
 
 ### Why the phone polls
 
