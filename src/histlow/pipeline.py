@@ -15,6 +15,7 @@ historical data is requested.
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -22,7 +23,7 @@ from pathlib import Path
 from . import selector
 from .cache import IdentityCache
 from .config import Settings
-from .domain import GameIdentity, PriceQuote
+from .domain import Deal, GameIdentity, HistoricalLow, PriceQuote, RecordStatus
 from .itad import ItadClient
 from .net import HttpClient
 from .payload import build_payload
@@ -164,12 +165,16 @@ def _execute(
 
     fresh = selector.unreported_deals(qualifying, state, settings.alerts)
     ranked = selector.rank_for_payload(fresh, settings.alerts)
+    # History is loaded last, for the capped set only: it costs one request per
+    # game and answers a labelling question, not a "should we alert" one.
+    ranked = selector.annotate_records(ranked, _record_statuses(itad, identities, lows, ranked))
 
     payload = build_payload(
         ranked,
         generated_at=now,
         headline_template=settings.notification.headline_template,
         separator=settings.notification.separator,
+        record_marker=settings.notification.record_marker,
     )
     published_url = publisher.publish(payload)
 
@@ -187,6 +192,30 @@ def _execute(
         alerted=len(ranked),
         published_url=published_url,
     )
+
+
+def _record_statuses(
+    itad: ItadClient,
+    identities: Mapping[int, GameIdentity],
+    lows: Mapping[int, HistoricalLow],
+    deals: Sequence[Deal],
+) -> dict[int, RecordStatus]:
+    """Works out which of the alerted games just set a new record."""
+    statuses: dict[int, RecordStatus] = {}
+
+    for deal in deals:
+        identity = identities.get(deal.app_id)
+        low = lows.get(deal.app_id)
+        if identity is None or low is None:
+            continue
+        statuses[deal.app_id] = selector.classify_record(
+            itad.fetch_price_history(identity.itad_id), low
+        )
+
+    new_records = sum(1 for status in statuses.values() if status.sets_new_record)
+    if statuses:
+        log.info("%d of %d alerted games set a new record", new_records, len(statuses))
+    return statuses
 
 
 def _reference_quotes(

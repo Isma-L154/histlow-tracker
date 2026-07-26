@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from histlow.domain import Deal, Money
+from histlow.domain import Deal, Money, RecordStatus
 from histlow.payload import PAYLOAD_VERSION, build_payload, format_money
 
 GENERATED_AT = datetime(2026, 7, 25, 18, 0, tzinfo=UTC)
@@ -21,6 +21,7 @@ def deal(
     low: int = 999,
     discount: int = 50,
     currency: str = "EUR",
+    record: RecordStatus | None = None,
 ) -> Deal:
     return Deal(
         app_id=app_id,
@@ -31,6 +32,7 @@ def deal(
         reference_current=Money(current, currency),
         reference_low=Money(low, currency),
         low_recorded_at=GENERATED_AT,
+        record=record or RecordStatus.unknown(),
     )
 
 
@@ -107,11 +109,32 @@ class TestBuildPayload:
         )
         assert payload["deals"][0]["is_new_record"] is False
 
-    def test_a_beaten_low_is_flagged_as_a_record(self) -> None:
+    def test_a_record_setting_sale_is_flagged_and_marked(self) -> None:
+        record = RecordStatus(sets_new_record=True, previous_low=Money(3499, "EUR"))
         payload = build_payload(
-            [deal(current=899, low=999)], generated_at=GENERATED_AT, headline_template=HEADLINE
+            [deal(title="SILENT HILL 2", record=record)],
+            generated_at=GENERATED_AT,
+            headline_template=HEADLINE,
+            record_marker="🔥 ",
         )
-        assert payload["deals"][0]["is_new_record"] is True
+
+        entry = payload["deals"][0]
+        assert entry["is_new_record"] is True
+        assert entry["previous_low"] == "34,99 €"
+        assert payload["new_record_count"] == 1
+        assert payload["summary"].startswith("🔥 SILENT HILL 2")
+
+    def test_a_matched_record_is_not_marked(self) -> None:
+        payload = build_payload(
+            [deal(title="Dispatch")],
+            generated_at=GENERATED_AT,
+            headline_template=HEADLINE,
+            record_marker="🔥 ",
+        )
+
+        assert payload["deals"][0]["previous_low"] is None
+        assert payload["new_record_count"] == 0
+        assert payload["summary"] == "Dispatch 9,99 €"
 
     def test_an_empty_run_still_produces_a_valid_document(self) -> None:
         # The Shortcut must be able to distinguish "nothing on sale" from "the

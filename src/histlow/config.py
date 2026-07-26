@@ -140,6 +140,9 @@ class NotificationConfig:
 
     headline_template: str = "\U0001f4b8 {count} en minimo historico"
     separator: str = " · "
+    #: Prefixed to games whose current sale beat every earlier price, as
+    #: opposed to returning to a record set previously.
+    record_marker: str = "\U0001f525 "
 
     def __post_init__(self) -> None:
         try:
@@ -316,6 +319,7 @@ def _parse_notification(section: Mapping) -> NotificationConfig:
     return NotificationConfig(
         headline_template=str(section.get("headline_template", defaults.headline_template)),
         separator=str(section.get("separator", defaults.separator)),
+        record_marker=str(section.get("record_marker", defaults.record_marker)),
     )
 
 

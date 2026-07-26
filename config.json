@@ -45,9 +45,10 @@
   },
 
   "notification": {
-    "$comment": "Wording shown on the phone. Kept out of the source so it can be any language. The only placeholder is {count}.",
+    "$comment": "Wording shown on the phone. Kept out of the source so it can be any language. The only placeholder is {count}. record_marker prefixes games whose current sale beat every earlier price, as opposed to matching a record set previously.",
     "headline_template": "💸 {count} en mínimo histórico",
-    "separator": " · "
+    "separator": " · ",
+    "record_marker": "🔥 "
   },
 
   "state": {
