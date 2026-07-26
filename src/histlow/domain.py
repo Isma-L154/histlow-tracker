@@ -141,15 +141,35 @@ class HistoricalLow:
 
 @dataclass(frozen=True, slots=True)
 class Deal:
-    """A qualifying find: currently priced at or below its all-time Steam low."""
+    """A qualifying find: currently priced at or below its all-time Steam low.
+
+    Two currencies are carried on purpose, because they answer different
+    questions.
+
+    `current` and `regular` are the *store* region: what the user will actually
+    pay, and therefore what the notification shows.
+
+    `reference_current` and `reference_low` are the *comparison* region: the
+    pair the at-or-below decision was made on. A separate region is needed
+    because ITAD does not track every currency Steam sells in - it reports
+    Costa Rica in USD, for instance - and comparing a colón price against a
+    dollar low is meaningless.
+
+    Both pairs are internally consistent; the invariants below enforce that.
+    """
 
     app_id: int
     title: str
     current: Money
     regular: Money
     discount_percent: int
-    historical_low: Money
+    reference_current: Money
+    reference_low: Money
     low_recorded_at: datetime | None
+
+    def __post_init__(self) -> None:
+        self.current._guard_same_currency(self.regular)
+        self.reference_current._guard_same_currency(self.reference_low)
 
     @property
     def store_url(self) -> str:
@@ -158,4 +178,9 @@ class Deal:
     @property
     def beats_previous_low(self) -> bool:
         """True when this price sets a new record rather than matching one."""
-        return self.current < self.historical_low
+        return self.reference_current < self.reference_low
+
+    @property
+    def is_cross_region(self) -> bool:
+        """True when the decision was made in a different currency than shown."""
+        return self.current.currency != self.reference_current.currency

@@ -106,14 +106,21 @@ def _render_deal(deal: Deal) -> dict:
     return {
         "app_id": deal.app_id,
         "title": deal.title,
+        # What the user pays, in their own storefront currency.
         "price": price,
         "price_minor": deal.current.minor_units,
         "currency": deal.current.currency,
         "regular_price": format_money(deal.regular),
         "discount_percent": deal.discount_percent,
-        "historical_low": format_money(deal.historical_low),
         "is_new_record": deal.beats_previous_low,
         "low_recorded_at": deal.low_recorded_at.isoformat() if deal.low_recorded_at else None,
         "url": deal.store_url,
         "summary": f"{deal.title} {price}",
+        # The pair the decision was actually made on. Exposed so the payload
+        # can be audited without re-running the pipeline, and flagged when it
+        # is a different currency than the one displayed.
+        "reference_price": format_money(deal.reference_current),
+        "reference_low": format_money(deal.reference_low),
+        "reference_currency": deal.reference_current.currency,
+        "compared_across_regions": deal.is_cross_region,
     }

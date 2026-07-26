@@ -63,9 +63,12 @@ jobs:
         env:
           PYTHONPATH: src
           STEAM_ID64: ${{ secrets.STEAM_ID64 }}
-          # Not sensitive, but kept overridable as a secret so the region can
-          # be changed without a commit. Falls back rather than failing the run.
+          # Neither is sensitive, but both stay overridable as secrets so the
+          # region can change without a commit. They fall back rather than
+          # failing the run. COMPARISON_COUNTRY must be a region ITAD tracks;
+          # see .env.example for why it differs from STORE_COUNTRY.
           STORE_COUNTRY: ${{ secrets.STORE_COUNTRY || 'CR' }}
+          COMPARISON_COUNTRY: ${{ secrets.COMPARISON_COUNTRY || 'US' }}
           ITAD_API_KEY: ${{ secrets.ITAD_API_KEY }}
           GIST_ID: ${{ secrets.GIST_ID }}
           GIST_TOKEN: ${{ secrets.GIST_TOKEN }}

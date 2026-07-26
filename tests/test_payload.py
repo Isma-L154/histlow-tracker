@@ -28,7 +28,8 @@ def deal(
         current=Money(current, currency),
         regular=Money(1999, currency),
         discount_percent=discount,
-        historical_low=Money(low, currency),
+        reference_current=Money(current, currency),
+        reference_low=Money(low, currency),
         low_recorded_at=GENERATED_AT,
     )
 
@@ -138,11 +139,33 @@ class TestBuildPayload:
             current=Money(999, "EUR"),
             regular=Money(1999, "EUR"),
             discount_percent=50,
-            historical_low=Money(999, "EUR"),
+            reference_current=Money(999, "EUR"),
+            reference_low=Money(999, "EUR"),
             low_recorded_at=None,
         )
         payload = build_payload([bare], generated_at=GENERATED_AT, headline_template=HEADLINE)
         assert payload["deals"][0]["low_recorded_at"] is None
+
+    def test_a_cross_region_deal_shows_local_price_and_flags_the_reference(self) -> None:
+        # Costa Rica: the user sees colones, the decision was made in dollars.
+        cross = Deal(
+            app_id=2124490,
+            title="SILENT HILL 2",
+            current=Money(1500000, "CRC"),
+            regular=Money(3750000, "CRC"),
+            discount_percent=60,
+            reference_current=Money(2799, "USD"),
+            reference_low=Money(2799, "USD"),
+            low_recorded_at=GENERATED_AT,
+        )
+        payload = build_payload([cross], generated_at=GENERATED_AT, headline_template=HEADLINE)
+        entry = payload["deals"][0]
+
+        assert entry["price"] == "₡15.000"
+        assert payload["summary"] == "SILENT HILL 2 ₡15.000"
+        assert entry["reference_price"] == "$27.99"
+        assert entry["reference_low"] == "$27.99"
+        assert entry["compared_across_regions"] is True
 
     def test_payload_is_json_serialisable(self) -> None:
         payload = build_payload([deal()], generated_at=GENERATED_AT, headline_template=HEADLINE)

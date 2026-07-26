@@ -39,6 +39,27 @@ price would essentially never match that figure and the tracker would never
 fire. `games/storelow/v2` scoped to `shops=[61]` (Steam) is the correct
 comparison and the reason this project works at all.
 
+### Why two regions
+
+ITAD does not carry price history in every currency Steam sells in. It reports
+the Costa Rican and Mexican storefronts in USD, not in colones or pesos, and
+comparing a colón price against a dollar low is meaningless.
+
+So the tracker splits the two jobs:
+
+- `STORE_COUNTRY` is where you buy. It sets the prices in the notification, in
+  the currency you actually pay.
+- `COMPARISON_COUNTRY` is a region ITAD does track. The at-or-below decision
+  happens there.
+
+Steam applies the same discount percentage worldwide, so a title at its
+all-time USD low is at its all-time local low too. When ITAD already tracks
+your currency, set the two to the same value and the extra request disappears.
+
+If every candidate fails the currency check the run raises rather than
+returning nothing, because "no deals" and "the comparison is broken" would
+otherwise look identical.
+
 ### Why the phone polls instead of receiving a push
 
 iOS does not allow an external server to deliver a push notification without a
