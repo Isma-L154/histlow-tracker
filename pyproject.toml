@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "histlow-tracker"
+version = "0.1.0"
+description = "Alerts when a wishlisted Steam game hits its all-time low price."
+readme = "README.md"
+requires-python = ">=3.11"
+
+# Intentionally empty. The runtime uses the standard library only, which
+# removes the entire third-party supply chain from the threat model and keeps
+# CI startup at roughly 80 ms with no install step.
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+histlow = "histlow.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+  "E", "W",   # pycodestyle
+  "F",        # pyflakes
+  "I",        # import sorting
+  "B",        # bugbear
+  "UP",       # pyupgrade
+  "SIM",      # simplify
+  "RUF",      # ruff-specific
+  "S",        # bandit security rules
+]
+ignore = [
+  "S101",  # pytest relies on bare `assert`
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]  # hard-coded dummy credentials in fixtures
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `tests` is on the path so shared fixtures live in an ordinary module rather
+# than being imported relatively, which requires a package.
+pythonpath = ["src", "tests"]
+addopts = "-q --strict-markers"
