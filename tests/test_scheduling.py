@@ -69,3 +69,27 @@ class TestInterval:
         slow = ScheduleConfig(min_interval_hours=12)
         assert not decide(now=NOW, schedule=slow, last_run_at=ago(hours=6)).should_run
         assert decide(now=NOW, schedule=slow, last_run_at=ago(hours=12)).should_run
+
+
+class TestDailyCadence:
+    """The shipped configuration: one run a day, guarded by a 20-hour minimum.
+
+    20 rather than 24 is load-bearing and easy to mistake for a typo.
+    """
+
+    DAILY = ScheduleConfig(min_interval_hours=20)
+
+    def test_a_late_run_followed_by_a_punctual_one_still_proceeds(self) -> None:
+        # GitHub delays scheduled runs by minutes to hours. Yesterday's fired
+        # 3 hours late, today's is on time, so only 21 hours separate them.
+        # A strict 24-hour minimum would skip today entirely.
+        assert decide(now=NOW, schedule=self.DAILY, last_run_at=ago(hours=21)).should_run
+
+    def test_a_punctual_pair_proceeds(self) -> None:
+        assert decide(now=NOW, schedule=self.DAILY, last_run_at=ago(hours=24)).should_run
+
+    def test_a_second_firing_the_same_evening_is_suppressed(self) -> None:
+        assert not decide(now=NOW, schedule=self.DAILY, last_run_at=ago(hours=2)).should_run
+
+    def test_a_run_missed_entirely_is_caught_the_next_day(self) -> None:
+        assert decide(now=NOW, schedule=self.DAILY, last_run_at=ago(hours=48)).should_run

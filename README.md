@@ -99,8 +99,8 @@ Steam sales run for days, so this costs nothing in practice.
 
 ## Repository layout
 
-Runs every three hours, year round. Worst-case latency between a price drop
-and the notification is one polling interval on each side.
+Runs once a day at 18:17 Costa Rica time, year round, with no seasonal
+calendar to maintain.
 
 ```
 .github/workflows/     CI, the scheduled tracker run, and the cron keepalive
