@@ -142,9 +142,23 @@ class TestBuildPayload:
         payload = build_payload([], generated_at=GENERATED_AT, headline_template=HEADLINE)
 
         assert payload["count"] == 0
-        assert payload["summary"] == ""
         assert payload["deals"] == []
         assert payload["generated_at"] == GENERATED_AT.isoformat()
+
+    def test_an_empty_run_omits_the_notification_keys_entirely(self) -> None:
+        # Absent, not empty and not null. The Shortcut's only reliable
+        # condition is "has any value", and a missing key is the one thing
+        # that makes it exact.
+        payload = build_payload([], generated_at=GENERATED_AT, headline_template=HEADLINE)
+
+        assert "headline" not in payload
+        assert "summary" not in payload
+
+    def test_a_populated_run_includes_the_notification_keys(self) -> None:
+        payload = build_payload([deal()], generated_at=GENERATED_AT, headline_template=HEADLINE)
+
+        assert payload["headline"]
+        assert payload["summary"]
 
     def test_a_custom_separator_is_used(self) -> None:
         payload = build_payload(

@@ -92,15 +92,28 @@ def build_payload(
     """
     rendered = [_render_deal(deal, record_marker) for deal in deals]
 
-    return {
+    document = {
         "version": PAYLOAD_VERSION,
         "generated_at": generated_at.isoformat(),
         "count": len(rendered),
         "new_record_count": sum(1 for item in rendered if item["is_new_record"]),
-        "headline": headline_template.format(count=len(rendered)),
-        "summary": separator.join(item["summary"] for item in rendered),
         "deals": rendered,
     }
+
+    # `headline` and `summary` are present only when there is something to
+    # report, and absent - not empty, not null - otherwise.
+    #
+    # This exists for the iOS Shortcut. Comparing a number there means
+    # persuading Shortcuts that a dictionary value really is numeric, which it
+    # frequently refuses to infer, leaving only "has any value" as a usable
+    # condition. An absent key makes that condition exact: the whole trigger
+    # becomes "if headline has any value". `count` stays for anything reading
+    # this document programmatically.
+    if rendered:
+        document["headline"] = headline_template.format(count=len(rendered))
+        document["summary"] = separator.join(item["summary"] for item in rendered)
+
+    return document
 
 
 def _render_deal(deal: Deal, record_marker: str = "") -> dict:
