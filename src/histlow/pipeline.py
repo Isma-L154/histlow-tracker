@@ -114,8 +114,17 @@ def run(
         )
     finally:
         # Lookups already performed are valid work even if a later stage
-        # failed; persisting them keeps the next attempt cheap.
+        # failed; persisting them keeps the next attempt cheap. This is a pure
+        # performance cache and cannot change which deals qualify, so it is
+        # saved in dry-run mode too.
         cache.save()
+
+    if settings.dry_run:
+        # A dry run must leave no trace. Recording alerts here would mark the
+        # previewed deals as already reported, and the next real run would
+        # suppress the very notification the preview was checking.
+        log.info("dry run: alert state left untouched")
+        return result
 
     state.mark_run(now)
     state.purge_expired(retention=timedelta(days=settings.state.retention_days), now=now)

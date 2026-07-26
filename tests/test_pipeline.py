@@ -309,6 +309,82 @@ class TestScheduleGate:
         assert result.ran
 
 
+class TestDryRun:
+    def _fixtures(self) -> tuple[FakeSteam, FakeItad]:
+        return (
+            FakeSteam(wishlist=[1], quotes={1: quote(1, 999, 1999, 50)}),
+            FakeItad(titles={1: "One"}, lows={1: 999}),
+        )
+
+    def test_a_dry_run_does_not_suppress_the_next_real_run(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Previewing a deal must not mark it as reported. Otherwise the real
+        # run stays silent about exactly what the preview just showed.
+        steam, itad = self._fixtures()
+
+        preview = FakePublisher()
+        execute(
+            paths,
+            steam,
+            itad,
+            preview,
+            settings=make_settings(dry_run=True),
+            monkeypatch=monkeypatch,
+        )
+        assert preview.published[0]["count"] == 1
+
+        real = FakePublisher()
+        execute(paths, steam, itad, real, monkeypatch=monkeypatch)
+        assert real.published[0]["count"] == 1
+
+    def test_a_dry_run_does_not_advance_the_schedule_gate(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        steam, itad = self._fixtures()
+        execute(
+            paths,
+            steam,
+            itad,
+            FakePublisher(),
+            settings=make_settings(dry_run=True),
+            monkeypatch=monkeypatch,
+        )
+
+        # No last_run_at was recorded, so an unforced run still proceeds.
+        result = execute(paths, steam, itad, FakePublisher(), monkeypatch=monkeypatch)
+        assert result.ran
+
+    def test_a_dry_run_writes_no_state_file(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        steam, itad = self._fixtures()
+        execute(
+            paths,
+            steam,
+            itad,
+            FakePublisher(),
+            settings=make_settings(dry_run=True),
+            monkeypatch=monkeypatch,
+        )
+        assert not paths.state.exists()
+
+    def test_a_dry_run_still_persists_the_identity_cache(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A pure performance cache: it cannot change which deals qualify.
+        steam, itad = self._fixtures()
+        execute(
+            paths,
+            steam,
+            itad,
+            FakePublisher(),
+            settings=make_settings(dry_run=True),
+            monkeypatch=monkeypatch,
+        )
+        assert paths.identities.exists()
+
+
 class TestReferenceQuotes:
     """Covers the cross-region path used when ITAD does not track the currency."""
 
