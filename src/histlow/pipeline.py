@@ -88,10 +88,7 @@ def run(
         log.info("no work this firing (%s)", decision.reason)
         return RunResult(ran=False, reason=decision.reason)
 
-    if decision.window_name:
-        log.info("running inside sale window %r (%s)", decision.window_name, decision.reason)
-    else:
-        log.info("running (%s)", decision.reason)
+    log.info("running (%s)", decision.reason)
 
     http = http or HttpClient()
     steam = SteamClient(http, country=settings.country)

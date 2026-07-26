@@ -7,34 +7,11 @@
   ],
 
   "schedule": {
-    "$comment": "All hours are UTC. Steam flips prices at 10:00 America/Los_Angeles, i.e. 17:00 UTC in summer and 18:00 UTC in winter.",
-    "daily_run_hours_utc": [18],
-    "sale_windows": [
-      {
-        "name": "Steam Autumn Sale 2026",
-        "start": "2026-11-24",
-        "end": "2026-12-01",
-        "interval_hours": 3
-      },
-      {
-        "name": "Steam Winter Sale 2026",
-        "start": "2026-12-18",
-        "end": "2027-01-05",
-        "interval_hours": 3
-      },
-      {
-        "name": "Steam Spring Sale 2027",
-        "start": "2027-03-11",
-        "end": "2027-03-18",
-        "interval_hours": 3
-      },
-      {
-        "name": "Steam Summer Sale 2027",
-        "start": "2027-06-24",
-        "end": "2027-07-08",
-        "interval_hours": 3
-      }
-    ]
+    "$comment": [
+      "The workflow fires every 3 hours and every firing does real work, all year round. There is no seasonal calendar to maintain, and a discount appearing on an ordinary weekday is picked up within hours rather than within a day.",
+      "min_interval_hours only guards against doing the same work twice, from a duplicated firing or a manual dispatch landing beside a scheduled one. Keep it equal to the cron interval in .github/workflows/tracker.yml."
+    ],
+    "min_interval_hours": 3
   },
 
   "alerts": {

@@ -1,0 +1,60 @@
+name: keepalive
+
+# GitHub disables scheduled workflows after 60 days without a commit on the
+# default branch. The tracker writes to a gist, never to this repository, so a
+# quiet period would silently switch the cron off and the alerts would simply
+# stop arriving with no failure to notice.
+#
+# This runs twice a month and commits only when the repository has actually
+# gone quiet, so an active month adds no noise to the history. Worst case: the
+# last commit lands on day 0, the checks on day 15 and day 30 do nothing, and
+# the day-45 check commits - comfortably inside the 60-day limit.
+on:
+  schedule:
+    - cron: "0 4 1,15 * *"
+  workflow_dispatch:
+
+# The only workflow in this repository with write access, and it deliberately
+# holds no secrets. The tracker keeps contents:read and all the credentials;
+# neither can do the other's job.
+permissions:
+  contents: write
+
+concurrency:
+  group: keepalive
+  cancel-in-progress: false
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.repository_owner == 'Isma-L154'
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Commit only if the repository has gone quiet
+        env:
+          # Commit when the last one is older than this. Chosen so that two
+          # checks a month always land before day 60.
+          QUIET_DAYS: "45"
+        run: |
+          set -euo pipefail
+
+          last_commit=$(git log -1 --format=%ct)
+          age_days=$(( ( $(date +%s) - last_commit ) / 86400 ))
+          echo "Last commit was ${age_days} day(s) ago; threshold is ${QUIET_DAYS}."
+
+          if [ "${age_days}" -lt "${QUIET_DAYS}" ]; then
+            echo "Repository is active. Nothing to do."
+            exit 0
+          fi
+
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/keepalive
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive
+          git commit -m "chore: keepalive commit so scheduled workflows stay enabled"
+          git push
+          echo "Committed. The 60-day inactivity clock is reset."

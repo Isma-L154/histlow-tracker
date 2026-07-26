@@ -42,7 +42,7 @@ def make_settings(**overrides) -> Settings:
         # reference fetch is skipped entirely.
         "comparison_country": "ES",
         "dry_run": False,
-        "schedule": ScheduleConfig(daily_run_hours_utc=(18,)),
+        "schedule": ScheduleConfig(min_interval_hours=3),
         "alerts": AlertRules(),
         "notification": NotificationConfig(headline_template="{count} deals"),
         "state": StateConfig(),
@@ -315,7 +315,7 @@ class TestIdentityCaching:
 
 
 class TestScheduleGate:
-    def test_a_firing_outside_the_slot_does_no_work(
+    def test_a_firing_inside_the_interval_does_no_work(
         self, paths: Paths, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         steam = FakeSteam(wishlist=[1], quotes={1: quote(1, 999, 1999, 50)})

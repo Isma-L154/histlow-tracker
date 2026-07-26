@@ -17,7 +17,6 @@ from __future__ import annotations
 import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import date
 from pathlib import Path
 
 DEFAULT_CONFIG_FILENAME = "config.json"
@@ -67,47 +66,22 @@ class Secrets:
 
 
 @dataclass(frozen=True, slots=True)
-class SaleWindow:
-    """A date range during which the tracker polls more frequently."""
-
-    name: str
-    start: date
-    end: date
-    interval_hours: int
-
-    def __post_init__(self) -> None:
-        if self.end < self.start:
-            raise ConfigError(f"sale window {self.name!r} ends before it starts")
-        if not 1 <= self.interval_hours <= 24:
-            raise ConfigError(
-                f"sale window {self.name!r} has interval_hours={self.interval_hours}, expected 1-24"
-            )
-
-    def contains(self, day: date) -> bool:
-        return self.start <= day <= self.end
-
-
-@dataclass(frozen=True, slots=True)
 class ScheduleConfig:
-    """When a cron firing should escalate into a full run.
+    """How often the tracker is allowed to do real work.
 
     GitHub Actions cron expressions are static, so the workflow fires on a
-    fixed frequent cadence and this configuration decides which firings do real
-    work. Changing the cadence therefore never requires editing YAML.
+    fixed cadence and this value guards against doing the same work twice -
+    from a duplicated firing, or a manual dispatch landing next to a scheduled
+    one. Changing the cadence means editing the cron and this together.
     """
 
-    daily_run_hours_utc: tuple[int, ...]
-    sale_windows: tuple[SaleWindow, ...] = ()
+    min_interval_hours: int = 3
 
     def __post_init__(self) -> None:
-        if not self.daily_run_hours_utc:
-            raise ConfigError("schedule.daily_run_hours_utc must list at least one hour")
-        for hour in self.daily_run_hours_utc:
-            if not 0 <= hour <= 23:
-                raise ConfigError(f"schedule hour out of range: {hour}")
-
-    def active_window(self, day: date) -> SaleWindow | None:
-        return next((w for w in self.sale_windows if w.contains(day)), None)
+        if not 1 <= self.min_interval_hours <= 24:
+            raise ConfigError(
+                f"schedule.min_interval_hours must be 1-24, got {self.min_interval_hours}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -187,9 +161,7 @@ class Settings:
     comparison_country: str
     log_level: str = "INFO"
     dry_run: bool = False
-    schedule: ScheduleConfig = field(
-        default_factory=lambda: ScheduleConfig(daily_run_hours_utc=(18,))
-    )
+    schedule: ScheduleConfig = field(default_factory=ScheduleConfig)
     alerts: AlertRules = field(default_factory=AlertRules)
     notification: NotificationConfig = field(default_factory=NotificationConfig)
     state: StateConfig = field(default_factory=StateConfig)
@@ -291,29 +263,12 @@ def _read_config_file(path: Path) -> dict:
 
 
 def _parse_schedule(section: Mapping) -> ScheduleConfig:
-    hours = section.get("daily_run_hours_utc", [18])
-    if not isinstance(hours, list) or not all(isinstance(h, int) for h in hours):
-        raise ConfigError("schedule.daily_run_hours_utc must be a list of integers")
-
-    windows = []
-    for entry in section.get("sale_windows", []):
-        if not isinstance(entry, Mapping):
-            raise ConfigError("each schedule.sale_windows entry must be an object")
-        try:
-            windows.append(
-                SaleWindow(
-                    name=str(entry["name"]),
-                    start=date.fromisoformat(str(entry["start"])),
-                    end=date.fromisoformat(str(entry["end"])),
-                    interval_hours=int(entry.get("interval_hours", 3)),
-                )
-            )
-        except KeyError as exc:
-            raise ConfigError(f"sale window missing required field: {exc}") from exc
-        except ValueError as exc:
-            raise ConfigError(f"sale window has an invalid date: {exc}") from exc
-
-    return ScheduleConfig(daily_run_hours_utc=tuple(hours), sale_windows=tuple(windows))
+    defaults = ScheduleConfig()
+    try:
+        interval = int(section.get("min_interval_hours", defaults.min_interval_hours))
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"schedule.min_interval_hours must be an integer: {exc}") from exc
+    return ScheduleConfig(min_interval_hours=interval)
 
 
 def _parse_alerts(section: Mapping) -> AlertRules:

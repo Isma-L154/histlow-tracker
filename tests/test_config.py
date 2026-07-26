@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-from datetime import date
 from pathlib import Path
 
 import pytest
 
-from histlow.config import ConfigError, SaleWindow, ScheduleConfig, Secrets, load_settings
+from histlow.config import ConfigError, ScheduleConfig, Secrets, load_settings
 
 VALID_ENV = {
     "STEAM_ID64": "76561198028121353",
@@ -17,17 +16,7 @@ VALID_ENV = {
 }
 
 CONFIG_DOCUMENT = {
-    "schedule": {
-        "daily_run_hours_utc": [18],
-        "sale_windows": [
-            {
-                "name": "Winter Sale",
-                "start": "2026-12-18",
-                "end": "2027-01-05",
-                "interval_hours": 3,
-            }
-        ],
-    },
+    "schedule": {"min_interval_hours": 3},
     "alerts": {"min_discount_percent": 1, "reprice_threshold_minor": 1, "max_items_in_payload": 25},
     "state": {"retention_days": 180},
 }
@@ -47,8 +36,7 @@ class TestLoadSettings:
         assert settings.country == "ES"  # normalised to upper case
         assert settings.secrets.steam_id64 == "76561198028121353"
         assert settings.dry_run is False
-        assert settings.schedule.daily_run_hours_utc == (18,)
-        assert settings.schedule.sale_windows[0].name == "Winter Sale"
+        assert settings.schedule.min_interval_hours == 3
         assert settings.state.retention_days == 180
 
     def test_reports_every_problem_at_once(self, config_file: Path) -> None:
@@ -111,34 +99,22 @@ class TestSecrets:
         Secrets("76561198028121353", "itad-key", "gid", "gtok").require_publishing_credentials()
 
 
-class TestSaleWindow:
-    def test_rejects_inverted_range(self) -> None:
-        with pytest.raises(ConfigError, match="ends before it starts"):
-            SaleWindow("Broken", date(2026, 12, 5), date(2026, 12, 1), 3)
-
-    def test_rejects_absurd_interval(self) -> None:
-        with pytest.raises(ConfigError, match="interval_hours"):
-            SaleWindow("Broken", date(2026, 12, 1), date(2026, 12, 5), 0)
-
-    def test_boundaries_are_inclusive(self) -> None:
-        window = SaleWindow("Winter", date(2026, 12, 18), date(2027, 1, 5), 3)
-        assert window.contains(date(2026, 12, 18))
-        assert window.contains(date(2027, 1, 5))
-        assert not window.contains(date(2026, 12, 17))
-        assert not window.contains(date(2027, 1, 6))
-
-
 class TestScheduleConfig:
-    def test_requires_at_least_one_daily_hour(self) -> None:
-        with pytest.raises(ConfigError, match="at least one hour"):
-            ScheduleConfig(daily_run_hours_utc=())
+    def test_defaults_to_three_hours(self) -> None:
+        assert ScheduleConfig().min_interval_hours == 3
 
-    def test_rejects_hours_outside_the_clock(self) -> None:
-        with pytest.raises(ConfigError, match="out of range"):
-            ScheduleConfig(daily_run_hours_utc=(24,))
+    @pytest.mark.parametrize("hours", [0, -1, 25])
+    def test_rejects_an_interval_outside_a_day(self, hours: int) -> None:
+        with pytest.raises(ConfigError, match="min_interval_hours"):
+            ScheduleConfig(min_interval_hours=hours)
 
-    def test_active_window_finds_the_matching_range(self) -> None:
-        winter = SaleWindow("Winter", date(2026, 12, 18), date(2027, 1, 5), 3)
-        schedule = ScheduleConfig(daily_run_hours_utc=(18,), sale_windows=(winter,))
-        assert schedule.active_window(date(2026, 12, 20)) is winter
-        assert schedule.active_window(date(2026, 11, 1)) is None
+    def test_a_missing_section_uses_the_default(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({}), encoding="utf-8")
+        assert load_settings(VALID_ENV, path).schedule.min_interval_hours == 3
+
+    def test_a_non_numeric_interval_is_reported(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({"schedule": {"min_interval_hours": "soon"}}), encoding="utf-8")
+        with pytest.raises(ConfigError, match="min_interval_hours"):
+            load_settings(VALID_ENV, path)
