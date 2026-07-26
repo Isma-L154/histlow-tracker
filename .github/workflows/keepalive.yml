@@ -13,6 +13,15 @@ on:
   schedule:
     - cron: "0 4 1,15 * *"
   workflow_dispatch:
+    inputs:
+      quiet_days:
+        description: >-
+          Commit when the last one is older than this many days.
+          Dispatch with 0 to exercise the commit path on demand: it is
+          otherwise unreachable for 45 days, and a broken push would only
+          surface once it was already too late to matter.
+        type: string
+        default: "45"
 
 # The only workflow in this repository with write access, and it deliberately
 # holds no secrets. The tracker keeps contents:read and all the credentials;
@@ -36,9 +45,9 @@ jobs:
 
       - name: Commit only if the repository has gone quiet
         env:
-          # Commit when the last one is older than this. Chosen so that two
-          # checks a month always land before day 60.
-          QUIET_DAYS: "45"
+          # Commit when the last one is older than this. The default is chosen
+          # so that two checks a month always land before day 60.
+          QUIET_DAYS: ${{ inputs.quiet_days || '45' }}
         run: |
           set -euo pipefail
 
