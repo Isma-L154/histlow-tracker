@@ -168,6 +168,7 @@ class Settings:
 
     secrets: Secrets
     country: str
+    comparison_country: str
     log_level: str = "INFO"
     dry_run: bool = False
     schedule: ScheduleConfig = field(
@@ -195,6 +196,17 @@ def load_settings(env: Mapping[str, str], config_path: Path) -> Settings:
     if len(country) != 2 or not country.isalpha():
         problems.append(f"STORE_COUNTRY must be a 2-letter ISO 3166-1 code, got {country!r}")
 
+    # ITAD does not carry price history for every currency Steam sells in; it
+    # reports Costa Rica and Mexico in USD, for example. Comparing a colon
+    # price against a dollar low is meaningless, so the at-or-below decision
+    # runs in a region ITAD does track while prices are still shown in the
+    # user's own. US is the safe default: ITAD always reports it in USD.
+    comparison_country = env.get("COMPARISON_COUNTRY", "US").strip().upper()
+    if len(comparison_country) != 2 or not comparison_country.isalpha():
+        problems.append(
+            f"COMPARISON_COUNTRY must be a 2-letter ISO 3166-1 code, got {comparison_country!r}"
+        )
+
     if problems:
         raise ConfigError(
             "invalid configuration:\n  - " + "\n  - ".join(problems)
@@ -205,6 +217,7 @@ def load_settings(env: Mapping[str, str], config_path: Path) -> Settings:
     return Settings(
         secrets=secrets,
         country=country,
+        comparison_country=comparison_country,
         log_level=env.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         dry_run=env.get("DRY_RUN", "").strip().lower() in _TRUE_VALUES,
         schedule=_parse_schedule(document.get("schedule", {})),

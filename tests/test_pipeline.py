@@ -31,6 +31,9 @@ def make_settings(**overrides) -> Settings:
     base = {
         "secrets": Secrets("76561199094002095", "itad-key", "gist-id", "gist-token"),
         "country": "ES",
+        # Same as `country` by default, so most tests run one region and the
+        # reference fetch is skipped entirely.
+        "comparison_country": "ES",
         "dry_run": False,
         "schedule": ScheduleConfig(daily_run_hours_utc=(18,)),
         "alerts": AlertRules(),
@@ -304,6 +307,43 @@ class TestScheduleGate:
         )
 
         assert result.ran
+
+
+class TestReferenceQuotes:
+    """Covers the cross-region path used when ITAD does not track the currency."""
+
+    def _store(self) -> dict[int, PriceQuote]:
+        return {1: PriceQuote(1, Money(1500000, "CRC"), Money(3750000, "CRC"), 60)}
+
+    def test_same_region_reuses_the_store_prices_without_a_request(self) -> None:
+        from histlow.pipeline import _reference_quotes
+
+        steam = FakeSteam(wishlist=[], quotes={})
+        store = self._store()
+
+        assert _reference_quotes(make_settings(), steam, store, [1]) is store
+        assert steam.price_requests == []
+
+    def test_a_different_region_is_fetched_for_the_discounted_subset_only(self) -> None:
+        from histlow.pipeline import _reference_quotes
+
+        reference = {1: PriceQuote(1, Money(2799, "USD"), Money(6999, "USD"), 60)}
+        steam = FakeSteam(wishlist=[], quotes=reference)
+        settings = make_settings(country="CR", comparison_country="US")
+
+        result = _reference_quotes(settings, steam, self._store(), [1])
+
+        assert result[1].current == Money(2799, "USD")
+        assert steam.price_requests == [[1]]
+
+    def test_nothing_discounted_means_no_request(self) -> None:
+        from histlow.pipeline import _reference_quotes
+
+        steam = FakeSteam(wishlist=[], quotes={})
+        settings = make_settings(country="CR", comparison_country="US")
+
+        assert _reference_quotes(settings, steam, {}, []) == {}
+        assert steam.price_requests == []
 
 
 class TestFailureHandling:

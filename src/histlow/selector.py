@@ -36,47 +36,75 @@ def discounted_app_ids(
     )
 
 
+class CurrencyMismatchError(RuntimeError):
+    """Every comparison was impossible because the currencies disagree.
+
+    Raised rather than returning an empty list, because an empty list is
+    indistinguishable from "nothing is on sale" and would leave the tracker
+    permanently, invisibly silent - the single failure mode this project exists
+    to prevent.
+    """
+
+
 def qualifying_deals(
-    quotes: Mapping[int, PriceQuote],
+    store_quotes: Mapping[int, PriceQuote],
+    reference_quotes: Mapping[int, PriceQuote],
     identities: Mapping[int, GameIdentity],
     lows: Mapping[int, HistoricalLow],
 ) -> list[Deal]:
     """Keeps only games priced at or below their all-time Steam low.
 
-    A game missing an identity or a recorded low is skipped rather than
-    guessed at: with nothing to compare against, any answer would be invented.
+    The decision uses `reference_quotes` and `lows`, which share a currency
+    ITAD actually tracks. Prices shown to the user come from `store_quotes`,
+    in the currency they will really pay.
+
+    A game missing an identity, a reference price or a recorded low is skipped
+    rather than guessed at: with nothing to compare against, any answer would
+    be invented.
 
     Matching the low counts as a hit. A sale that merely equals the best price
     ever seen is still the best price ever seen, and holding out for a strict
     improvement would suppress most genuine opportunities.
     """
     deals: list[Deal] = []
+    comparable = 0
+    mismatched = 0
 
-    for app_id in sorted(quotes):
-        quote = quotes[app_id]
+    for app_id in sorted(store_quotes):
         identity = identities.get(app_id)
         low = lows.get(app_id)
-        if identity is None or low is None:
+        reference = reference_quotes.get(app_id)
+        if identity is None or low is None or reference is None:
             continue
 
         try:
-            if not quote.current <= low.low:
-                continue
+            qualifies = reference.current <= low.low
         except DomainError:
-            # Currency mismatch between the storefront and the historical
-            # record. Comparing them would be meaningless, so skip the game.
+            mismatched += 1
+            continue
+
+        comparable += 1
+        if not qualifies:
             continue
 
         deals.append(
             Deal(
                 app_id=app_id,
                 title=identity.title,
-                current=quote.current,
-                regular=quote.regular,
-                discount_percent=quote.discount_percent,
-                historical_low=low.low,
+                current=store_quotes[app_id].current,
+                regular=store_quotes[app_id].regular,
+                discount_percent=store_quotes[app_id].discount_percent,
+                reference_current=reference.current,
+                reference_low=low.low,
                 low_recorded_at=low.recorded_at,
             )
+        )
+
+    if mismatched and not comparable:
+        raise CurrencyMismatchError(
+            f"none of the {mismatched} candidate games could be compared: the Steam price "
+            "and the ITAD historical low are quoted in different currencies. Set "
+            "COMPARISON_COUNTRY to a region ITAD tracks (US is always safe)."
         )
 
     return deals

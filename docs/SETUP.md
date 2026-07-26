@@ -122,6 +122,7 @@ At **Settings → Secrets and variables → Actions**, add:
 | `GIST_ID` | from step 3 |
 | `GIST_TOKEN` | the `gist`-scoped token |
 | `STORE_COUNTRY` | optional, defaults to `CR` |
+| `COMPARISON_COUNTRY` | optional, defaults to `US` |
 
 Then run the workflow once by hand: **Actions → tracker → Run workflow**,
 leaving **force** checked.
@@ -208,6 +209,7 @@ after sending a warning email. A single commit resets the clock.
 | Symptom | Cause |
 | --- | --- |
 | `WishlistUnavailableError` | Game details is not set to Public |
+| `none of the N candidate games could be compared` | `COMPARISON_COUNTRY` names a region ITAD does not track; set it to `US` |
 | `ITAD rejected the API key` | wrong `ITAD_API_KEY`, or the email is unverified |
 | `The gist was not found` | wrong `GIST_ID`, or the token belongs to another account |
 | `GitHub rejected the gist token` | the token lacks the `gist` scope |

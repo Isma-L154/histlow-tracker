@@ -28,6 +28,7 @@ from .logging_setup import configure_logging
 from .net import HttpError
 from .pipeline import Paths, run
 from .publisher import PublishError
+from .selector import CurrencyMismatchError
 from .steam import SteamError
 
 log = logging.getLogger("histlow")
@@ -105,7 +106,9 @@ def main(argv: list[str] | None = None) -> int:
             now=datetime.now(tz=UTC),
             forced=args.force,
         )
-    except ConfigError as exc:
+    except (ConfigError, CurrencyMismatchError) as exc:
+        # A currency mismatch is a misconfigured region, not an outage: the
+        # fix is COMPARISON_COUNTRY, so it exits as a configuration error.
         log.error("%s", exc)
         return EXIT_CONFIG_ERROR
     except (SteamError, ItadError, PublishError, HttpError) as exc:

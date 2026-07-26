@@ -14,6 +14,7 @@ import pytest
 from histlow.config import AlertRules
 from histlow.domain import GameIdentity, HistoricalLow, Money, PriceQuote
 from histlow.selector import (
+    CurrencyMismatchError,
     discounted_app_ids,
     qualifying_deals,
     rank_for_payload,
@@ -40,6 +41,11 @@ def identity(app_id: int, title: str = "A Game") -> GameIdentity:
 
 def low(app_id: int, amount: int, currency: str = "EUR") -> HistoricalLow:
     return HistoricalLow(app_id=app_id, low=Money(amount, currency), recorded_at=NOW)
+
+
+def same_region(quotes):
+    """Most cases run one region, where store and reference prices coincide."""
+    return quotes, quotes
 
 
 # ---------------------------------------------------------------------------
@@ -76,43 +82,56 @@ class TestDiscountedAppIds:
 class TestQualifyingDeals:
     def test_matching_the_all_time_low_qualifies(self) -> None:
         # The central rule: equalling the record still counts.
-        deals = qualifying_deals({1: quote(1, 999, 1999, 50)}, {1: identity(1)}, {1: low(1, 999)})
+        deals = qualifying_deals(
+            *same_region({1: quote(1, 999, 1999, 50)}), {1: identity(1)}, {1: low(1, 999)}
+        )
         assert [d.app_id for d in deals] == [1]
         assert not deals[0].beats_previous_low
 
     def test_beating_the_all_time_low_qualifies_as_a_record(self) -> None:
-        deals = qualifying_deals({1: quote(1, 899, 1999, 55)}, {1: identity(1)}, {1: low(1, 999)})
+        deals = qualifying_deals(
+            *same_region({1: quote(1, 899, 1999, 55)}), {1: identity(1)}, {1: low(1, 999)}
+        )
         assert deals[0].beats_previous_low
 
     def test_a_price_above_the_low_does_not_qualify(self) -> None:
-        assert qualifying_deals(
-            {1: quote(1, 1099, 1999, 45)}, {1: identity(1)}, {1: low(1, 999)}
-        ) == []
+        assert (
+            qualifying_deals(
+                *same_region({1: quote(1, 1099, 1999, 45)}), {1: identity(1)}, {1: low(1, 999)}
+            )
+            == []
+        )
 
     def test_one_cent_above_the_low_does_not_qualify(self) -> None:
         # Exercises the integer comparison at its boundary.
-        assert qualifying_deals(
-            {1: quote(1, 1000, 1999, 50)}, {1: identity(1)}, {1: low(1, 999)}
-        ) == []
+        assert (
+            qualifying_deals(
+                *same_region({1: quote(1, 1000, 1999, 50)}), {1: identity(1)}, {1: low(1, 999)}
+            )
+            == []
+        )
 
     def test_game_without_a_recorded_low_is_skipped(self) -> None:
-        assert qualifying_deals({1: quote(1, 999, 1999, 50)}, {1: identity(1)}, {}) == []
+        quotes = same_region({1: quote(1, 999, 1999, 50)})
+        assert qualifying_deals(*quotes, {1: identity(1)}, {}) == []
 
     def test_game_without_an_identity_is_skipped(self) -> None:
-        assert qualifying_deals({1: quote(1, 999, 1999, 50)}, {}, {1: low(1, 999)}) == []
+        quotes = same_region({1: quote(1, 999, 1999, 50)})
+        assert qualifying_deals(*quotes, {}, {1: low(1, 999)}) == []
 
-    def test_currency_mismatch_is_skipped_rather_than_compared(self) -> None:
-        # A misconfigured region must not manufacture alerts.
-        deals = qualifying_deals(
-            {1: quote(1, 999, 1999, 50, currency="EUR")},
-            {1: identity(1)},
-            {1: low(1, 999, currency="USD")},
+    def test_game_without_a_reference_price_is_skipped(self) -> None:
+        assert (
+            qualifying_deals(
+                {1: quote(1, 999, 1999, 50)}, {}, {1: identity(1)}, {1: low(1, 999)}
+            )
+            == []
         )
-        assert deals == []
 
     def test_carries_the_title_through_from_the_identity(self) -> None:
         deals = qualifying_deals(
-            {1: quote(1, 999, 1999, 50)}, {1: identity(1, "Silksong")}, {1: low(1, 999)}
+            *same_region({1: quote(1, 999, 1999, 50)}),
+            {1: identity(1, "Silksong")},
+            {1: low(1, 999)},
         )
         assert deals[0].title == "Silksong"
 
@@ -125,7 +144,52 @@ class TestQualifyingDeals:
         identities = {1: identity(1), 2: identity(2), 3: identity(3)}
         lows = {1: low(1, 999), 2: low(2, 1000), 3: low(3, 600)}
 
-        assert [d.app_id for d in qualifying_deals(quotes, identities, lows)] == [1, 3]
+        deals = qualifying_deals(*same_region(quotes), identities, lows)
+        assert [d.app_id for d in deals] == [1, 3]
+
+
+class TestCrossRegionComparison:
+    """The Costa Rica case: ITAD reports CRC storefronts in USD."""
+
+    def test_decides_on_the_reference_region_but_shows_the_store_price(self) -> None:
+        store = {1: quote(1, 1500000, 3750000, 60, currency="CRC")}
+        reference = {1: quote(1, 2799, 6999, 60, currency="USD")}
+
+        deals = qualifying_deals(
+            store, reference, {1: identity(1, "SILENT HILL 2")}, {1: low(1, 2799, "USD")}
+        )
+
+        assert len(deals) == 1
+        assert deals[0].current == Money(1500000, "CRC")  # what the user pays
+        assert deals[0].reference_low == Money(2799, "USD")  # what decided it
+        assert deals[0].is_cross_region
+
+    def test_the_reference_price_governs_not_the_store_price(self) -> None:
+        # Store price is numerically far below the low; only the currency-
+        # matched pair may decide anything.
+        store = {1: quote(1, 1500000, 3750000, 60, currency="CRC")}
+        reference = {1: quote(1, 3999, 6999, 43, currency="USD")}
+
+        assert qualifying_deals(store, reference, {1: identity(1)}, {1: low(1, 2799, "USD")}) == []
+
+    def test_a_total_currency_mismatch_raises_instead_of_returning_empty(self) -> None:
+        # This is the bug that made the tracker silent for Costa Rica: an empty
+        # list is indistinguishable from "nothing is on sale".
+        quotes = {1: quote(1, 1500000, 3750000, 60, currency="CRC")}
+
+        with pytest.raises(CurrencyMismatchError, match="COMPARISON_COUNTRY"):
+            qualifying_deals(quotes, quotes, {1: identity(1)}, {1: low(1, 2799, "USD")})
+
+    def test_a_partial_mismatch_does_not_raise(self) -> None:
+        # One odd game must not abort a run that is otherwise working.
+        store = {1: quote(1, 999, 1999, 50), 2: quote(2, 999, 1999, 50)}
+        lows = {1: low(1, 999, "EUR"), 2: low(2, 999, "USD")}
+
+        deals = qualifying_deals(store, store, {1: identity(1), 2: identity(2)}, lows)
+        assert [d.app_id for d in deals] == [1]
+
+    def test_no_candidates_at_all_does_not_raise(self) -> None:
+        assert qualifying_deals({}, {}, {}, {}) == []
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +204,7 @@ class TestUnreportedDeals:
 
     def _deal(self, current: int):
         return qualifying_deals(
-            {1: quote(1, current, 1999, 50)}, {1: identity(1)}, {1: low(1, 1999)}
+            *same_region({1: quote(1, current, 1999, 50)}), {1: identity(1)}, {1: low(1, 1999)}
         )
 
     def test_a_new_game_is_reported(self, state: TrackerState) -> None:
@@ -173,7 +237,7 @@ class TestUnreportedDeals:
 class TestRankForPayload:
     def _deal(self, app_id: int, current: int, low_amount: int, discount: int, title: str):
         return qualifying_deals(
-            {app_id: quote(app_id, current, 9999, discount)},
+            *same_region({app_id: quote(app_id, current, 9999, discount)}),
             {app_id: identity(app_id, title)},
             {app_id: low(app_id, low_amount)},
         )[0]

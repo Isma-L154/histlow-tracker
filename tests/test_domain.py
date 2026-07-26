@@ -78,7 +78,8 @@ class TestDeal:
             current=Money(current, "EUR"),
             regular=Money(1999, "EUR"),
             discount_percent=50,
-            historical_low=Money(low, "EUR"),
+            reference_current=Money(current, "EUR"),
+            reference_low=Money(low, "EUR"),
             low_recorded_at=None,
         )
 
@@ -90,3 +91,47 @@ class TestDeal:
 
     def test_store_url_points_at_the_app(self) -> None:
         assert self._deal(999, 999).store_url.endswith("/app/1030300")
+
+    def test_same_region_is_not_flagged_as_cross_region(self) -> None:
+        assert not self._deal(999, 999).is_cross_region
+
+    def test_a_cross_region_comparison_is_flagged(self) -> None:
+        # The Costa Rica case: paid in colones, decided in dollars.
+        deal = Deal(
+            app_id=1,
+            title="Cross region",
+            current=Money(1500000, "CRC"),
+            regular=Money(3750000, "CRC"),
+            discount_percent=60,
+            reference_current=Money(2799, "USD"),
+            reference_low=Money(2799, "USD"),
+            low_recorded_at=None,
+        )
+        assert deal.is_cross_region
+        assert not deal.beats_previous_low
+
+    def test_display_currencies_must_agree_with_each_other(self) -> None:
+        with pytest.raises(DomainError):
+            Deal(
+                app_id=1,
+                title="Bad",
+                current=Money(999, "EUR"),
+                regular=Money(1999, "USD"),
+                discount_percent=50,
+                reference_current=Money(999, "USD"),
+                reference_low=Money(999, "USD"),
+                low_recorded_at=None,
+            )
+
+    def test_reference_currencies_must_agree_with_each_other(self) -> None:
+        with pytest.raises(DomainError):
+            Deal(
+                app_id=1,
+                title="Bad",
+                current=Money(999, "EUR"),
+                regular=Money(1999, "EUR"),
+                discount_percent=50,
+                reference_current=Money(999, "USD"),
+                reference_low=Money(999, "GBP"),
+                low_recorded_at=None,
+            )

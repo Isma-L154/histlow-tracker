@@ -22,7 +22,7 @@ from pathlib import Path
 from . import selector
 from .cache import IdentityCache
 from .config import Settings
-from .domain import GameIdentity
+from .domain import GameIdentity, PriceQuote
 from .itad import ItadClient
 from .net import HttpClient
 from .payload import build_payload
@@ -92,13 +92,19 @@ def run(
 
     http = http or HttpClient()
     steam = SteamClient(http, country=settings.country)
-    itad = ItadClient(http, api_key=settings.secrets.itad_api_key, country=settings.country)
+    # Historical lows and the prices they are compared against must come from
+    # the same region, or the currencies will not line up.
+    reference_steam = SteamClient(http, country=settings.comparison_country)
+    itad = ItadClient(
+        http, api_key=settings.secrets.itad_api_key, country=settings.comparison_country
+    )
     cache = IdentityCache.load(paths.identities)
 
     try:
         result = _execute(
             settings=settings,
             steam=steam,
+            reference_steam=reference_steam,
             itad=itad,
             cache=cache,
             state=state,
@@ -122,6 +128,7 @@ def _execute(
     *,
     settings: Settings,
     steam: SteamClient,
+    reference_steam: SteamClient,
     itad: ItadClient,
     cache: IdentityCache,
     state: TrackerState,
@@ -138,9 +145,12 @@ def _execute(
     identities = _resolve_identities(itad, cache, discounted, now=now)
     lows = itad.fetch_steam_lows(list(identities.values()))
 
-    qualifying = selector.qualifying_deals(
-        {app_id: quotes[app_id] for app_id in discounted}, identities, lows
+    store_quotes = {app_id: quotes[app_id] for app_id in discounted}
+    reference_quotes = _reference_quotes(
+        settings, reference_steam, store_quotes, discounted
     )
+
+    qualifying = selector.qualifying_deals(store_quotes, reference_quotes, identities, lows)
     log.info("%d discounted apps are at or below their all-time Steam low", len(qualifying))
 
     fresh = selector.unreported_deals(qualifying, state, settings.alerts)
@@ -168,6 +178,33 @@ def _execute(
         alerted=len(ranked),
         published_url=published_url,
     )
+
+
+def _reference_quotes(
+    settings: Settings,
+    reference_steam: SteamClient,
+    store_quotes: dict[int, PriceQuote],
+    discounted: list[int],
+) -> dict[int, PriceQuote]:
+    """Prices in the comparison region, for the at-or-below decision.
+
+    When both regions are the same the store prices already are the reference
+    prices, so the second request is skipped entirely. Only a user whose
+    currency ITAD does not track pays for the extra call, and only for the
+    handful of games that survived the discount filter.
+    """
+    if settings.comparison_country == settings.country:
+        return store_quotes
+    if not discounted:
+        return {}
+
+    log.info(
+        "fetching %s reference prices for %d discounted apps (%s is not tracked by ITAD)",
+        settings.comparison_country,
+        len(discounted),
+        settings.country,
+    )
+    return reference_steam.fetch_price_quotes(discounted)
 
 
 def _resolve_identities(
