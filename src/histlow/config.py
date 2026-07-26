@@ -130,6 +130,28 @@ class AlertRules:
 
 
 @dataclass(frozen=True, slots=True)
+class NotificationConfig:
+    """User-facing wording, kept out of the source so it can be any language.
+
+    `headline_template` receives a single `{count}` placeholder. It is rendered
+    once at load time so a typo fails at startup rather than at the moment an
+    alert would have fired.
+    """
+
+    headline_template: str = "\U0001f4b8 {count} en minimo historico"
+    separator: str = " · "
+
+    def __post_init__(self) -> None:
+        try:
+            self.headline_template.format(count=0)
+        except (IndexError, KeyError, ValueError) as exc:
+            raise ConfigError(
+                f"notification.headline_template is not a valid template ({exc}); "
+                "the only supported placeholder is {count}"
+            ) from exc
+
+
+@dataclass(frozen=True, slots=True)
 class StateConfig:
     """Retention policy for the de-duplication store."""
 
@@ -152,6 +174,7 @@ class Settings:
         default_factory=lambda: ScheduleConfig(daily_run_hours_utc=(18,))
     )
     alerts: AlertRules = field(default_factory=AlertRules)
+    notification: NotificationConfig = field(default_factory=NotificationConfig)
     state: StateConfig = field(default_factory=StateConfig)
 
 
@@ -186,6 +209,7 @@ def load_settings(env: Mapping[str, str], config_path: Path) -> Settings:
         dry_run=env.get("DRY_RUN", "").strip().lower() in _TRUE_VALUES,
         schedule=_parse_schedule(document.get("schedule", {})),
         alerts=_parse_alerts(document.get("alerts", {})),
+        notification=_parse_notification(document.get("notification", {})),
         state=_parse_state(document.get("state", {})),
     )
 
@@ -271,6 +295,14 @@ def _parse_alerts(section: Mapping) -> AlertRules:
         max_items_in_payload=int(
             section.get("max_items_in_payload", defaults.max_items_in_payload)
         ),
+    )
+
+
+def _parse_notification(section: Mapping) -> NotificationConfig:
+    defaults = NotificationConfig()
+    return NotificationConfig(
+        headline_template=str(section.get("headline_template", defaults.headline_template)),
+        separator=str(section.get("separator", defaults.separator)),
     )
 
 

@@ -44,6 +44,12 @@
     "max_items_in_payload": 25
   },
 
+  "notification": {
+    "$comment": "Wording shown on the phone. Kept out of the source so it can be any language. The only placeholder is {count}.",
+    "headline_template": "💸 {count} en mínimo histórico",
+    "separator": " · "
+  },
+
   "state": {
     "$comment": "Entries older than this are purged so the state file cannot grow without bound.",
     "retention_days": 180
