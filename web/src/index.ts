@@ -34,7 +34,7 @@ export default {
     }
 
     try {
-      return await route(url, request, env, ctx);
+      return await route(url, env, ctx);
     } catch (error) {
       if (error instanceof SteamError) {
         return problem(error.status, error.message);
@@ -47,22 +47,17 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-async function route(
-  url: URL,
-  request: Request,
-  env: Env,
-  ctx: ExecutionContext,
-): Promise<Response> {
+async function route(url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (url.pathname === "/api/health") {
     return json({ ok: true, version: VERSION });
   }
 
   if (url.pathname === "/api/search") {
-    const query = url.searchParams.get("q") ?? "";
-    if (query.trim().length < 2) {
+    const query = (url.searchParams.get("q") ?? "").trim();
+    if (query.length < 2) {
       return problem(400, "Search for at least two characters.");
     }
-    return cached(request, env, ctx, async () => {
+    return cached(key(url, `/api/search?q=${encodeURIComponent(query.toLowerCase())}`), false, env, ctx, async () => {
       const results = await client(env).search(query);
       return json({ results });
     });
@@ -72,7 +67,7 @@ async function route(
   if (game) {
     const appId = Number(game[1]);
     const steamId = resolveSteamId(url, env);
-    return cached(request, env, ctx, async () => {
+    return cached(key(url, `/api/game/${appId}`), steamId !== null, env, ctx, async () => {
       const payload = await client(env).gameAchievements(appId, steamId);
       return json(payload);
     });
@@ -106,6 +101,18 @@ function resolveSteamId(url: URL, env: Env): string | null {
 }
 
 /**
+ * The cache key for a request, built from scratch rather than from its URL.
+ *
+ * Only the parameters that change the answer belong in the key. Deriving it
+ * from the incoming URL instead would let anyone append a junk parameter and
+ * miss the cache on every request, which is exactly the traffic the cache is
+ * there to keep away from the Steam key's quota.
+ */
+function key(url: URL, canonical: string): string {
+  return new URL(canonical, url.origin).toString();
+}
+
+/**
  * Serves from the edge cache when possible, populating it otherwise.
  *
  * Achievement text never changes and unlock percentages move slowly, so a day
@@ -114,15 +121,17 @@ function resolveSteamId(url: URL, env: Env): string | null {
  * standing between a public URL and someone burning that quota.
  *
  * Responses carrying personal progress are deliberately not cached: they
- * differ per player and are nobody else's business.
+ * differ per player and are nobody else's business. `personal` is decided by
+ * whether a player was actually resolved, not by whether one was asked for, so
+ * an unusable `?steamid=` value still gets a shared, cacheable answer.
  */
 async function cached(
-  request: Request,
+  cacheKey: string,
+  personal: boolean,
   env: Env,
   ctx: ExecutionContext,
   produce: () => Promise<Response>,
 ): Promise<Response> {
-  const personal = new URL(request.url).searchParams.has("steamid") || Boolean(env.DEFAULT_STEAM_ID);
   if (personal) {
     const fresh = await produce();
     fresh.headers.set("Cache-Control", "private, no-store");
@@ -130,13 +139,13 @@ async function cached(
   }
 
   const cache = caches.default;
-  const hit = await cache.match(request);
+  const hit = await cache.match(cacheKey);
   if (hit) return hit;
 
   const response = await produce();
   if (response.ok) {
     response.headers.set("Cache-Control", `public, max-age=${env.CACHE_SECONDS}`);
-    ctx.waitUntil(cache.put(request, response.clone()));
+    ctx.waitUntil(cache.put(cacheKey, response.clone()));
   }
   return response;
 }

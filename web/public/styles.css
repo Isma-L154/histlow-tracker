@@ -1,0 +1,491 @@
+/*
+ * Dark only, on purpose: this page is a companion to Steam, which is dark, and
+ * a light variant would be a second design to keep honest for no one's benefit.
+ */
+
+:root {
+  --bg: #0e1318;
+  --panel: #171d25;
+  --panel-hover: #1f2833;
+  --border: #2a3541;
+  --text: #e6edf3;
+  --muted: #8b98a5;
+  --accent: #66c0f4;
+  --unlocked: #6cbf3f;
+
+  /* Rarity ramp: the rarer the achievement, the warmer the colour. */
+  --rarity-legendary: #f0b849;
+  --rarity-rare: #b06cf5;
+  --rarity-uncommon: #66c0f4;
+  --rarity-common: #8b98a5;
+
+  --radius: 10px;
+  --shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0 1rem 4rem;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 "Segoe UI", system-ui, -apple-system, sans-serif;
+}
+
+img {
+  max-width: 100%;
+}
+
+a {
+  color: var(--accent);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* -- top bar ------------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1.25rem 0;
+}
+
+.brand {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.search {
+  position: relative;
+  flex: 1 1 18rem;
+}
+
+input[type="search"],
+input[type="text"] {
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+}
+
+input:focus-visible,
+button:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* -- search results ------------------------------------------------------ */
+
+.results {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  left: 0;
+  max-height: 22rem;
+  margin: 0;
+  padding: 0.25rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  list-style: none;
+}
+
+.results li button {
+  display: flex;
+  gap: 0.65rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.results li button:hover,
+.results li button:focus-visible {
+  background: var(--panel-hover);
+}
+
+.results img {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--panel-hover);
+}
+
+/* -- profile ------------------------------------------------------------- */
+
+.profile {
+  position: relative;
+  flex: none;
+}
+
+.profile summary {
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  cursor: pointer;
+  user-select: none;
+}
+
+.profile[open] summary {
+  border-color: var(--accent);
+}
+
+.profile-body {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  width: min(24rem, 90vw);
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.profile-body label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.hint {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: normal;
+}
+
+.profile-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.profile-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-status {
+  margin: 0.6rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.profile-status.is-error {
+  color: #ff8a80;
+}
+
+button {
+  padding: 0.55rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-hover);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button.ghost {
+  background: none;
+  color: var(--muted);
+}
+
+/* -- main ---------------------------------------------------------------- */
+
+main {
+  max-width: 60rem;
+  margin: 0 auto;
+}
+
+.status {
+  margin: 2rem 0;
+  color: var(--muted);
+}
+
+.status.is-error {
+  padding: 0.9rem 1rem;
+  border: 1px solid #5c2b2b;
+  border-radius: var(--radius);
+  background: #241618;
+  color: #ff9f9a;
+}
+
+/* -- game header --------------------------------------------------------- */
+
+.game-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.game-cover {
+  width: 260px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.game-meta {
+  flex: 1 1 18rem;
+}
+
+.game-meta h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.5rem;
+}
+
+.progress-line {
+  margin: 0 0 0.4rem;
+  color: var(--muted);
+}
+
+.progress-line strong {
+  color: var(--text);
+}
+
+.progress-bar {
+  height: 8px;
+  margin-bottom: 0.9rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel-hover);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--unlocked));
+  transition: width 0.35s ease;
+}
+
+.notice {
+  margin: 0 0 0.9rem;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid var(--rarity-legendary);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--rarity-legendary) 10%, transparent);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* -- toolbar ------------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.9rem;
+}
+
+.filters {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.chip {
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.88rem;
+}
+
+.chip.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--text);
+}
+
+.count {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* -- achievements -------------------------------------------------------- */
+
+.achievements {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.achievement {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 0 0.9rem;
+  align-items: center;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius);
+  margin-bottom: 0.5rem;
+  background: var(--panel);
+}
+
+/*
+ * `display: grid` above outranks the browser's own `[hidden] { display: none }`,
+ * so without this the filter would update its counter while changing nothing on
+ * screen.
+ */
+.achievement[hidden] {
+  display: none;
+}
+
+.achievement.is-unlocked {
+  border-left-color: var(--unlocked);
+}
+
+/* Not yet earned: the icon stays legible but visibly inert. */
+.achievement.is-locked .achievement-icon {
+  opacity: 0.55;
+}
+
+.achievement-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+  background: var(--panel-hover);
+}
+
+.achievement-body h3 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+  margin: 0 0 0.15rem;
+  font-size: 1rem;
+}
+
+.achievement-body p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.badge {
+  padding: 0.05rem 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--unlocked) 20%, transparent);
+  color: var(--unlocked);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.achievement-guide {
+  display: inline-block;
+  margin-top: 0.35rem;
+  font-size: 0.82rem;
+}
+
+.rarity {
+  text-align: right;
+}
+
+.rarity-percent {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.rarity-label {
+  display: block;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rarity-legendary { color: var(--rarity-legendary); }
+.rarity-rare      { color: var(--rarity-rare); }
+.rarity-uncommon  { color: var(--rarity-uncommon); }
+.rarity-common    { color: var(--rarity-common); }
+.rarity-unknown   { color: var(--muted); }
+
+/* -- footer -------------------------------------------------------------- */
+
+.footer {
+  max-width: 60rem;
+  margin: 2.5rem auto 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+@media (width <= 34rem) {
+  .achievement {
+    grid-template-columns: 48px 1fr;
+  }
+
+  .achievement-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .rarity {
+    grid-column: 2;
+    margin-top: 0.35rem;
+    text-align: left;
+  }
+
+  .rarity-percent,
+  .rarity-label {
+    display: inline;
+    font-size: 0.8rem;
+  }
+
+  .rarity-percent {
+    margin-inline-end: 0.4rem;
+  }
+
+  .game-cover {
+    width: 100%;
+  }
+}
