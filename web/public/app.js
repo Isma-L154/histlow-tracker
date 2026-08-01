@@ -277,6 +277,9 @@ function renderAchievement(appId, achievement) {
   icon.alt = "";
   icon.loading = "lazy";
   icon.referrerPolicy = "no-referrer";
+  // A few achievements point at art Steam no longer serves. An empty tile reads
+  // as a missing icon; a broken-image box reads as a broken page.
+  icon.addEventListener("error", () => icon.removeAttribute("src"), { once: true });
 
   const body = document.createElement("div");
   body.className = "achievement-body";
@@ -300,12 +303,28 @@ function renderAchievement(appId, achievement) {
   description.textContent = achievement.description || "Logro oculto: Steam no publica la descripción.";
   body.append(description);
 
+  const actions = document.createElement("div");
+  actions.className = "achievement-actions";
+
+  const panel = document.createElement("div");
+  panel.className = "howto";
+  panel.hidden = true;
+
+  const reveal = document.createElement("button");
+  reveal.type = "button";
+  reveal.className = "howto-button";
+  reveal.textContent = "¿Cómo se consigue?";
+  reveal.setAttribute("aria-expanded", "false");
+  reveal.addEventListener("click", () => toggleHowTo(reveal, panel, appId, achievement));
+
   const guide = link(
-    "Buscar guía →",
+    "Ver guías en Steam →",
     `${GUIDES_BASE}/${appId}/guides/?searchText=${encodeURIComponent(achievement.name)}&browsefilter=toprated&l=spanish`,
   );
   guide.className = "achievement-guide";
-  body.append(guide);
+
+  actions.append(reveal, guide);
+  body.append(actions);
 
   const rarity = document.createElement("div");
   rarity.className = "rarity";
@@ -318,8 +337,123 @@ function renderAchievement(appId, achievement) {
   label.textContent = tier.label;
   rarity.append(percent, label);
 
-  item.append(icon, body, rarity);
+  item.append(icon, body, rarity, panel);
   return item;
+}
+
+// -- how an achievement is earned -------------------------------------------
+
+async function toggleHowTo(button, panel, appId, achievement) {
+  const open = button.getAttribute("aria-expanded") === "true";
+  if (open) {
+    panel.hidden = true;
+    button.setAttribute("aria-expanded", "false");
+    return;
+  }
+
+  panel.hidden = false;
+  button.setAttribute("aria-expanded", "true");
+  if (panel.dataset.loaded === "true") return;
+
+  panel.replaceChildren(
+    note("Buscando en las guías de la comunidad… la primera consulta de cada juego tarda unos segundos."),
+  );
+
+  try {
+    const data = await api(`/api/howto/${appId}/${encodeURIComponent(achievement.key)}`);
+    panel.dataset.loaded = "true";
+    renderHowTo(panel, data, appId, achievement);
+  } catch (error) {
+    if (error.name === "AbortError") return;
+    // Deliberately not marked as loaded: a failure here is usually transient,
+    // so collapsing and reopening should try again rather than replay the error.
+    panel.replaceChildren(note(error.message));
+  }
+}
+
+function renderHowTo(panel, data, appId, achievement) {
+  panel.replaceChildren();
+
+  if (!data.answered) {
+    panel.append(
+      note(
+        data.passages.length > 0
+          ? "Las guías que mencionan este logro no explican cómo conseguirlo."
+          : `Ninguna de las ${data.guidesSearched} guías revisadas explica este logro. Puede que nadie lo haya escrito todavía.`,
+      ),
+      link(
+        "Buscar a mano en Steam →",
+        `${GUIDES_BASE}/${appId}/guides/?searchText=${encodeURIComponent(achievement.name)}&browsefilter=toprated&l=spanish`,
+      ),
+    );
+    return;
+  }
+
+  panel.append(renderSteps(data.steps));
+
+  if (data.passages.length > 0) {
+    const sources = document.createElement("p");
+    sources.className = "howto-sources";
+    sources.append(document.createTextNode("Escrito a partir de: "));
+    // Several passages can come from one guide; each guide is credited once.
+    const seen = new Set();
+    for (const passage of data.passages) {
+      if (seen.has(passage.guideId)) continue;
+      seen.add(passage.guideId);
+      if (seen.size > 1) sources.append(document.createTextNode(" · "));
+      sources.append(link(`${passage.guideTitle} — ${passage.author}`, passage.guideUrl));
+    }
+    panel.append(sources);
+  }
+
+  const disclaimer = document.createElement("p");
+  disclaimer.className = "howto-disclaimer";
+  disclaimer.textContent =
+    "Resumen automático de guías escritas por otros jugadores. Si algo no cuadra, el enlace lleva al original.";
+  panel.append(disclaimer);
+}
+
+/**
+ * The model is asked for a sentence followed by dashed steps, so that is what
+ * gets rendered. Anything that does not match falls back to a paragraph rather
+ * than being dropped.
+ */
+function renderSteps(text) {
+  const fragment = document.createDocumentFragment();
+  let list = null;
+
+  for (const raw of text.split("\n")) {
+    const line = raw.trim();
+    if (line === "") continue;
+
+    const bullet = /^[-*•]\s+(.*)$/.exec(line);
+    if (bullet) {
+      if (!list) {
+        list = document.createElement("ol");
+        list.className = "howto-steps";
+        fragment.append(list);
+      }
+      const item = document.createElement("li");
+      item.textContent = bullet[1];
+      list.append(item);
+      continue;
+    }
+
+    list = null;
+    const paragraph = document.createElement("p");
+    paragraph.className = "howto-lead";
+    paragraph.textContent = line;
+    fragment.append(paragraph);
+  }
+
+  return fragment;
+}
+
+function note(message) {
+  const paragraph = document.createElement("p");
+  paragraph.className = "howto-note";
+  paragraph.textContent = message;
+  return paragraph;
 }
 
 /**

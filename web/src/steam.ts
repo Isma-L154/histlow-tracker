@@ -132,6 +132,21 @@ export class SteamClient {
     };
   }
 
+  /**
+   * One achievement's official name and description.
+   *
+   * Resolved from Steam rather than accepted from the caller: the name is what
+   * the guide corpus is searched for and what reaches the model's prompt, so it
+   * has to come from an authoritative source, not from a query parameter.
+   */
+  async achievementByKey(
+    appId: number,
+    key: string,
+  ): Promise<{ name: string; description: string } | null> {
+    const entry = (await this.schema(appId)).find((item) => item.key === key);
+    return entry ? { name: entry.name, description: entry.description } : null;
+  }
+
   // -- individual sources -------------------------------------------------
 
   private async schema(appId: number): Promise<Omit<Achievement, "globalPercent" | "unlocked" | "unlockedAt">[]> {

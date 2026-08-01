@@ -15,6 +15,13 @@
     "not_found_handling": "single-page-application"
   },
 
+  // Rewrites community guide passages into steps in Spanish. On the Workers
+  // free plan this cannot bill: the daily allocation of 10,000 Neurons simply
+  // stops serving once spent, and the page falls back to the raw passages.
+  "ai": {
+    "binding": "AI"
+  },
+
   // The Steam Web API key is a secret, set with `wrangler secret put
   // STEAM_WEB_API_KEY`. It is never committed and never reaches the browser.
   "vars": {
@@ -22,6 +29,20 @@
     // percentages move slowly. A day of edge caching keeps the page instant
     // and keeps both the Worker and the Steam key far below their quotas.
     "CACHE_SECONDS": "86400",
+
+    // Guides are read once per game and reused for every achievement in it,
+    // so this window is what keeps the work off the hot path. A week is well
+    // inside how often a community guide changes.
+    "GUIDE_CACHE_SECONDS": "604800",
+
+    // How many of the game's best-rated achievement guides form the corpus.
+    // Six was measured to parse comfortably inside the free plan's 10ms of CPU.
+    "GUIDE_COUNT": "6",
+
+    // Larger models translate Russian guides noticeably better, which is most
+    // of this feature's value. At roughly 139 Neurons per answer this one
+    // affords about 70 first-time lookups a day; answers are cached after that.
+    "HOWTO_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
 
     // Optional. Set a 17-digit SteamID64 to have the page show which
     // achievements you already hold, turning the list into "what is left".
