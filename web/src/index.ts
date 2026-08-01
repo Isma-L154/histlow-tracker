@@ -14,10 +14,25 @@
  * sibling modules.
  */
 
-import { VERSION, json, problem } from "./http.ts";
+import { VERSION, json, problem, logFailure } from "./http.ts";
 import { SteamError, SteamClient } from "./steam.ts";
+import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
+import { explainAchievement } from "./howto.ts";
 
 const GAME_ROUTE = /^\/api\/game\/(\d{1,10})$/;
+// Achievement keys are developer-chosen identifiers, so the character class is
+// deliberately broad - but bounded, and never interpolated into an upstream URL
+// without encoding.
+const HOWTO_ROUTE = /^\/api\/howto\/(\d{1,10})\/([\w.%-]{1,120})$/;
+
+/**
+ * Bumped whenever retrieval or prompting changes.
+ *
+ * Answers are cached for a week, so without this a deploy that improves how
+ * passages are found would keep serving the answers the old logic produced -
+ * and the improvement would be invisible exactly where it mattered.
+ */
+const HOWTO_LOGIC_VERSION = 3;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -34,35 +49,30 @@ export default {
     }
 
     try {
-      return await route(url, request, env, ctx);
+      return await route(url, env, ctx);
     } catch (error) {
       if (error instanceof SteamError) {
         return problem(error.status, error.message);
       }
       // Nothing from an unexpected failure is echoed: it could quote a URL,
       // and one of those carries the API key.
-      console.error("unhandled failure", error);
+      logFailure("unhandled failure", error);
       return problem(500, "Something went wrong handling that request.");
     }
   },
 } satisfies ExportedHandler<Env>;
 
-async function route(
-  url: URL,
-  request: Request,
-  env: Env,
-  ctx: ExecutionContext,
-): Promise<Response> {
+async function route(url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (url.pathname === "/api/health") {
     return json({ ok: true, version: VERSION });
   }
 
   if (url.pathname === "/api/search") {
-    const query = url.searchParams.get("q") ?? "";
-    if (query.trim().length < 2) {
+    const query = (url.searchParams.get("q") ?? "").trim();
+    if (query.length < 2) {
       return problem(400, "Search for at least two characters.");
     }
-    return cached(request, env, ctx, async () => {
+    return cached(key(url, `/api/search?q=${encodeURIComponent(query.toLowerCase())}`), false, env, ctx, async () => {
       const results = await client(env).search(query);
       return json({ results });
     });
@@ -72,13 +82,130 @@ async function route(
   if (game) {
     const appId = Number(game[1]);
     const steamId = resolveSteamId(url, env);
-    return cached(request, env, ctx, async () => {
+    return cached(key(url, `/api/game/${appId}`), steamId !== null, env, ctx, async () => {
       const payload = await client(env).gameAchievements(appId, steamId);
       return json(payload);
     });
   }
 
+  const howto = HOWTO_ROUTE.exec(url.pathname);
+  if (howto) {
+    const appId = Number(howto[1]);
+    const achievementKey = decodeURIComponent(howto[2] ?? "");
+    return cached(
+      key(url, `/api/howto/v${HOWTO_LOGIC_VERSION}/${appId}/${encodeURIComponent(achievementKey)}`),
+      false,
+      env,
+      ctx,
+      () => explain(appId, achievementKey, env, ctx),
+    );
+  }
+
   return problem(404, `No API route matches ${url.pathname}.`);
+}
+
+/**
+ * How one achievement is earned, according to the game's community guides.
+ *
+ * The passages travel back alongside the written steps rather than being
+ * swallowed by them. They are the evidence: if the model is wrong, or the daily
+ * allocation is spent and there are no steps at all, the reader still gets the
+ * real text and the link to whoever wrote it.
+ */
+async function explain(
+  appId: number,
+  achievementKey: string,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  const achievement = await client(env).achievementByKey(appId, achievementKey);
+  if (!achievement) {
+    return problem(404, "That achievement does not belong to this game.");
+  }
+
+  const guides = await corpus(appId, env, ctx);
+  let passages = findPassages(guides, achievement.name, achievement.description, 3);
+  let searched = guides.length;
+
+  // The shared corpus is a game's best-rated achievement guides, which for many
+  // games are route walkthroughs that never name a single achievement. Only
+  // when it comes up empty is it worth paying for a search aimed at this one.
+  if (passages.length === 0) {
+    const targeted = await targetedGuides(appId, achievement.name);
+    searched += targeted.length;
+    passages = findPassages(targeted, achievement.name, achievement.description, 3, {
+      guideTitleQualifies: true,
+    });
+  }
+
+  const written = passages.length > 0
+    ? await explainAchievement(env.AI, env.HOWTO_MODEL, achievement, passages)
+    : null;
+
+  const answered = written?.answered ?? false;
+  return json(
+    {
+      appId,
+      key: achievementKey,
+      name: achievement.name,
+      steps: written?.steps ?? null,
+      answered,
+      guidesSearched: searched,
+      passages: passages.map(({ score: _score, ...passage }) => passage),
+    },
+    {
+      // A found answer keeps for a week. A miss keeps for an hour, because a
+      // miss is as likely to mean "nobody has written it yet" as "it cannot be
+      // found", and the first of those fixes itself.
+      headers: { "Cache-Control": `public, max-age=${answered ? 604800 : 3600}` },
+    },
+  );
+}
+
+/** The two best-rated guides Steam returns when searching for this achievement. */
+async function targetedGuides(appId: number, name: string): Promise<Guide[]> {
+  const ids = await fetchGuideIdsFor(appId, name, 2);
+  const guides: Guide[] = [];
+  for (const id of ids) {
+    const guide = await fetchGuide(id);
+    if (guide) guides.push(guide);
+  }
+  return guides;
+}
+
+/**
+ * The game's guide corpus, downloaded once and reused.
+ *
+ * Reading six guides costs several seconds of wall time, so doing it per
+ * achievement would make every row in a fifty-achievement game pay for it. The
+ * parsed corpus is cached separately from the answers built out of it.
+ */
+async function corpus(appId: number, env: Env, ctx: ExecutionContext): Promise<Guide[]> {
+  const cache = caches.default;
+  const cacheKey = `https://corpus.invalid/guides/${appId}`;
+
+  const hit = await cache.match(cacheKey);
+  if (hit) return (await hit.json()) as Guide[];
+
+  const ids = await fetchGuideIds(appId, Number(env.GUIDE_COUNT) || 6);
+  const guides: Guide[] = [];
+  for (const id of ids) {
+    const guide = await fetchGuide(id);
+    if (guide) guides.push(guide);
+  }
+
+  ctx.waitUntil(
+    cache.put(
+      cacheKey,
+      new Response(JSON.stringify(guides), {
+        headers: {
+          "Content-Type": "application/json",
+          "Cache-Control": `public, max-age=${env.GUIDE_CACHE_SECONDS}`,
+        },
+      }),
+    ),
+  );
+  return guides;
 }
 
 function client(env: Env): SteamClient {
@@ -106,6 +233,18 @@ function resolveSteamId(url: URL, env: Env): string | null {
 }
 
 /**
+ * The cache key for a request, built from scratch rather than from its URL.
+ *
+ * Only the parameters that change the answer belong in the key. Deriving it
+ * from the incoming URL instead would let anyone append a junk parameter and
+ * miss the cache on every request, which is exactly the traffic the cache is
+ * there to keep away from the Steam key's quota.
+ */
+function key(url: URL, canonical: string): string {
+  return new URL(canonical, url.origin).toString();
+}
+
+/**
  * Serves from the edge cache when possible, populating it otherwise.
  *
  * Achievement text never changes and unlock percentages move slowly, so a day
@@ -114,15 +253,17 @@ function resolveSteamId(url: URL, env: Env): string | null {
  * standing between a public URL and someone burning that quota.
  *
  * Responses carrying personal progress are deliberately not cached: they
- * differ per player and are nobody else's business.
+ * differ per player and are nobody else's business. `personal` is decided by
+ * whether a player was actually resolved, not by whether one was asked for, so
+ * an unusable `?steamid=` value still gets a shared, cacheable answer.
  */
 async function cached(
-  request: Request,
+  cacheKey: string,
+  personal: boolean,
   env: Env,
   ctx: ExecutionContext,
   produce: () => Promise<Response>,
 ): Promise<Response> {
-  const personal = new URL(request.url).searchParams.has("steamid") || Boolean(env.DEFAULT_STEAM_ID);
   if (personal) {
     const fresh = await produce();
     fresh.headers.set("Cache-Control", "private, no-store");
@@ -130,13 +271,17 @@ async function cached(
   }
 
   const cache = caches.default;
-  const hit = await cache.match(request);
+  const hit = await cache.match(cacheKey);
   if (hit) return hit;
 
   const response = await produce();
   if (response.ok) {
-    response.headers.set("Cache-Control", `public, max-age=${env.CACHE_SECONDS}`);
-    ctx.waitUntil(cache.put(request, response.clone()));
+    // A producer that set its own lifetime knows something this helper does
+    // not, so it wins.
+    if (!response.headers.has("Cache-Control")) {
+      response.headers.set("Cache-Control", `public, max-age=${env.CACHE_SECONDS}`);
+    }
+    ctx.waitUntil(cache.put(cacheKey, response.clone()));
   }
   return response;
 }

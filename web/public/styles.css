@@ -1,0 +1,825 @@
+/*
+ * Dark only, on purpose: this page is a companion to Steam, which is dark, and
+ * a light variant would be a second design to keep honest for no one's benefit.
+ */
+
+:root {
+  --bg: #0b0f14;
+  --bg-glow: #10202e;
+  --panel: #151b23;
+  --panel-2: #1b232d;
+  --panel-hover: #222c38;
+  --border: #26313d;
+  --border-strong: #34424f;
+  --text: #e9eff5;
+  --muted: #8a97a6;
+  --accent: #66c0f4;
+  --accent-deep: #2a7fb8;
+  --unlocked: #7bc95a;
+  --danger: #ff8a80;
+
+  /* Rarity ramp: the rarer the achievement, the warmer the colour. */
+  --rarity-legendary: #f3b53f;
+  --rarity-rare: #b478f7;
+  --rarity-uncommon: #66c0f4;
+  --rarity-common: #8a97a6;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 10px 30px rgb(0 0 0 / 50%);
+  --wide: 62rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0 1.25rem 5rem;
+  /* Fixed, so a short page does not end the glow mid-screen with a visible
+     seam where the body box stops. */
+  background:
+    radial-gradient(90rem 40rem at 50% -18rem, var(--bg-glow), transparent 70%) fixed,
+    var(--bg);
+  color: var(--text);
+  font:
+    16px/1.6 system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+img {
+  max-width: 100%;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 3px;
+}
+
+h1,
+h2,
+h3 {
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* -- top bar ------------------------------------------------------------- */
+
+.topbar {
+  /* Anchor for the profile panel once the bar wraps; see the narrow query. */
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.85rem 1.25rem;
+  align-items: center;
+  width: 100%;
+  max-width: var(--wide);
+  margin: 0 auto;
+  padding: 1.5rem 0 1.75rem;
+}
+
+.brand {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand-mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+}
+
+.brand-badge {
+  fill: color-mix(in srgb, var(--accent) 10%, transparent);
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.brand-check {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.brand-text strong {
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.brand-text span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.01em;
+}
+
+/* -- search -------------------------------------------------------------- */
+
+.search {
+  position: relative;
+  flex: 1 1 20rem;
+}
+
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: 0.85rem;
+  width: 18px;
+  height: 18px;
+  transform: translateY(-50%);
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+input[type="search"],
+input[type="text"] {
+  width: 100%;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+input[type="search"]:hover,
+input[type="text"]:hover {
+  border-color: var(--border-strong);
+}
+
+input[type="search"]:focus {
+  border-color: var(--accent);
+  background: var(--panel-2);
+  outline: none;
+}
+
+input::placeholder {
+  color: var(--muted);
+}
+
+/* After the shared input rule, so the shorthand above cannot reset it. */
+.search input[type="search"] {
+  padding-left: 2.6rem;
+}
+
+.results {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  left: 0;
+  max-height: 22rem;
+  margin: 0;
+  padding: 0.3rem;
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  list-style: none;
+}
+
+.results li button {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.45rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.results li button:hover,
+.results li button:focus-visible {
+  background: var(--panel-hover);
+}
+
+.results img {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 6px;
+  object-fit: cover;
+  background: var(--panel-hover);
+}
+
+/* -- buttons ------------------------------------------------------------- */
+
+button {
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+button:hover {
+  border-color: var(--border-strong);
+  background: var(--panel-hover);
+}
+
+button.primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+  color: #06131d;
+  font-weight: 600;
+}
+
+button.primary:hover {
+  filter: brightness(1.08);
+}
+
+button.ghost {
+  background: none;
+  color: var(--muted);
+}
+
+/* -- profile ------------------------------------------------------------- */
+
+.profile {
+  position: relative;
+  flex: none;
+}
+
+.profile summary {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.profile summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile summary:hover {
+  border-color: var(--border-strong);
+}
+
+.profile[open] summary {
+  border-color: var(--accent);
+}
+
+.profile-icon {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+.profile-body {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: min(25rem, calc(100vw - 2.5rem));
+  padding: 1rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.profile-body label {
+  display: block;
+  margin-bottom: 0.55rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.hint {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: normal;
+  line-height: 1.45;
+}
+
+.profile-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.profile-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.profile-status {
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.profile-status.is-error {
+  color: var(--danger);
+}
+
+/* -- main ---------------------------------------------------------------- */
+
+main {
+  width: 100%;
+  max-width: var(--wide);
+  margin: 0 auto;
+}
+
+/* -- hero ---------------------------------------------------------------- */
+
+.hero {
+  padding: 3.5rem 0 4rem;
+  text-align: center;
+}
+
+.hero h1 {
+  max-width: 22ch;
+  margin: 0 auto 1rem;
+  font-size: clamp(1.9rem, 5vw, 2.9rem);
+  font-weight: 680;
+}
+
+.hero-lead {
+  max-width: 46ch;
+  margin: 0 auto 2.25rem;
+  color: var(--muted);
+  font-size: 1.02rem;
+}
+
+.hero-examples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.hero-examples-label {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.example {
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.88rem;
+}
+
+/* -- status -------------------------------------------------------------- */
+
+.status {
+  margin: 2rem 0;
+  color: var(--muted);
+}
+
+.status.is-error {
+  padding: 0.95rem 1.1rem;
+  border: 1px solid #5c2b2b;
+  border-radius: var(--radius);
+  background: #241618;
+  color: var(--danger);
+}
+
+/* -- game header --------------------------------------------------------- */
+
+.game-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  align-items: flex-start;
+  margin-bottom: 1.75rem;
+}
+
+.game-cover {
+  width: 280px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.game-meta {
+  flex: 1 1 18rem;
+}
+
+.game-meta h2 {
+  margin: 0 0 0.6rem;
+  font-size: clamp(1.4rem, 3.5vw, 1.85rem);
+}
+
+.progress-line {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.progress-line strong {
+  color: var(--text);
+}
+
+.progress-bar {
+  height: 9px;
+  margin-bottom: 1.1rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel-hover);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--unlocked));
+  transition: width 0.35s ease;
+}
+
+.notice {
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.8rem;
+  border-left: 3px solid var(--rarity-legendary);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--rarity-legendary) 9%, transparent);
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+/* -- steam links --------------------------------------------------------- */
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.steam-link {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 0.86rem;
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.steam-link:hover {
+  border-color: var(--accent);
+  background: var(--panel-hover);
+}
+
+.steam-link svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.steam-link:hover svg {
+  stroke: var(--accent);
+}
+
+/* -- toolbar ------------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.filters {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.chip {
+  padding: 0.38rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.87rem;
+}
+
+.chip.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.count {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* -- achievements -------------------------------------------------------- */
+
+.achievements {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.achievement {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  gap: 0 1rem;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius);
+  margin-bottom: 0.55rem;
+  background: var(--panel);
+  transition: border-color 0.15s ease;
+}
+
+.achievement:hover {
+  border-color: var(--border-strong);
+}
+
+/*
+ * `display: grid` above outranks the browser's own `[hidden] { display: none }`,
+ * so without this the filter would update its counter while changing nothing on
+ * screen.
+ */
+.achievement[hidden] {
+  display: none;
+}
+
+.achievement.is-unlocked {
+  border-left-color: var(--unlocked);
+}
+
+/* Not yet earned: the icon stays legible but visibly inert. */
+.achievement.is-locked .achievement-icon {
+  opacity: 0.5;
+}
+
+.achievement-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-hover);
+}
+
+.achievement-body h3 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: baseline;
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+  font-weight: 620;
+}
+
+.achievement-body p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.badge {
+  padding: 0.08rem 0.5rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--unlocked) 18%, transparent);
+  color: var(--unlocked);
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.achievement-actions {
+  margin-top: 0.55rem;
+}
+
+.howto-button {
+  padding: 0.32rem 0.8rem;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: 0.83rem;
+}
+
+.howto-button:hover {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.howto-button[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.rarity {
+  text-align: right;
+}
+
+.rarity-percent {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.rarity-label {
+  display: block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rarity-legendary { color: var(--rarity-legendary); }
+.rarity-rare      { color: var(--rarity-rare); }
+.rarity-uncommon  { color: var(--rarity-uncommon); }
+.rarity-common    { color: var(--rarity-common); }
+.rarity-unknown   { color: var(--muted); }
+
+/* -- how-to panel -------------------------------------------------------- */
+
+/* The panel spans the whole row rather than sitting in the text column. */
+.howto {
+  grid-column: 1 / -1;
+  margin-top: 0.85rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel-2));
+}
+
+.howto-lead {
+  margin: 0 0 0.7rem;
+  color: var(--text);
+  font-size: 0.94rem;
+}
+
+.howto-steps {
+  margin: 0 0 0.85rem;
+  padding-left: 1.35rem;
+  color: var(--text);
+  font-size: 0.94rem;
+}
+
+.howto-steps li {
+  margin-bottom: 0.35rem;
+  padding-left: 0.2rem;
+}
+
+.howto-steps li::marker {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.howto-note {
+  margin: 0 0 0.5rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.howto-sources,
+.howto-disclaimer {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.howto-sources {
+  margin-bottom: 0.35rem;
+}
+
+/* -- footer -------------------------------------------------------------- */
+
+.footer {
+  width: 100%;
+  max-width: var(--wide);
+  /* `auto` on top keeps the footer at the bottom of a short page instead of
+     stranding it halfway up. */
+  margin: 3rem auto 0;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+/* -- narrow -------------------------------------------------------------- */
+
+@media (width <= 40rem) {
+  .topbar {
+    padding: 1.1rem 0 1.25rem;
+  }
+
+  .brand-text span {
+    display: none;
+  }
+
+  .profile summary span {
+    display: none;
+  }
+
+  /*
+   * The bar wraps here and the trigger shrinks to its icon, so anchoring the
+   * panel to that trigger pushes it off the left edge. Anchoring it to the bar
+   * instead lets it span the screen.
+   */
+  .profile {
+    position: static;
+  }
+
+  .profile-body {
+    right: 0;
+    left: 0;
+    width: auto;
+  }
+
+  .hero {
+    padding: 2.25rem 0 2.75rem;
+  }
+}
+
+@media (width <= 34rem) {
+  .achievement {
+    grid-template-columns: 48px 1fr;
+  }
+
+  .achievement-icon {
+    width: 48px;
+    height: 48px;
+  }
+
+  .rarity {
+    grid-column: 2;
+    margin-top: 0.4rem;
+    text-align: left;
+  }
+
+  .rarity-percent,
+  .rarity-label {
+    display: inline;
+    font-size: 0.8rem;
+  }
+
+  .rarity-percent {
+    margin-inline-end: 0.4rem;
+  }
+
+  .game-cover {
+    width: 100%;
+  }
+}

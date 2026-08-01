@@ -31,3 +31,16 @@ export function json(body: unknown, init: ResponseInit = {}): Response {
 export function problem(status: number, message: string): Response {
   return json({ error: message }, { status });
 }
+
+/**
+ * Logs a failure with any credential stripped out.
+ *
+ * Steam takes its API key as a query parameter, so a thrown error that quotes
+ * the URL it was fetching would carry the key into the Worker's logs. Nothing
+ * here reaches the browser - this is about not leaving the secret sitting in
+ * an observability dashboard.
+ */
+export function logFailure(context: string, error: unknown): void {
+  const rendered = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+  console.error(context, rendered.replace(/([?&](?:key|token|steamid)=)[^&\s"']+/gi, "$1<redacted>"));
+}
