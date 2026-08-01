@@ -119,6 +119,9 @@ tests/                 Unit tests; no network access required
 docs/                  iOS Shortcut setup, operations runbook
 config.json            Non-secret runtime configuration
 .env.example           Template for local runs
+web/                   Cazalogros - the achievement browser (see below)
+  src/                 Cloudflare Worker: Steam client, guide corpus, how-to
+  public/              The page itself: no framework, no build step
 ```
 
 Layering is one-directional: `domain` depends on nothing, adapters depend on
@@ -159,6 +162,132 @@ python -m histlow --dry-run
 
 `--dry-run` executes the full pipeline and prints what would be published
 without writing to the gist or mutating state.
+
+---
+
+# Cazalogros
+
+A second, independent module in this repository: a web page that lists every
+achievement in a Steam game, ordered by how rare it actually is, and explains
+**how each one is earned** — in Spanish, on the page, rather than linking out.
+
+Lives in [`web/`](web/) and shares nothing with the tracker but the repo.
+
+## How it works
+
+```
+Browser
+   |
+   |  /            -> served straight from web/public by Cloudflare's asset
+   |                  runtime. Worker code does not execute at all.
+   |  /api/*       -> the Worker
+   v
+Cloudflare Worker
+   |
+   |  1. Steam  SearchApps / appdetails            -> find the game
+   |  2. Steam  GetSchemaForGame                   -> names, descriptions, icons
+   |  3. Steam  GetGlobalAchievementPercentages    -> how rare each one is
+   |  4. Steam  GetPlayerAchievements (optional)   -> which ones you hold
+   |  5. Steam  guide hub + guide pages            -> the guide corpus
+   |  6. Workers AI                                -> the passages, as steps
+   v
+One JSON response per achievement, cached at the edge.
+```
+
+### Where the steps come from
+
+Steam's API does not expose guide bodies. `GetDetails` returns only the
+author's summary, `num_children` is 0 and `file_url` is the cover image, so
+the text is read from the rendered guide page with `HTMLRewriter` — which
+parses in the runtime rather than in JavaScript, and therefore fits the free
+plan's 10 ms of CPU per request. Six guides were measured to fit.
+
+Passages are matched to an achievement by its **name**, which survives
+translation: Steam keeps achievement names in English inside a Russian guide,
+and that is the only reason a foreign-language corpus is searchable. When a
+game's top-rated guides are route walkthroughs that never name an achievement,
+a second search aimed at that name runs instead. On Hollow Knight that took
+coverage from 3 of 12 to 10 of 12.
+
+The model only ever sees retrieved passages and is instructed to report that
+it cannot answer rather than fill the gap. **Coverage is deliberately not
+100%.** Some achievements have no written guide, and some — "finish the game
+in under 10 hours" — have no steps to give. Saying so beats inventing them.
+
+### Cost
+
+Nothing, and it cannot become something. The Cloudflare **Free** plan has no
+billable overflow: when the daily allocation of 10,000 Neurons is spent,
+inference stops serving and the page falls back to showing the raw guide
+passages. Reaching a bill would require manually upgrading the account.
+
+| Resource | Free allowance | Typical use |
+|---|---|---|
+| Worker requests | 100,000/day | dozens |
+| Workers AI | 10,000 Neurons/day | ~139 per new answer, so ~70/day |
+| Steam Web API | no charge | — |
+
+Answers cache for a week, misses for an hour, and the guide corpus for a week
+per game — so a game you have already opened costs nothing at all.
+
+## Does it work on a phone?
+
+Yes. It is a normal responsive website, so any mobile browser opens it — no
+app, no install, nothing to add to a home screen. Verified at 320 px, 390 px
+and 768 px on an emulated touch device.
+
+The adaptation is plain CSS, in [`web/public/styles.css`](web/public/styles.css):
+
+- **Fluid by default.** The layout is flexbox with `max-width` caps and
+  `clamp()` type, so it reflows continuously instead of snapping between fixed
+  designs. Most of the page needs no breakpoint at all.
+- **`≤ 40rem`** — the top bar wraps, the wordmark's tagline and the profile
+  button's label drop to their icons, and the profile panel anchors to the bar
+  rather than to its own button. Without that last rule the panel hangs off
+  the left edge at 320 px, because the button it was anchored to has shrunk to
+  an icon at the far right.
+- **`≤ 34rem`** — each achievement drops from three columns to two: the rarity
+  figure moves below the description instead of being squeezed beside it, and
+  the icon shrinks from 64 px to 48 px.
+- **Touch targets** stay at or above 30 px tall throughout, and the page never
+  scrolls horizontally at any tested width.
+
+Dark only, on purpose: it is a companion to Steam, which is dark.
+
+## Deploying it
+
+```bash
+cd web
+npm install
+npx wrangler secret put STEAM_WEB_API_KEY   # prompts; never a CLI argument
+npm run check                               # typecheck + build dry run
+npm run deploy
+```
+
+`web/wrangler.jsonc` holds the non-secret configuration: cache lifetimes, how
+many guides form the corpus, and which model writes the steps.
+
+## Security posture
+
+- **No credential reaches the browser.** The Steam key exists only as a Worker
+  secret and only ever appears in a query to `api.steampowered.com`. Error
+  messages return a status code and a fixed label, never the URL that failed,
+  and logged errors are redacted before they reach the observability panel.
+- **Nothing from an API is inserted as HTML.** Achievement text is written by
+  game developers and guide text by strangers; both reach the page only
+  through `textContent`. There is no `innerHTML` in the client.
+- **A strict CSP** in [`web/public/_headers`](web/public/_headers) starts from
+  `default-src 'none'` and allows only same-origin scripts and styles plus
+  Steam's image CDNs, so anything injected has nowhere to send what it finds.
+- **No user input reaches an upstream URL unencoded.** App ids are matched as
+  digits by the route pattern, guide ids as digits from the fetched HTML, and
+  achievement names pass through `encodeURIComponent`.
+- **The edge cache is the rate limit.** Cache keys are built from the canonical
+  route rather than the incoming URL, so appending a junk parameter cannot miss
+  the cache on every request and burn the Steam key's quota.
+
+Semgrep (`p/typescript`, `p/javascript`, `p/xss`, `p/secrets`,
+`p/command-injection`, and Trail of Bits' rules) reports no findings.
 
 ---
 

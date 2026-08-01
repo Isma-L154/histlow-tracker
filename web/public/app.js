@@ -134,9 +134,10 @@ function renderResults(results) {
     const button = document.createElement("button");
     button.type = "button";
 
-    if (result.icon) {
+    const thumbnail = artwork(result.icon);
+    if (thumbnail) {
       const icon = document.createElement("img");
-      icon.src = https(result.icon);
+      icon.src = thumbnail;
       icon.alt = "";
       icon.loading = "lazy";
       icon.referrerPolicy = "no-referrer";
@@ -203,8 +204,9 @@ function renderGame(game) {
   el.name.textContent = game.name;
   document.title = `${game.name} · ${SITE_TITLE}`;
 
-  if (game.headerImage) {
-    el.cover.src = https(game.headerImage);
+  const cover = artwork(game.headerImage);
+  if (cover) {
+    el.cover.src = cover;
     el.cover.alt = `Portada de ${game.name}`;
     el.cover.hidden = false;
   } else {
@@ -296,7 +298,10 @@ function renderAchievement(appId, achievement) {
 
   const icon = document.createElement("img");
   icon.className = "achievement-icon";
-  icon.src = https(achievement.unlocked === false ? achievement.iconLocked || achievement.icon : achievement.icon);
+  const art = artwork(
+    achievement.unlocked === false ? achievement.iconLocked || achievement.icon : achievement.icon,
+  );
+  if (art) icon.src = art;
   icon.alt = "";
   icon.loading = "lazy";
   icon.referrerPolicy = "no-referrer";
@@ -605,13 +610,19 @@ function link(text, href) {
 }
 
 /**
- * Some older Steam schemas still hand out `http://` icon URLs, which a browser
- * blocks outright as mixed content on an HTTPS page.
+ * A usable image URL, or null.
+ *
+ * Two things go wrong with Steam's artwork. Some older schemas still hand out
+ * `http://` URLs, which a browser blocks as mixed content on an HTTPS page.
+ * And some achievements carry an empty icon field, which leaves a directory
+ * URL ending in a slash: requesting it returns a listing rather than an image,
+ * which the browser blocks and logs. Not asking is cleaner than handling the
+ * failure afterwards.
  */
-function https(url) {
-  return typeof url === "string" && url.startsWith("http://")
-    ? `https://${url.slice("http://".length)}`
-    : url;
+function artwork(url) {
+  if (typeof url !== "string" || url === "") return null;
+  const secure = url.startsWith("http://") ? `https://${url.slice("http://".length)}` : url;
+  return /\/[^/?#]+\.[a-z]{3,4}(?:[?#]|$)/i.test(secure) ? secure : null;
 }
 
 function formatDate(iso) {
