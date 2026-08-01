@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "histlow-achievements",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-20",
+
+  // Serves the static site and the API from one deployment. Requests under
+  // /api/ hit the Worker; everything else is served straight from ./public
+  // without invoking Worker code at all, so browsing the page costs nothing
+  // against the request budget that matters.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+    "not_found_handling": "single-page-application"
+  },
+
+  // The Steam Web API key is a secret, set with `wrangler secret put
+  // STEAM_WEB_API_KEY`. It is never committed and never reaches the browser.
+  "vars": {
+    // Achievement text and icons effectively never change, and global unlock
+    // percentages move slowly. A day of edge caching keeps the page instant
+    // and keeps both the Worker and the Steam key far below their quotas.
+    "CACHE_SECONDS": "86400"
+  },
+
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  }
+}

@@ -1,0 +1,33 @@
+/**
+ * Response helpers.
+ *
+ * These live outside the entrypoint on purpose. The Workers runtime treats
+ * every named export of the entry module as a handler or binding, so exporting
+ * a helper - or even a version string - from `index.ts` fails at startup with
+ * "the provided value is not of type 'function or ExportedHandler'". Notably
+ * `wrangler deploy --dry-run` does not catch that; only starting the runtime
+ * does.
+ */
+
+const JSON_HEADERS = {
+  "Content-Type": "application/json; charset=utf-8",
+} as const;
+
+export const VERSION = "0.1.0";
+
+export function json(body: unknown, init: ResponseInit = {}): Response {
+  return new Response(JSON.stringify(body), {
+    ...init,
+    headers: { ...JSON_HEADERS, ...init.headers },
+  });
+}
+
+/**
+ * An error response carrying a message meant for a person to read.
+ *
+ * Messages are written to be safe in a public response: they never quote a
+ * credential and never repeat an upstream body verbatim.
+ */
+export function problem(status: number, message: string): Response {
+  return json({ error: message }, { status });
+}
