@@ -44,3 +44,6 @@ desktop.ini
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Local security-scan output
+static_analysis_semgrep_*/

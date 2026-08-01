@@ -12,6 +12,7 @@
  * work this page exists to remove.
  */
 
+import { logFailure } from "./http.ts";
 import type { Passage } from "./guides.ts";
 
 export interface HowTo {
@@ -84,7 +85,7 @@ export async function explainAchievement(
   } catch (error) {
     // Most often the daily free allocation is spent. The caller still has the
     // passages, so the page degrades to showing the source text.
-    console.error("workers ai call failed", error);
+    logFailure("workers ai call failed", error);
     return null;
   }
 

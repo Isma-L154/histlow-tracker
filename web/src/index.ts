@@ -14,7 +14,7 @@
  * sibling modules.
  */
 
-import { VERSION, json, problem } from "./http.ts";
+import { VERSION, json, problem, logFailure } from "./http.ts";
 import { SteamError, SteamClient } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
@@ -56,7 +56,7 @@ export default {
       }
       // Nothing from an unexpected failure is echoed: it could quote a URL,
       // and one of those carries the API key.
-      console.error("unhandled failure", error);
+      logFailure("unhandled failure", error);
       return problem(500, "Something went wrong handling that request.");
     }
   },

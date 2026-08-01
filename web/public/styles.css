@@ -87,6 +87,8 @@ h3 {
 /* -- top bar ------------------------------------------------------------- */
 
 .topbar {
+  /* Anchor for the profile panel once the bar wraps; see the narrow query. */
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   gap: 0.85rem 1.25rem;
@@ -769,6 +771,21 @@ main {
 
   .profile summary span {
     display: none;
+  }
+
+  /*
+   * The bar wraps here and the trigger shrinks to its icon, so anchoring the
+   * panel to that trigger pushes it off the left edge. Anchoring it to the bar
+   * instead lets it span the screen.
+   */
+  .profile {
+    position: static;
+  }
+
+  .profile-body {
+    right: 0;
+    left: 0;
+    width: auto;
   }
 
   .hero {
