@@ -4,47 +4,53 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <meta name="description" content="Todos los logros de un juego de Steam, ordenados por lo raros que son de verdad." />
-    <title>Logros de Steam</title>
+    <meta name="description" content="Todos los logros de un juego de Steam, ordenados por lo raros que son de verdad, y cómo se consigue cada uno." />
+    <title>Cazalogros</title>
     <link rel="stylesheet" href="/styles.css" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='26' font-size='26'>🏆</text></svg>" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 28 9v14l-12 7L4 23V9z' fill='%230e1318' stroke='%2366c0f4' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='m11 16 3.5 3.5L22 12' fill='none' stroke='%2366c0f4' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
   </head>
   <body>
     <header class="topbar">
-      <h1 class="brand">🏆 Logros de Steam</h1>
+      <a class="brand" href="#" aria-label="Cazalogros, inicio">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true" focusable="false">
+          <path class="brand-badge" d="M16 2 28 9v14l-12 7L4 23V9z" />
+          <path class="brand-check" d="m11 16 3.5 3.5L22 12" />
+        </svg>
+        <span class="brand-text">
+          <strong>Cazalogros</strong>
+          <span>logros de Steam, explicados</span>
+        </span>
+      </a>
 
       <form class="search" id="search-form" role="search" autocomplete="off">
         <label class="visually-hidden" for="search-input">Buscar un juego</label>
-        <input
-          id="search-input"
-          type="search"
-          name="q"
-          placeholder="Buscar un juego…"
-          spellcheck="false"
-          aria-describedby="search-hint"
-        />
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m20 20-3.5-3.5" />
+        </svg>
+        <input id="search-input" type="search" name="q" placeholder="Buscar un juego…" spellcheck="false" />
         <ul class="results" id="results" role="listbox" aria-label="Resultados" hidden></ul>
       </form>
 
       <details class="profile" id="profile">
-        <summary>Mi perfil</summary>
+        <summary>
+          <svg class="profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <circle cx="12" cy="8" r="4" />
+            <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
+          </svg>
+          <span>Mi perfil</span>
+        </summary>
         <div class="profile-body">
           <label for="steamid-input">
             SteamID64 (17 dígitos)
-            <span class="hint">
-              Se guarda solo en este navegador. Con él marcamos los logros que ya tienes.
-            </span>
+            <span class="hint">Se guarda solo en este navegador. Con él marcamos los logros que ya tienes.</span>
           </label>
           <div class="profile-row">
-            <input
-              id="steamid-input"
-              type="text"
-              inputmode="numeric"
-              pattern="\d{17}"
-              maxlength="17"
-              placeholder="76561199000000000"
-            />
-            <button type="button" id="steamid-save">Guardar</button>
+            <input id="steamid-input" type="text" inputmode="numeric" pattern="\d{17}" maxlength="17" placeholder="76561199000000000" />
+            <button type="button" id="steamid-save" class="primary">Guardar</button>
             <button type="button" id="steamid-clear" class="ghost">Quitar</button>
           </div>
           <p class="profile-status" id="profile-status" role="status"></p>
@@ -53,9 +59,22 @@
     </header>
 
     <main id="main">
-      <p class="status" id="status" role="status" aria-live="polite">
-        Busca un juego para ver todos sus logros ordenados por rareza.
-      </p>
+      <section class="hero" id="hero">
+        <h1>Descubre cómo se consigue cada logro</h1>
+        <p class="hero-lead">
+          Busca un juego y verás todos sus logros ordenados del más raro al más común. Los pasos
+          salen de las guías que escribió la comunidad, resumidos en español.
+        </p>
+        <div class="hero-examples">
+          <span class="hero-examples-label">Prueba con</span>
+          <button type="button" class="example" data-appid="367520">Hollow Knight</button>
+          <button type="button" class="example" data-appid="1245620">ELDEN RING</button>
+          <button type="button" class="example" data-appid="782330">DOOM Eternal</button>
+          <button type="button" class="example" data-appid="1145360">Hades</button>
+        </div>
+      </section>
+
+      <p class="status" id="status" role="status" aria-live="polite" hidden></p>
 
       <section class="game" id="game" hidden>
         <div class="game-head">
@@ -87,9 +106,7 @@
     </main>
 
     <footer class="footer">
-      <span id="search-hint">
-        El porcentaje es la proporción de jugadores que tiene cada logro: cuanto más bajo, más raro.
-      </span>
+      El porcentaje es la proporción de jugadores que tiene cada logro: cuanto más bajo, más raro.
     </footer>
 
     <script type="module" src="/app.js"></script>

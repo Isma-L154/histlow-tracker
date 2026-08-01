@@ -9,6 +9,7 @@
  * only ever reach the page through `textContent` or an attribute setter.
  */
 
+const SITE_TITLE = "Cazalogros";
 const STORAGE_KEY = "histlow.steamid";
 const SEARCH_DEBOUNCE_MS = 250;
 const MAX_RESULTS = 12;
@@ -25,6 +26,7 @@ const el = {
   steamIdSave: document.getElementById("steamid-save"),
   steamIdClear: document.getElementById("steamid-clear"),
   profileStatus: document.getElementById("profile-status"),
+  hero: document.getElementById("hero"),
   status: document.getElementById("status"),
   game: document.getElementById("game"),
   cover: document.getElementById("game-cover"),
@@ -181,6 +183,7 @@ async function loadGame(appId) {
 
   setStatus("Cargando logros…");
   el.game.hidden = true;
+  el.hero.hidden = true;
 
   const query = state.steamId ? `?steamid=${encodeURIComponent(state.steamId)}` : "";
   try {
@@ -198,7 +201,7 @@ async function loadGame(appId) {
 
 function renderGame(game) {
   el.name.textContent = game.name;
-  document.title = `${game.name} · Logros de Steam`;
+  document.title = `${game.name} · ${SITE_TITLE}`;
 
   if (game.headerImage) {
     el.cover.src = https(game.headerImage);
@@ -250,16 +253,36 @@ function renderProgress(game) {
 
 function renderLinks(game) {
   el.links.replaceChildren();
-  const guides = `${GUIDES_BASE}/${game.appId}/guides/?browsefilter=toprated&requiredtags%5B%5D=Achievements`;
   const targets = [
-    ["Guías de logros (español)", `${guides}&l=spanish`],
-    ["Guías de logros (todas)", guides],
-    ["Estadísticas en Steam", `https://steamcommunity.com/stats/${game.appId}/achievements/`],
-    ["Ficha de la tienda", `https://store.steampowered.com/app/${game.appId}/`],
+    [
+      "Guías de logros",
+      `${GUIDES_BASE}/${game.appId}/guides/?browsefilter=toprated&requiredtags%5B%5D=Achievements&l=spanish`,
+      "M4 5h16M4 12h16M4 19h10",
+    ],
+    [
+      "Ficha de la tienda",
+      `https://store.steampowered.com/app/${game.appId}/`,
+      "M5 7h14l-1 12H6zM9 7V5a3 3 0 0 1 6 0v2",
+    ],
   ];
-  for (const [label, href] of targets) {
-    el.links.append(link(label, href));
+  for (const [label, href, path] of targets) {
+    const anchor = link(label, href);
+    anchor.className = "steam-link";
+    anchor.prepend(icon(path));
+    el.links.append(anchor);
   }
+}
+
+/** A small line-art glyph from a single path, drawn inline to satisfy the CSP. */
+function icon(path) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  svg.setAttribute("focusable", "false");
+  const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  shape.setAttribute("d", path);
+  svg.append(shape);
+  return svg;
 }
 
 function renderAchievement(appId, achievement) {
@@ -317,13 +340,7 @@ function renderAchievement(appId, achievement) {
   reveal.setAttribute("aria-expanded", "false");
   reveal.addEventListener("click", () => toggleHowTo(reveal, panel, appId, achievement));
 
-  const guide = link(
-    "Ver guías en Steam →",
-    `${GUIDES_BASE}/${appId}/guides/?searchText=${encodeURIComponent(achievement.name)}&browsefilter=toprated&l=spanish`,
-  );
-  guide.className = "achievement-guide";
-
-  actions.append(reveal, guide);
+  actions.append(reveal);
   body.append(actions);
 
   const rarity = document.createElement("div");
@@ -381,10 +398,7 @@ function renderHowTo(panel, data, appId, achievement) {
           ? "Las guías que mencionan este logro no explican cómo conseguirlo."
           : `Ninguna de las ${data.guidesSearched} guías revisadas explica este logro. Puede que nadie lo haya escrito todavía.`,
       ),
-      link(
-        "Buscar a mano en Steam →",
-        `${GUIDES_BASE}/${appId}/guides/?searchText=${encodeURIComponent(achievement.name)}&browsefilter=toprated&l=spanish`,
-      ),
+      searchLink(appId, achievement.name),
     );
     return;
   }
@@ -447,6 +461,18 @@ function renderSteps(text) {
   }
 
   return fragment;
+}
+
+/** The escape hatch when we have no answer: search Steam for it by hand. */
+function searchLink(appId, achievementName) {
+  const anchor = link(
+    "Buscar a mano en Steam",
+    `${GUIDES_BASE}/${appId}/guides/?searchText=${encodeURIComponent(achievementName)}` +
+      "&browsefilter=toprated&l=spanish",
+  );
+  anchor.className = "steam-link";
+  anchor.prepend(icon("M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M20 20l-3.5-3.5"));
+  return anchor;
 }
 
 function note(message) {
@@ -563,6 +589,9 @@ function showError(message) {
   el.status.classList.add("is-error");
   el.status.hidden = false;
   el.game.hidden = true;
+  // Bringing the hero back leaves somewhere to go from a dead link, instead of
+  // an error on an otherwise empty page.
+  el.hero.hidden = false;
 }
 
 function link(text, href) {
@@ -602,11 +631,17 @@ function route() {
   }
   state.game = null;
   el.game.hidden = true;
-  document.title = "Logros de Steam";
-  setStatus("Busca un juego para ver todos sus logros ordenados por rareza.");
+  el.hero.hidden = false;
+  document.title = SITE_TITLE;
+  setStatus("");
 }
 
 window.addEventListener("hashchange", route);
+
+el.hero.addEventListener("click", (event) => {
+  const example = event.target.closest("[data-appid]");
+  if (example) location.hash = `#/game/${example.dataset.appid}`;
+});
 
 if (state.steamId) {
   el.steamId.value = state.steamId;
