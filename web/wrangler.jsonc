@@ -21,7 +21,13 @@
     // Achievement text and icons effectively never change, and global unlock
     // percentages move slowly. A day of edge caching keeps the page instant
     // and keeps both the Worker and the Steam key far below their quotas.
-    "CACHE_SECONDS": "86400"
+    "CACHE_SECONDS": "86400",
+
+    // Optional. Set a 17-digit SteamID64 to have the page show which
+    // achievements you already hold, turning the list into "what is left".
+    // Left empty the feature is simply absent, and every response stays
+    // cacheable and impersonal. A caller can also pass ?steamid= per request.
+    "DEFAULT_STEAM_ID": ""
   },
 
   "observability": {
