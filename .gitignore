@@ -13,6 +13,16 @@ secrets/
 var/
 *.state.json
 
+# --- Web (Cloudflare Worker) ------------------------------------------------
+node_modules/
+.wrangler/
+# Local Worker secrets, the browser-side equivalent of .env.
+.dev.vars
+.dev.vars.*
+# Regenerated from wrangler.jsonc by `wrangler types`; committing it would
+# let the checked-in copy drift from the config it describes.
+web/worker-configuration.d.ts
+
 # --- Python ----------------------------------------------------------------
 __pycache__/
 *.py[cod]
