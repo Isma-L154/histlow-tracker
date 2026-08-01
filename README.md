@@ -103,7 +103,8 @@ Runs once a day at 18:17 Costa Rica time, year round, with no seasonal
 calendar to maintain.
 
 ```
-.github/workflows/     CI, the scheduled tracker run, and the cron keepalive
+.github/workflows/     CI, the scheduled tracker run, the cron keepalive,
+                       and the deploy that publishes web/ on every push to main
 src/histlow/
   domain.py            Frozen dataclasses. No I/O.
   config.py            Environment + config.json loading and validation
@@ -256,11 +257,34 @@ Dark only, on purpose: it is a companion to Steam, which is dark.
 
 ## Deploying it
 
+**Every push to `main` that touches `web/` deploys to production**, via
+[`.github/workflows/deploy-web.yml`](.github/workflows/deploy-web.yml). The
+workflow typechecks first, deploys, then polls `/api/health` until production
+answers — because an upload reporting success and a site that actually serves
+are not the same claim.
+
+It needs one repository secret:
+
+| Secret | Purpose |
+|---|---|
+| `CLOUDFLARE_API_TOKEN` | A token with the **Edit Cloudflare Workers** template |
+| `CLOUDFLARE_ACCOUNT_ID` | Only if the token can reach more than one account |
+
+`wrangler deploy` replaces the script and its `vars`, and leaves secrets alone:
+`STEAM_WEB_API_KEY` survives every deployment and is set once, by hand:
+
+```bash
+cd web
+npx wrangler secret put STEAM_WEB_API_KEY   # prompts; never a CLI argument
+```
+
+To deploy from a machine instead — for a rollback, or before the secret
+exists:
+
 ```bash
 cd web
 npm install
-npx wrangler secret put STEAM_WEB_API_KEY   # prompts; never a CLI argument
-npm run check                               # typecheck + build dry run
+npm run check      # typecheck + build dry run
 npm run deploy
 ```
 
