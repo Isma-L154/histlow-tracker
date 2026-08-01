@@ -1,0 +1,16 @@
+# Response headers for the static side of the site.
+#
+# The page loads nothing but its own two files plus images from Steam's CDNs,
+# so the policy can be an allowlist rather than a set of exceptions: anything
+# injected into this page has nowhere to send what it finds.
+#
+# Steam serves achievement art from several hostnames depending on the game's
+# age, so all four are listed: shared.cloudflare, shared.akamai and cdn.* under
+# steamstatic.com, plus the older steamcdn-a.akamaihd.net.
+
+/*
+  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://media.steampowered.com; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  Cross-Origin-Opener-Policy: same-origin
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), interest-cohort=()
