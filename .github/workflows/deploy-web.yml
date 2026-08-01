@@ -1,0 +1,92 @@
+name: deploy-web
+
+# Publishes Cazalogros to Cloudflare whenever main changes.
+#
+# Before this existed, `main` and production only matched because someone had
+# run `wrangler deploy` by hand at the right moment. Nothing enforced it, and
+# nothing would have reported the drift.
+on:
+  push:
+    branches: [main]
+    # The Worker is built entirely from web/, so a commit that touches only the
+    # Python tracker has nothing to publish. This workflow itself is included:
+    # a change to how deployment works should prove itself by deploying.
+    paths:
+      - "web/**"
+      - ".github/workflows/deploy-web.yml"
+  # Redeploy on demand - after a rollback, or to confirm production matches
+  # main without waiting for a commit.
+  workflow_dispatch:
+
+# Reads the repository and nothing else. The Cloudflare credential is a
+# repository secret and is never exposed to a pull request from a fork,
+# because this only ever runs on push to main.
+permissions:
+  contents: read
+
+# Deployments must not overlap: two `wrangler deploy` runs racing would leave
+# whichever finished last in production, which is not necessarily the newer
+# commit. Queue instead of cancelling so an in-flight deploy completes.
+concurrency:
+  group: deploy-web
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      # A deploy is not the place to discover a type error. Run the typecheck
+      # on its own rather than through `npm run check`, which also invokes
+      # wrangler: this gate needs no Cloudflare credential, so a failure here
+      # can only mean the code is broken.
+      - name: Typecheck
+        working-directory: web
+        run: npx tsc --noEmit
+
+      - name: Deploy to Cloudflare
+        working-directory: web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Optional. Only needed when the token can reach more than one
+          # account, where wrangler cannot infer which one is meant.
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npx wrangler deploy
+
+      # Proves the deployment actually serves, rather than trusting that the
+      # upload reported success. A green deploy step and a broken site are not
+      # the same thing.
+      - name: Verify production responds
+        run: |
+          set -euo pipefail
+          # Hardcoded on purpose: this is the address the deployment is
+          # supposed to serve. Deriving it from config would make the check
+          # agree with a wrong deployment instead of catching it. Update it
+          # here if the workers.dev subdomain ever changes again.
+          url="https://histlow-achievements.ilsproj.workers.dev/api/health"
+          for attempt in 1 2 3 4 5; do
+            body="$(curl -fsS --max-time 20 "$url" || true)"
+            if printf '%s' "$body" | grep -q '"ok":true'; then
+              echo "production healthy: $body"
+              exit 0
+            fi
+            echo "attempt $attempt: not healthy yet (got: ${body:-no response})"
+            sleep 10
+          done
+          echo "::error::Production did not report healthy after the deploy."
+          exit 1
