@@ -51,10 +51,17 @@ jobs:
         working-directory: web
         run: npm ci
 
+      # `worker-configuration.d.ts` describes the bindings and is generated
+      # from wrangler.jsonc, so it is not in the repository - a checkout does
+      # not have one. Generating it needs no credentials; it only reads config.
+      - name: Generate binding types
+        working-directory: web
+        run: npx wrangler types
+
       # A deploy is not the place to discover a type error. Run the typecheck
       # on its own rather than through `npm run check`, which also invokes
-      # wrangler: this gate needs no Cloudflare credential, so a failure here
-      # can only mean the code is broken.
+      # `wrangler deploy --dry-run`: this gate needs no Cloudflare credential,
+      # so a failure here can only mean the code is broken.
       - name: Typecheck
         working-directory: web
         run: npx tsc --noEmit
