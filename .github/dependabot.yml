@@ -16,10 +16,11 @@ updates:
       toolchain:
         patterns: ["*"]
 
-  # Workflows pin actions by mutable tag (`@v7`), which means a moved tag would
-  # run unreviewed code with this repository's secrets in scope. Keeping the
-  # tags current is not a substitute for pinning by digest, but it does mean a
-  # published fix is not sitting unapplied for months.
+  # Workflows pin actions by commit digest, so a moved tag cannot swap in
+  # unreviewed code that would run with this repository's secrets in scope.
+  # That safety costs currency: a digest never picks up a fix on its own.
+  # Dependabot is what closes that gap - it rewrites both the digest and the
+  # trailing version comment, so an update stays reviewable as a diff.
   - package-ecosystem: github-actions
     directory: /
     schedule:
