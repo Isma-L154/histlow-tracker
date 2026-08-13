@@ -91,7 +91,16 @@ async function route(url: URL, env: Env, ctx: ExecutionContext): Promise<Respons
   const howto = HOWTO_ROUTE.exec(url.pathname);
   if (howto) {
     const appId = Number(howto[1]);
-    const achievementKey = decodeURIComponent(howto[2] ?? "");
+    // The route pattern admits `%`, so the path can still carry percent
+    // encoding that does not decode - `%FF%FE` is not valid UTF-8. Left to
+    // throw, that surfaced as a 500 and wrote a log line, which made bad input
+    // indistinguishable from a broken deployment and let anyone fill the log.
+    let achievementKey: string;
+    try {
+      achievementKey = decodeURIComponent(howto[2] ?? "");
+    } catch {
+      return problem(400, "That achievement identifier is not valid.");
+    }
     return cached(
       key(url, `/api/howto/v${HOWTO_LOGIC_VERSION}/${appId}/${encodeURIComponent(achievementKey)}`),
       false,
