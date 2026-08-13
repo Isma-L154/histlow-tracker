@@ -1,0 +1,40 @@
+version: 2
+
+# Security alerts arrive on their own, without this file. What this adds is
+# routine version updates, batched so a solo maintainer gets one pull request a
+# month per ecosystem instead of a steady trickle of individual bumps.
+updates:
+  # Every package here is a devDependency - wrangler, vitest, typescript. None
+  # of it is bundled into the deployed Worker, which ships with zero runtime
+  # dependencies, so these updates affect the local toolchain only.
+  - package-ecosystem: npm
+    directory: /web
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 3
+    groups:
+      toolchain:
+        patterns: ["*"]
+
+  # Workflows pin actions by mutable tag (`@v7`), which means a moved tag would
+  # run unreviewed code with this repository's secrets in scope. Keeping the
+  # tags current is not a substitute for pinning by digest, but it does mean a
+  # published fix is not sitting unapplied for months.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # The tracker declares no runtime dependencies at all; `dev` is pytest and
+  # ruff. Listed so a future dependency cannot be added without Dependabot
+  # already watching the manifest it lands in.
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      dev-tools:
+        patterns: ["*"]
