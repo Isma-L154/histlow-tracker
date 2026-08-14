@@ -146,9 +146,37 @@ Add these actions in order:
 | 5 | **Set Variable** | name `title` |
 | 6 | **Get Dictionary Value** | get `Value` for key `summary` in `payload` |
 | 7 | **Set Variable** | name `body` |
-| 8 | **If** | `title` **has any value** |
-| 9 | ↳ **Show Notification** | Title: `title`, Body: `body` |
-| 10 | **End If** | — |
+| 8 | **Get Dictionary Value** | get `Value` for key `alert_id` in `payload` |
+| 9 | **Set Variable** | name `newid` |
+| 10 | **Get File** | path `Shortcuts/histlow-seen.txt`, **Error If Not Found off** |
+| 11 | **Set Variable** | name `seen` |
+| 12 | **If** | `newid` **has any value** |
+| 13 | ↳ **If** | `seen` **is not** `newid` |
+| 14 | ↳ ↳ **Show Notification** | Title: `title`, Body: `body` |
+| 15 | ↳ ↳ **Text** | `newid` |
+| 16 | ↳ ↳ **Save File** | path `Shortcuts/histlow-seen.txt`, **Overwrite on**, *Ask Where To Save* off |
+| 17 | ↳ **End If** | — |
+| 18 | **End If** | — |
+
+### Why the shortcut remembers
+
+Steps 8-17 are what stop one deal producing one notification per poll. A deal
+stays in the payload for `alerts.repeat_for_days` and the phone polls several
+times a day, so without a memory the same alert is announced every time it is
+read.
+
+`alert_id` is a fingerprint of the games and prices being announced, and
+deliberately not of `generated_at`: it stays identical while the same deal is
+republished, and changes the moment a game joins or a price drops further. The
+shortcut stores the last one it acted on and compares.
+
+**Turn "Error If Not Found" off** on step 10. The file does not exist until the
+first notification is shown, and the default is to abort the whole shortcut.
+
+The outer `If` on step 12 is not redundant. When there is nothing to report the
+payload carries no `alert_id`, so `newid` is empty — and an empty value differs
+from whatever was stored, which without that guard would show an empty
+notification every time a sale ended.
 
 No numeric comparison appears anywhere, and that is deliberate. Shortcuts
 infers the type of a dictionary value and frequently refuses to treat one as a
@@ -237,11 +265,10 @@ alert published and replaced between two polls is never read — and since
 publishing records it, it would never be published again. One missed poll used
 to cost the deal outright.
 
-The cost is a repeat: the shortcut notifies once per poll while the deal is
-still in the payload, so at two polls a day and a two-day window the same game
-is announced up to four times. Being told twice about a deal beats being told
-about none of it. Set `repeat_for_days` to 0 to publish each alert exactly
-once.
+That would mean one notification per poll while the deal lingers, so the
+payload also carries `alert_id` and the shortcut remembers the last one it
+acted on. A republication of the same deal is recognised and stays silent: one
+notification per distinct alert, however often the phone looks.
 
 The window is anchored to when the deal was *first* reported, not refreshed on
 each run, so a month-long sale still stops after two days rather than
