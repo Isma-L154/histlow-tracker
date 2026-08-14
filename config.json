@@ -17,9 +17,11 @@
   "alerts": {
     "$comment": [
       "A deal reaches the shortlist when the current Steam price is at or below the historical Steam low. Comparisons run on integer minor units, never floats.",
-      "require_new_record then narrows that shortlist to sales that BEAT every earlier price. A game returning to a record set by an earlier sale stays silent. This makes alerts much rarer on purpose: Steam tends to repeat a title's deepest discount, so a game can sit at its all-time low again and again without ever going lower. Set it to false to hear about those too."
+      "require_new_record then narrows that shortlist to sales that BEAT every earlier price. A game returning to a record set by an earlier sale stays silent. This makes alerts much rarer on purpose: Steam tends to repeat a title's deepest discount, so a game can sit at its all-time low again and again without ever going lower. Set it to false to hear about those too.",
+      "repeat_for_days keeps a reported deal in the payload for that long. The phone polls on a timer instead of receiving a push, so a payload published and replaced between two polls is never read - and because publishing records the alert, it would never be published again. One missed poll used to cost the deal outright. The price of fixing that is one notification per poll while the deal lingers: at two polls a day and two days, the same game is announced up to four times. Set to 0 to publish each alert exactly once."
     ],
     "require_new_record": true,
+    "repeat_for_days": 2,
     "min_discount_percent": 1,
     "reprice_threshold_minor": 1,
     "max_items_in_payload": 25

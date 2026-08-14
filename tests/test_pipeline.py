@@ -240,9 +240,12 @@ class TestDeduplication:
     def _steam(self) -> FakeSteam:
         return FakeSteam(wishlist=[1], quotes={1: quote(1, 999, 1999, 50)})
 
-    def test_the_same_deal_is_not_republished_on_the_next_run(
+    def test_the_same_deal_keeps_showing_inside_the_repeat_window(
         self, paths: Paths, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # The phone polls on a timer. A payload that appeared and vanished
+        # between two polls was never read, and the deal was recorded as
+        # alerted, so it would never have been published again.
         itad = FakeItad(titles={1: "One"}, lows={1: 999})
 
         first = FakePublisher()
@@ -258,7 +261,54 @@ class TestDeduplication:
             now=NOW + timedelta(days=1),
             monkeypatch=monkeypatch,
         )
-        assert second.published[0]["count"] == 0
+        assert second.published[0]["count"] == 1
+
+    def test_the_same_deal_drops_out_once_the_window_closes(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        itad = FakeItad(titles={1: "One"}, lows={1: 999})
+        execute(paths, self._steam(), itad, FakePublisher(), monkeypatch=monkeypatch)
+
+        later = FakePublisher()
+        execute(
+            paths,
+            self._steam(),
+            itad,
+            later,
+            now=NOW + timedelta(days=3),
+            monkeypatch=monkeypatch,
+        )
+        assert later.published[0]["count"] == 0
+
+    def test_a_long_sale_does_not_repeat_forever(
+        self, paths: Paths, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The window is anchored to when the deal was first reported. Were a
+        # repeat to re-record it, the anchor would advance every run and a
+        # month-long sale would notify every single day.
+        itad = FakeItad(titles={1: "One"}, lows={1: 999})
+        execute(paths, self._steam(), itad, FakePublisher(), monkeypatch=monkeypatch)
+
+        for day in (1, 2):
+            execute(
+                paths,
+                self._steam(),
+                itad,
+                FakePublisher(),
+                now=NOW + timedelta(days=day),
+                monkeypatch=monkeypatch,
+            )
+
+        final = FakePublisher()
+        execute(
+            paths,
+            self._steam(),
+            itad,
+            final,
+            now=NOW + timedelta(days=5),
+            monkeypatch=monkeypatch,
+        )
+        assert final.published[0]["count"] == 0
 
     def test_a_lower_price_alerts_again(
         self, paths: Paths, monkeypatch: pytest.MonkeyPatch
