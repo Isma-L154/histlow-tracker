@@ -95,6 +95,15 @@ class AlertRules:
     reprice_threshold_minor: int = 1
     max_items_in_payload: int = 25
 
+    #: How long a deal keeps appearing in the payload after it is first
+    #: reported.
+    #:
+    #: The phone polls on a timer rather than receiving a push, so an alert
+    #: published and replaced between two polls is never seen - and since it is
+    #: recorded as alerted, it is never published again either. One missed poll
+    #: used to cost the deal permanently. Set to 0 to publish each alert once.
+    repeat_for_days: int = 2
+
     #: When true, only a sale that beats every earlier price is reported.
     #: Returning to a record set by an earlier sale stays silent.
     #:
@@ -113,6 +122,8 @@ class AlertRules:
             raise ConfigError("alerts.reprice_threshold_minor must be at least 1")
         if self.max_items_in_payload < 1:
             raise ConfigError("alerts.max_items_in_payload must be at least 1")
+        if self.repeat_for_days < 0:
+            raise ConfigError("alerts.repeat_for_days cannot be negative")
 
 
 @dataclass(frozen=True, slots=True)
@@ -289,6 +300,7 @@ def _parse_alerts(section: Mapping) -> AlertRules:
         require_new_record=bool(
             section.get("require_new_record", defaults.require_new_record)
         ),
+        repeat_for_days=int(section.get("repeat_for_days", defaults.repeat_for_days)),
     )
 
 

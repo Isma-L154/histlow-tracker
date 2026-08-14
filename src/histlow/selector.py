@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from datetime import datetime, timedelta
 
 from .config import AlertRules
 from .domain import (
@@ -129,6 +130,34 @@ def unreported_deals(
         if state.should_alert(
             deal.app_id, deal.current, threshold_minor=rules.reprice_threshold_minor
         )
+    ]
+
+
+def repeated_deals(
+    deals: Sequence[Deal], state: TrackerState, rules: AlertRules, *, now: datetime
+) -> list[Deal]:
+    """Deals already reported that should still appear in the payload.
+
+    The phone polls on a timer, so a payload published and replaced between two
+    polls is never read. Because publishing also records the alert, that deal
+    would then never be published again: a single missed poll cost it outright.
+
+    Keeping it in the payload for `repeat_for_days` closes that hole. The cost
+    is that a deal is notified once per poll while it lingers, which is a far
+    smaller price than silently losing one.
+
+    Only deals still at the recorded price come back. A sale that ended, or one
+    that shallowed, drops out rather than advertising a price that is gone.
+    """
+    if rules.repeat_for_days <= 0:
+        return []
+
+    window = timedelta(days=rules.repeat_for_days)
+    return [
+        deal
+        for deal in deals
+        if (alerted := state.alerted_at(deal.app_id, deal.current)) is not None
+        and now - alerted <= window
     ]
 
 
