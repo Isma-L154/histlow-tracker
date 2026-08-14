@@ -16,6 +16,7 @@ whatever language the user configured.
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
@@ -112,8 +113,28 @@ def build_payload(
     if rendered:
         document["headline"] = headline_template.format(count=len(rendered))
         document["summary"] = separator.join(item["summary"] for item in rendered)
+        document["alert_id"] = _alert_id(rendered)
 
     return document
+
+
+def _alert_id(rendered: Sequence[dict]) -> str:
+    """A fingerprint of what is being announced.
+
+    A deal stays in the payload for days while the phone polls several times a
+    day, so the same alert is read again and again. The Shortcut keeps no state
+    of its own, so it needs something to compare against a value it stored: an
+    id it has already seen means it has already shown that notification.
+
+    Built from the games and their prices only. `generated_at` is excluded on
+    purpose - it changes every run, which would make every republication look
+    like a new alert and defeat the whole mechanism. Sorting means a reordered
+    but unchanged set keeps its id.
+    """
+    fingerprint = ";".join(
+        sorted(f"{item['app_id']}:{item['price_minor']}:{item['currency']}" for item in rendered)
+    )
+    return hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()[:12]
 
 
 def _render_deal(deal: Deal, record_marker: str = "") -> dict:
