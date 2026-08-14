@@ -58,6 +58,7 @@ class RunResult:
     qualifying: int = 0
     record_setting: int = 0
     alerted: int = 0
+    repeated: int = 0
     published_url: str = ""
 
     def describe(self) -> str:
@@ -66,7 +67,7 @@ class RunResult:
         return (
             f"{self.wishlist_size} wishlisted -> {self.discounted} discounted -> "
             f"{self.qualifying} at all-time low -> {self.record_setting} beat it -> "
-            f"{self.alerted} newly alerted"
+            f"{self.alerted} newly alerted, {self.repeated} still showing"
         )
 
 
@@ -173,7 +174,11 @@ def _execute(
         _log_record_filter(at_low, candidates)
 
     fresh = selector.unreported_deals(candidates, state, settings.alerts)
-    ranked = selector.rank_for_payload(fresh, settings.alerts)
+    # Deals already reported are republished for a while, because the phone
+    # polls rather than being pushed to: a payload that appears and is replaced
+    # between two polls is never read, and would never be published again.
+    repeated = selector.repeated_deals(candidates, state, settings.alerts, now=now)
+    ranked = selector.rank_for_payload([*fresh, *repeated], settings.alerts)
 
     payload = build_payload(
         ranked,
@@ -186,7 +191,11 @@ def _execute(
 
     # Recorded only after a successful publish. Marking them earlier would
     # suppress the alert permanently if publishing had failed.
-    for deal in ranked:
+    #
+    # Only the fresh ones. Re-recording a repeat would push its timestamp
+    # forward on every run, so a long sale would never age out of the repeat
+    # window and would notify daily until it ended.
+    for deal in fresh:
         state.record_alert(deal.app_id, deal.current, now=now)
 
     return RunResult(
@@ -196,7 +205,8 @@ def _execute(
         discounted=len(discounted),
         qualifying=len(at_low),
         record_setting=sum(1 for deal in at_low if deal.record.sets_new_record),
-        alerted=len(ranked),
+        alerted=len(fresh),
+        repeated=len(repeated),
         published_url=published_url,
     )
 

@@ -231,6 +231,22 @@ It alerts again only when it goes strictly cheaper than the price last
 reported. Records are forgotten after `state.retention_days`, so the same game
 can alert afresh years later.
 
+A reported deal does stay in the payload for `alerts.repeat_for_days`, which
+defaults to 2. The phone polls on a timer rather than receiving a push, so an
+alert published and replaced between two polls is never read — and since
+publishing records it, it would never be published again. One missed poll used
+to cost the deal outright.
+
+The cost is a repeat: the shortcut notifies once per poll while the deal is
+still in the payload, so at two polls a day and a two-day window the same game
+is announced up to four times. Being told twice about a deal beats being told
+about none of it. Set `repeat_for_days` to 0 to publish each alert exactly
+once.
+
+The window is anchored to when the deal was *first* reported, not refreshed on
+each run, so a month-long sale still stops after two days rather than
+notifying daily until it ends.
+
 ### Scheduled workflows get disabled
 
 GitHub disables cron workflows in repositories with no commit on the default
