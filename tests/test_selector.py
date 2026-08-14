@@ -6,7 +6,7 @@ buzzes. Every case here is a plain data transformation with no I/O.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -18,6 +18,7 @@ from histlow.selector import (
     discounted_app_ids,
     qualifying_deals,
     rank_for_payload,
+    repeated_deals,
     unreported_deals,
 )
 from histlow.state import TrackerState
@@ -227,6 +228,57 @@ class TestUnreportedDeals:
         rules = AlertRules(reprice_threshold_minor=100)
         assert unreported_deals(self._deal(950), state, rules) == []
         assert len(unreported_deals(self._deal(899), state, rules)) == 1
+
+
+class TestRepeatedDeals:
+    """A deal stays in the payload for a while after it is first reported.
+
+    The phone polls on a timer, so an alert that appears and is replaced before
+    the next poll is never seen at all - and because it is recorded as alerted,
+    it is never published again either. Keeping it in the payload for a couple
+    of days means a missed poll costs nothing.
+    """
+
+    @pytest.fixture
+    def state(self, tmp_path: Path) -> TrackerState:
+        return TrackerState.load(tmp_path / "state.json")
+
+    def _deal(self, current: int):
+        return qualifying_deals(
+            *same_region({1: quote(1, current, 1999, 50)}), {1: identity(1)}, {1: low(1, 1999)}
+        )
+
+    def test_a_never_reported_deal_is_not_a_repeat(self, state: TrackerState) -> None:
+        # It belongs to the fresh set, and counting it in both would duplicate it.
+        assert repeated_deals(self._deal(999), state, RULES, now=NOW) == []
+
+    def test_a_deal_reported_today_is_repeated(self, state: TrackerState) -> None:
+        state.record_alert(1, Money(999, "EUR"), now=NOW)
+        later = NOW + timedelta(days=1)
+        assert len(repeated_deals(self._deal(999), state, RULES, now=later)) == 1
+
+    def test_a_deal_stops_repeating_after_the_window(self, state: TrackerState) -> None:
+        state.record_alert(1, Money(999, "EUR"), now=NOW)
+        later = NOW + timedelta(days=2, seconds=1)
+        assert repeated_deals(self._deal(999), state, RULES, now=later) == []
+
+    def test_the_window_is_configurable(self, state: TrackerState) -> None:
+        state.record_alert(1, Money(999, "EUR"), now=NOW)
+        rules = AlertRules(repeat_for_days=5)
+        later = NOW + timedelta(days=4)
+        assert len(repeated_deals(self._deal(999), state, rules, now=later)) == 1
+
+    def test_zero_days_disables_repeating(self, state: TrackerState) -> None:
+        state.record_alert(1, Money(999, "EUR"), now=NOW)
+        rules = AlertRules(repeat_for_days=0)
+        assert repeated_deals(self._deal(999), state, rules, now=NOW) == []
+
+    def test_a_worse_price_does_not_keep_repeating(self, state: TrackerState) -> None:
+        # The sale ended and a shallower one replaced it. Repeating the old
+        # alert would name a price the store no longer offers.
+        state.record_alert(1, Money(999, "EUR"), now=NOW)
+        later = NOW + timedelta(days=1)
+        assert repeated_deals(self._deal(1099), state, RULES, now=later) == []
 
 
 # ---------------------------------------------------------------------------

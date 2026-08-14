@@ -91,6 +91,18 @@ class TrackerState:
             return True
         return previous.price.minor_units - price.minor_units >= threshold_minor
 
+    def alerted_at(self, app_id: int, price: Money) -> datetime | None:
+        """When this app was last reported, if it was reported at this price.
+
+        A differing price or currency returns None: the recorded alert names a
+        figure the store no longer offers, so republishing it would put a stale
+        price on someone's lock screen.
+        """
+        previous = self._alerts.get(app_id)
+        if previous is None or previous.price != price:
+            return None
+        return previous.alerted_at
+
     # -- mutation -----------------------------------------------------------
 
     def record_alert(self, app_id: int, price: Money, *, now: datetime) -> None:

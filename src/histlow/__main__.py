@@ -79,7 +79,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _force_utf8_output() -> None:
+    """Makes stdout and stderr able to carry currency symbols.
+
+    A Windows console defaults to a legacy codepage, and cp1252 has no colon
+    sign. Printing a Costa Rican price would raise UnicodeEncodeError and take
+    the whole run down - which made `--dry-run`, whose entire purpose is to
+    preview a payload before publishing it, fail exactly when there was
+    something to preview. CI runs on UTF-8 and never saw it.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            reconfigure(encoding="utf-8")
+
+
 def main(argv: list[str] | None = None) -> int:
+    _force_utf8_output()
     args = build_parser().parse_args(argv)
 
     environment = merge_environment(dict(os.environ), read_dotenv(args.env_file))
