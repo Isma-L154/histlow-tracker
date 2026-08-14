@@ -173,6 +173,63 @@ class TestBuildPayload:
         assert payload["headline"]
         assert payload["summary"]
 
+
+class TestAlertId:
+    """A fingerprint of what is being announced, so the phone can skip repeats.
+
+    A deal now stays in the payload for days and the phone polls several times
+    a day, so the same alert is read repeatedly. The shortcut has no memory of
+    its own; this gives it something to compare against one it stored.
+    """
+
+    def test_absent_when_there_is_nothing_to_report(self) -> None:
+        # Same contract as headline and summary: missing, not empty.
+        payload = build_payload([], generated_at=GENERATED_AT, headline_template=HEADLINE)
+        assert "alert_id" not in payload
+
+    def test_present_when_there_is_something_to_report(self) -> None:
+        payload = build_payload([deal()], generated_at=GENERATED_AT, headline_template=HEADLINE)
+        assert payload["alert_id"]
+
+    def test_stable_across_runs_for_the_same_deal(self) -> None:
+        # The whole point: republishing the same deal tomorrow must not look
+        # like a new alert, so the timestamp cannot be part of it.
+        first = build_payload([deal()], generated_at=GENERATED_AT, headline_template=HEADLINE)
+        later = datetime(2026, 7, 27, 18, 0, tzinfo=UTC)
+        second = build_payload([deal()], generated_at=later, headline_template=HEADLINE)
+
+        assert first["alert_id"] == second["alert_id"]
+
+    def test_changes_when_the_price_drops_further(self) -> None:
+        cheap = build_payload(
+            [deal(current=899)], generated_at=GENERATED_AT, headline_template=HEADLINE
+        )
+        dearer = build_payload(
+            [deal(current=999)], generated_at=GENERATED_AT, headline_template=HEADLINE
+        )
+        assert cheap["alert_id"] != dearer["alert_id"]
+
+    def test_changes_when_another_game_joins(self) -> None:
+        one = build_payload([deal()], generated_at=GENERATED_AT, headline_template=HEADLINE)
+        two = build_payload(
+            [deal(), deal(app_id=2358720, title="Black Myth: Wukong")],
+            generated_at=GENERATED_AT,
+            headline_template=HEADLINE,
+        )
+        assert one["alert_id"] != two["alert_id"]
+
+    def test_ignores_the_order_deals_arrive_in(self) -> None:
+        # Ranking may reorder an unchanged set; that is not a new alert.
+        a, b = deal(), deal(app_id=2358720, title="Black Myth: Wukong")
+        forward = build_payload([a, b], generated_at=GENERATED_AT, headline_template=HEADLINE)
+        reverse = build_payload([b, a], generated_at=GENERATED_AT, headline_template=HEADLINE)
+
+        assert forward["alert_id"] == reverse["alert_id"]
+
+    def test_is_short_enough_to_compare_on_a_phone(self) -> None:
+        payload = build_payload([deal()], generated_at=GENERATED_AT, headline_template=HEADLINE)
+        assert len(payload["alert_id"]) <= 16
+
     def test_a_custom_separator_is_used(self) -> None:
         payload = build_payload(
             [deal(title="A"), deal(app_id=2, title="B")],
