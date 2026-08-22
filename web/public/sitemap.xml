@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  One entry, and that is not an oversight.
+
+  Routing is hash-based (#/game/367520) and a crawler discards everything
+  after the fragment, so every game view resolves to this same URL. Listing
+  them would be listing the home page many times over under different names.
+
+  A larger sitemap only becomes meaningful if the app moves to real paths.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://cazalogros.cloudils.com/</loc>
+    <lastmod>2026-08-22</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>
