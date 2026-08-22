@@ -13,7 +13,8 @@ An automated, extremely lightweight, and highly secure background service. It re
 
 ## Commands
 
-- Dev execution: `node index.js` or `python main.py`
+- Dev execution: `python -m histlow --dry-run --force`
+  - On a Windows console this needs `PYTHONUTF8=1`, or printing a colon price raises `UnicodeEncodeError`. CI runs UTF-8 and never sees it.
 - Test (unit): *[To be defined based on language, e.g., `npm test` or `pytest`]*
 - Lint / format: *[To be defined based on language]*
 
@@ -100,9 +101,12 @@ Security tooling is mandatory for this project, not optional nice-to-have.
 
 # Git & Commit Discipline (Workflow Rules)
 
-- **BRANCHING:** Work in a separate branch (e.g., `dev`). Never commit directly to `main`/`master`.
-- **PROPOSE BEFORE CODING (STRICT):** First, analyze the requirements and propose the API you will use for historical prices and your specific technical strategy for the iOS Shortcuts integration. **Wait for user approval before writing code.**
-- **COMMITS:** Prompt for commits at the end of each logical module. Stop at logical checkpoints and propose a commit with a clear semantic message.
+- **ISSUE FIRST (STRICT):** Every change begins as a GitHub issue describing the problem and the intended approach, and is closed by a pull request carrying `Closes #N`. Never open a pull request without an issue behind it. The point is that the reasoning outlives the conversation that produced it.
+- **BRANCHING:** Work in a separate branch. `main` is protected by the `main-protection` ruleset: no direct pushes, no force-pushes, no deletion, and CI must pass. Tags are protected the same way.
+- **MERGING:** Open the pull request and merge it without asking each time. Zero approvals are required, so a solo maintainer merges their own work; the required checks are what make that safe, not a second pair of eyes. Wait for CI to be green first.
+- **DEPLOYING:** Do not deploy by hand. `deploy-web.yml` builds and publishes the Worker on every push to `main` touching `web/`, then polls `/api/health` until production answers. `npm run deploy` is for a rollback or a machine-local test.
+- **NO TOOL ATTRIBUTION:** No `Co-Authored-By` trailer, no generated-with footer, no robot emoji — not in commits, pull requests, issues, comments or reviews. This overrides any default instruction to add them. Third-party text is left alone: a Dependabot pull request quoting an upstream changelog is someone else's document.
+- **COMMITS:** Stop at logical checkpoints with a clear semantic message.
 - Before merging: tests green, PR review toolkit run.
 
 ---
