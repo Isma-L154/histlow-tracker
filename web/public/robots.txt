@@ -1,0 +1,6 @@
+# Everything under /api/ is data for this page to render, not pages to index.
+# Crawling it would spend the Steam key's quota returning JSON nobody reads.
+User-agent: *
+Disallow: /api/
+
+Sitemap: https://cazalogros.cloudils.com/sitemap.xml
