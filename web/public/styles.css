@@ -39,7 +39,7 @@ body {
   flex-direction: column;
   min-height: 100vh;
   margin: 0;
-  padding: 0 1.25rem 5rem;
+  padding: 0 1.25rem 2rem;
   /* Fixed, so a short page does not end the glow mid-screen with a visible
      seam where the body box stops. */
   background:
@@ -87,8 +87,14 @@ h3 {
 /* -- top bar ------------------------------------------------------------- */
 
 .topbar {
-  /* Anchor for the profile panel once the bar wraps; see the narrow query. */
-  position: relative;
+  /*
+   * Sticky, because the search was gone after the first screen and a game runs
+   * to several. Also the anchor for the profile panel once the bar wraps; see
+   * the narrow query.
+   */
+  position: sticky;
+  z-index: 20;
+  top: 0;
   display: flex;
   flex-wrap: wrap;
   gap: 0.85rem 1.25rem;
@@ -96,7 +102,11 @@ h3 {
   width: 100%;
   max-width: var(--wide);
   margin: 0 auto;
-  padding: 1.5rem 0 1.75rem;
+  padding: 1rem 0 1.1rem;
+  /* The page background is a fixed gradient, so a solid colour here would band
+     against it. */
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(10px);
 }
 
 .brand {
@@ -372,6 +382,9 @@ button.ghost {
 /* -- main ---------------------------------------------------------------- */
 
 main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
   width: 100%;
   max-width: var(--wide);
   margin: 0 auto;
@@ -380,6 +393,9 @@ main {
 /* -- hero ---------------------------------------------------------------- */
 
 .hero {
+  /* Centres in whatever main has left, so the home page is not top-heavy
+     with a third of the screen empty underneath. */
+  margin-block: auto;
   padding: 3.5rem 0 4rem;
   text-align: center;
 }
@@ -537,7 +553,18 @@ main {
 
 /* -- toolbar ------------------------------------------------------------- */
 
+/*
+ * Follows the top bar down the page. The offset is whatever that bar currently
+ * measures - it wraps to two rows on a narrow screen - so it is published as a
+ * custom property rather than guessed at here.
+ */
 .toolbar {
+  position: sticky;
+  z-index: 15;
+  top: var(--topbar-height, 4.5rem);
+  padding: 0.6rem 0;
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(10px);
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -578,15 +605,10 @@ main {
 }
 
 .achievement {
-  display: grid;
-  grid-template-columns: 64px 1fr auto;
-  gap: 0 1rem;
-  align-items: center;
-  padding: 0.85rem 1rem;
   border: 1px solid var(--border);
   border-left: 3px solid transparent;
   border-radius: var(--radius);
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.35rem;
   background: var(--panel);
   transition: border-color 0.15s ease;
 }
@@ -596,58 +618,83 @@ main {
 }
 
 /*
- * `display: grid` above outranks the browser's own `[hidden] { display: none }`,
- * so without this the filter would update its counter while changing nothing on
- * screen.
+ * The whole row is one control.
+ *
+ * It used to be three stacked lines - name, description, and a button - which
+ * cost 118px each and made a sixty-three achievement game eight screens long.
+ * Folding it into a single line roughly halves that; the description moves
+ * into the panel the row opens, where there is space to read it.
+ */
+.achievement-summary {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto auto;
+  gap: 0 0.85rem;
+  align-items: center;
+  width: 100%;
+  padding: 0.5rem 0.85rem;
+  border: 0;
+  border-radius: inherit;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.achievement-name {
+  overflow: hidden;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.achievement-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: var(--panel-strong);
+  object-fit: cover;
+}
+
+.achievement.is-locked .achievement-icon {
+  opacity: 0.55;
+}
+
+.chevron {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.15s ease;
+}
+
+.achievement-summary[aria-expanded="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+.achievement-detail {
+  padding: 0 0.85rem 0.75rem calc(40px + 1.7rem);
+}
+
+.achievement-description {
+  margin: 0 0 0.6rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/*
+ * `display: grid` on the row above outranks the browser's own
+ * `[hidden] { display: none }`, so without this the filter would update its
+ * counter while changing nothing on screen.
  */
 .achievement[hidden] {
   display: none;
 }
 
 .achievement.is-unlocked {
-  border-left-color: var(--unlocked);
-}
-
-/* Not yet earned: the icon stays legible but visibly inert. */
-.achievement.is-locked .achievement-icon {
-  opacity: 0.5;
-}
-
-.achievement-icon {
-  width: 64px;
-  height: 64px;
-  border-radius: var(--radius-sm);
-  background: var(--panel-hover);
-}
-
-.achievement-body h3 {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  align-items: baseline;
-  margin: 0 0 0.2rem;
-  font-size: 1rem;
-  font-weight: 620;
-}
-
-.achievement-body p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.badge {
-  padding: 0.08rem 0.5rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--unlocked) 18%, transparent);
-  color: var(--unlocked);
-  font-size: 0.74rem;
-  font-weight: 600;
-  white-space: nowrap;
-}
-
-.achievement-actions {
-  margin-top: 0.55rem;
+  border-left-color: var(--ok);
 }
 
 .howto-button {
@@ -667,22 +714,40 @@ main {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
 }
 
+/* -- rarity -------------------------------------------------------------- */
+
 .rarity {
-  text-align: right;
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+/*
+ * The bar is why this page exists. Sorted by rarity, the list is meant to be
+ * scanned, and a column of numbers cannot be. The percentage beside it carries
+ * the same information, so colour is never the only signal.
+ */
+.rarity-bar {
+  width: 68px;
+  height: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+}
+
+.rarity-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
 }
 
 .rarity-percent {
-  display: block;
-  font-size: 1.05rem;
+  min-width: 3.6rem;
+  font-size: 0.95rem;
   font-weight: 650;
   font-variant-numeric: tabular-nums;
-}
-
-.rarity-label {
-  display: block;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  text-align: right;
 }
 
 .rarity-legendary { color: var(--rarity-legendary); }
@@ -749,10 +814,11 @@ main {
 .footer {
   width: 100%;
   max-width: var(--wide);
-  /* `auto` on top keeps the footer at the bottom of a short page instead of
-     stranding it halfway up. */
-  margin: 3rem auto 0;
-  padding-top: 1.5rem;
+  /* `auto`, genuinely: the shorthand used to say 3rem while the comment
+     claimed auto, which stranded the footer mid-screen on a short page with a
+     third of the viewport empty beneath it. */
+  margin: auto auto 0;
+  padding-top: 2rem;
   border-top: 1px solid var(--border);
   color: var(--muted);
   font-size: 0.8rem;
@@ -778,6 +844,19 @@ main {
    * panel to that trigger pushes it off the left edge. Anchoring it to the bar
    * instead lets it span the screen.
    */
+  /*
+   * The bar wraps to ~190px here, and sticking that to the top costs a third
+   * of a phone screen permanently. It scrolls away instead; the filters below
+   * stay pinned, which is what a long list actually needs within reach.
+   */
+  .topbar {
+    position: relative;
+  }
+
+  .toolbar {
+    top: 0;
+  }
+
   .profile {
     position: static;
   }
@@ -794,32 +873,68 @@ main {
 }
 
 @media (width <= 34rem) {
-  .achievement {
-    grid-template-columns: 48px 1fr;
+  .achievement-summary {
+    grid-template-columns: 32px minmax(0, 1fr) auto auto;
+    gap: 0 0.6rem;
+    padding: 0.45rem 0.6rem;
   }
 
   .achievement-icon {
-    width: 48px;
-    height: 48px;
+    width: 32px;
+    height: 32px;
   }
 
-  .rarity {
-    grid-column: 2;
-    margin-top: 0.4rem;
-    text-align: left;
-  }
-
-  .rarity-percent,
-  .rarity-label {
-    display: inline;
-    font-size: 0.8rem;
+  /* The bar is the first thing to go: at this width the row needs every pixel
+     for the name, and the percentage carries the same information. */
+  .rarity-bar {
+    display: none;
   }
 
   .rarity-percent {
-    margin-inline-end: 0.4rem;
+    min-width: 3rem;
+    font-size: 0.85rem;
+  }
+
+  .achievement-detail {
+    padding-left: calc(32px + 1.2rem);
   }
 
   .game-cover {
     width: 100%;
+  }
+}
+
+/* -- motion -------------------------------------------------------------- */
+
+/*
+ * Five transitions ran regardless of the system setting. None of them carries
+ * meaning, so switching them off costs the page nothing.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* -- rarity scale note ---------------------------------------------------- */
+
+/*
+ * Sits where the percentages actually are. It used to be the footer's only
+ * line, explaining a figure the home page never shows.
+ */
+.scale-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+@media (width <= 46rem) {
+  .scale-note {
+    display: none;
   }
 }

@@ -296,6 +296,16 @@ function renderAchievement(appId, achievement) {
   if (achievement.unlocked === false) item.classList.add("is-locked");
   item.dataset.unlocked = String(achievement.unlocked);
 
+  const tier = rarityTier(achievement.globalPercent);
+
+  // The whole row is the control. A separate button per achievement meant
+  // sixty-three identical buttons down the page, and a row tall enough to
+  // hold one - which is what made a single game eight screens long.
+  const summary = document.createElement("button");
+  summary.type = "button";
+  summary.className = "achievement-summary";
+  summary.setAttribute("aria-expanded", "false");
+
   const icon = document.createElement("img");
   icon.className = "achievement-icon";
   const art = artwork(
@@ -309,30 +319,33 @@ function renderAchievement(appId, achievement) {
   // as a missing icon; a broken-image box reads as a broken page.
   icon.addEventListener("error", () => icon.removeAttribute("src"), { once: true });
 
-  const body = document.createElement("div");
-  body.className = "achievement-body";
-
-  const title = document.createElement("h3");
   const name = document.createElement("span");
+  name.className = "achievement-name";
   name.textContent = achievement.name;
-  title.append(name);
+
+  summary.append(icon, name);
+
   if (achievement.unlocked === true) {
     const badge = document.createElement("span");
     badge.className = "badge";
     badge.textContent = achievement.unlockedAt
       ? `✓ ${formatDate(achievement.unlockedAt)}`
       : "✓ Conseguido";
-    title.append(badge);
+    summary.append(badge);
   }
-  body.append(title);
+
+  summary.append(rarityMeter(achievement.globalPercent, tier), chevron());
+
+  const detail = document.createElement("div");
+  detail.className = "achievement-detail";
+  detail.hidden = true;
 
   const description = document.createElement("p");
+  description.className = "achievement-description";
   // Hidden achievements come back with an empty description from Steam.
-  description.textContent = achievement.description || "Logro oculto: Steam no publica la descripción.";
-  body.append(description);
-
-  const actions = document.createElement("div");
-  actions.className = "achievement-actions";
+  description.textContent =
+    achievement.description || "Logro oculto: Steam no publica la descripción.";
+  detail.append(description);
 
   const panel = document.createElement("div");
   panel.className = "howto";
@@ -345,22 +358,71 @@ function renderAchievement(appId, achievement) {
   reveal.setAttribute("aria-expanded", "false");
   reveal.addEventListener("click", () => toggleHowTo(reveal, panel, appId, achievement));
 
-  actions.append(reveal);
-  body.append(actions);
+  // Reading the guides costs a model call, so it stays a deliberate second
+  // action rather than firing on every row somebody opens out of curiosity.
+  detail.append(reveal, panel);
 
-  const rarity = document.createElement("div");
-  rarity.className = "rarity";
-  const tier = rarityTier(achievement.globalPercent);
-  const percent = document.createElement("span");
-  percent.className = `rarity-percent ${tier.className}`;
-  percent.textContent = achievement.globalPercent === null ? "—" : `${achievement.globalPercent.toFixed(1)}%`;
-  const label = document.createElement("span");
-  label.className = `rarity-label ${tier.className}`;
-  label.textContent = tier.label;
-  rarity.append(percent, label);
+  summary.addEventListener("click", () => {
+    const open = summary.getAttribute("aria-expanded") === "true";
+    summary.setAttribute("aria-expanded", String(!open));
+    detail.hidden = open;
+  });
 
-  item.append(icon, body, rarity, panel);
+  item.append(summary, detail);
   return item;
+}
+
+/**
+ * The rarity figure, plus a bar that can be compared without reading it.
+ *
+ * The bar is the reason this page exists: sorted by rarity, the list is meant
+ * to be scanned, and a column of numbers cannot be. It is decorative in the
+ * accessibility sense - the percentage next to it carries the same value, and
+ * colour is never the only signal.
+ */
+function rarityMeter(percent, tier) {
+  const wrap = document.createElement("span");
+  wrap.className = "rarity";
+
+  const bar = document.createElement("span");
+  bar.className = `rarity-bar ${tier.className}`;
+  bar.setAttribute("aria-hidden", "true");
+  const fill = document.createElement("span");
+  fill.style.width = `${Math.round(rarityWeight(percent) * 100)}%`;
+  bar.append(fill);
+
+  const value = document.createElement("span");
+  value.className = `rarity-percent ${tier.className}`;
+  value.textContent = percent === null ? "—" : `${percent.toFixed(1)}%`;
+  value.title = `${tier.label}${percent === null ? "" : ` · ${percent.toFixed(1)}% de los jugadores`}`;
+
+  wrap.append(bar, value);
+  return wrap;
+}
+
+/**
+ * How full the bar is, from 0 (everyone has it) to 1 (almost nobody does).
+ *
+ * Logarithmic, because a linear scale wastes itself where the interest is:
+ * Hollow Knight's rarest six sit between 3.9% and 5.5%, which on a linear bar
+ * are indistinguishable. On this one they separate visibly, while a 24%
+ * achievement still reads as obviously easier.
+ */
+function rarityWeight(percent) {
+  if (percent === null || percent <= 0) return 0;
+  const clamped = Math.min(100, Math.max(0.1, percent));
+  return Math.min(1, Math.log10(100 / clamped) / 3);
+}
+
+function chevron() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", "chevron");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M6 9l6 6 6-6");
+  svg.append(path);
+  return svg;
 }
 
 // -- how an achievement is earned -------------------------------------------
@@ -500,6 +562,26 @@ function rarityTier(percent) {
   if (percent < 40) return { label: "Poco común", className: "rarity-uncommon" };
   return { label: "Común", className: "rarity-common" };
 }
+
+/*
+ * Publishes the top bar's height so the toolbar can stick directly beneath it.
+ *
+ * The bar wraps to two rows on a narrow screen, so the offset is measured
+ * rather than hard-coded: a guessed value leaves either a gap or an overlap at
+ * exactly the widths nobody tests.
+ */
+function trackTopbarHeight() {
+  const bar = document.querySelector(".topbar");
+  if (!bar) return;
+  const publish = () => {
+    document.documentElement.style.setProperty("--topbar-height", `${bar.offsetHeight}px`);
+  };
+  publish();
+  if ("ResizeObserver" in window) new ResizeObserver(publish).observe(bar);
+  else window.addEventListener("resize", publish);
+}
+
+trackTopbarHeight();
 
 // -- filtering --------------------------------------------------------------
 
