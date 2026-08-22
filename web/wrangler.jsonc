@@ -4,6 +4,21 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-20",
 
+  // Served from the project's own domain. `custom_domain` makes Cloudflare
+  // create the DNS record and issue the certificate itself, so there is no
+  // separate DNS step to keep in sync with this file.
+  "routes": [
+    {
+      "pattern": "cazalogros.cloudils.com",
+      "custom_domain": true
+    }
+  ],
+
+  // The workers.dev address is switched off rather than left as a second way
+  // in. Two live URLs for one site means the old one keeps being linked and
+  // bookmarked, and every later decision about the domain gets made twice.
+  "workers_dev": false,
+
   // Serves the static site and the API from one deployment. Requests under
   // /api/ hit the Worker; everything else is served straight from ./public
   // without invoking Worker code at all, so browsing the page costs nothing
