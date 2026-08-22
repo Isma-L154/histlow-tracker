@@ -151,9 +151,10 @@ function renderResults(results) {
     button.addEventListener("click", () => {
       hideResults();
       el.search.value = result.name;
-      // The hash is the single source of truth for "which game", so a game can
-      // be bookmarked and the back button works without extra bookkeeping.
-      location.hash = `#/game/${result.appId}`;
+      // The path is the single source of truth for "which game", so a game
+      // can be bookmarked, the back button works without extra bookkeeping,
+      // and the server can describe it when the link is shared.
+      goToGame(result.appId);
     });
 
     const item = document.createElement("li");
@@ -716,8 +717,27 @@ function formatDate(iso) {
 
 // -- routing ----------------------------------------------------------------
 
+/**
+ * Sends the browser to a game without reloading the page.
+ *
+ * A real path rather than a fragment, because a fragment never reaches the
+ * server and the server is what writes the preview card a chat app shows.
+ */
+function goToGame(appId) {
+  history.pushState({ appId }, "", `/game/${appId}`);
+  route();
+}
+
 function route() {
-  const match = /^#\/game\/(\d{1,10})$/.exec(location.hash);
+  // Links shared before the move still arrive as #/game/123. Rewriting them
+  // in place keeps every bookmark and pasted message working, and leaves the
+  // reader on a URL that will preview properly if they share it onward.
+  const legacy = /^#\/game\/(\d{1,10})$/.exec(location.hash);
+  if (legacy) {
+    history.replaceState({ appId: Number(legacy[1]) }, "", `/game/${legacy[1]}`);
+  }
+
+  const match = /^\/game\/(\d{1,10})$/.exec(location.pathname);
   if (match) {
     loadGame(Number(match[1]));
     return;
@@ -729,11 +749,13 @@ function route() {
   setStatus("");
 }
 
+// Back and forward now move between real paths.
+window.addEventListener("popstate", route);
 window.addEventListener("hashchange", route);
 
 el.hero.addEventListener("click", (event) => {
   const example = event.target.closest("[data-appid]");
-  if (example) location.hash = `#/game/${example.dataset.appid}`;
+  if (example) goToGame(Number(example.dataset.appid));
 });
 
 if (state.steamId) {
