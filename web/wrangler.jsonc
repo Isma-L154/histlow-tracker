@@ -26,7 +26,10 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"],
+    // `/game/*` joins the list because those pages are built by the Worker: it
+    // writes the title and cover art into the HTML so a shared link previews
+    // as the game rather than as the site.
+    "run_worker_first": ["/api/*", "/game/*"],
     "not_found_handling": "single-page-application"
   },
 

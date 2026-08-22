@@ -18,8 +18,11 @@ import { VERSION, json, problem, logFailure } from "./http.ts";
 import { SteamError, SteamClient } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
+import { describeGame } from "./preview.ts";
 
 const GAME_ROUTE = /^\/api\/game\/(\d{1,10})$/;
+// The page a person shares, as opposed to the endpoint behind it.
+const GAME_PAGE_ROUTE = /^\/game\/(\d{1,10})$/;
 // Achievement keys are developer-chosen identifiers, so the character class is
 // deliberately broad - but bounded, and never interpolated into an upstream URL
 // without encoding.
@@ -38,9 +41,14 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    const page = GAME_PAGE_ROUTE.exec(url.pathname);
+    if (page && request.method === "GET") {
+      return gamePage(Number(page[1]), url, env);
+    }
+
     if (!url.pathname.startsWith("/api/")) {
-      // Unreachable in production: `run_worker_first` limits Worker execution
-      // to /api/*. Kept so `wrangler dev` and tests behave the same way.
+      // Everything else is a static file, or the SPA fallback for a path that
+      // does not match one.
       return env.ASSETS.fetch(request);
     }
 
@@ -111,6 +119,37 @@ async function route(url: URL, env: Env, ctx: ExecutionContext): Promise<Respons
   }
 
   return problem(404, `No API route matches ${url.pathname}.`);
+}
+
+/**
+ * The HTML for one game's page, described so a shared link previews properly.
+ *
+ * Preview bots do not run JavaScript, so the title and image a person sees in
+ * a chat app have to be in the document as it leaves the Worker. Failing to
+ * find the game is not an error here: the shell still renders, and the client
+ * will report the problem in the reader's own language.
+ */
+async function gamePage(appId: number, url: URL, env: Env): Promise<Response> {
+  const shell = await env.ASSETS.fetch(new URL("/index.html", url.origin));
+  const html = await shell.text();
+
+  let described = html;
+  try {
+    const game = await client(env).gameAchievements(appId, null);
+    described = describeGame(html, game, url.origin);
+  } catch (error) {
+    // An unknown id, or Steam being down. The page still works; only the
+    // preview card falls back to the site's generic one.
+    if (!(error instanceof SteamError)) logFailure("game page render failed", error);
+  }
+
+  return new Response(described, {
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      // Same shape for every visitor, and the underlying data barely moves.
+      "Cache-Control": `public, max-age=${env.CACHE_SECONDS}`,
+    },
+  });
 }
 
 /**
