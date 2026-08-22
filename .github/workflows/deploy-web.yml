@@ -84,16 +84,19 @@ jobs:
           # Hardcoded on purpose: this is the address the deployment is
           # supposed to serve. Deriving it from config would make the check
           # agree with a wrong deployment instead of catching it. Update it
-          # here if the workers.dev subdomain ever changes again.
-          url="https://histlow-achievements.ilsproj.workers.dev/api/health"
-          for attempt in 1 2 3 4 5; do
+          # here if the site ever moves again.
+          url="https://cazalogros.cloudils.com/api/health"
+          # Wide enough to cover a custom domain issuing its certificate for
+          # the first time, which takes longer than a redeploy. Too short and
+          # the deploy succeeds while this reports failure.
+          for attempt in $(seq 1 12); do
             body="$(curl -fsS --max-time 20 "$url" || true)"
             if printf '%s' "$body" | grep -q '"ok":true'; then
               echo "production healthy: $body"
               exit 0
             fi
             echo "attempt $attempt: not healthy yet (got: ${body:-no response})"
-            sleep 10
+            sleep 15
           done
           echo "::error::Production did not report healthy after the deploy."
           exit 1

@@ -70,6 +70,8 @@ A second, independent module in this repository: a web page that lists every
 achievement in a Steam game, ordered by how rare it actually is, and explains
 **how each one is earned** — in Spanish, on the page, rather than linking out.
 
+Live at **[cazalogros.cloudils.com](https://cazalogros.cloudils.com)**.
+
 Lives in [`web/`](web/) and shares nothing with the tracker but the repo.
 
 ## How it works
