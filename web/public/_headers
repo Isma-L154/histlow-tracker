@@ -7,9 +7,13 @@
 # Steam serves achievement art from several hostnames depending on the game's
 # age, so all four are listed: shared.cloudflare, shared.akamai and cdn.* under
 # steamstatic.com, plus the older steamcdn-a.akamaihd.net.
+#
+# The one script host that is not us is Cloudflare's analytics beacon, which
+# the edge injects into this page. It was being refused, which cost the
+# statistics it exists for and wrote an error in every visitor's console.
 
 /*
-  Content-Security-Policy: default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://media.steampowered.com; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data: https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://media.steampowered.com; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin
