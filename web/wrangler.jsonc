@@ -33,6 +33,21 @@
     "not_found_handling": "single-page-application"
   },
 
+  // Only the model-backed route is limited, and only per caller.
+  //
+  // The edge cache covers repeat questions, but it cannot cover the first one:
+  // a script walking uncached achievement keys spends the whole daily
+  // allocation of neurons in minutes, and the feature then stops answering for
+  // everybody until the next day. Twenty a minute is far above what reading a
+  // page looks like and far below what draining the budget requires.
+  "ratelimits": [
+    {
+      "name": "HOWTO_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ],
+
   // Rewrites community guide passages into steps in Spanish. On the Workers
   // free plan this cannot bill: the daily allocation of 10,000 Neurons simply
   // stops serving once spent, and the page falls back to the raw passages.
