@@ -9,7 +9,7 @@
     "deploy": "wrangler deploy",
     "check": "wrangler types && tsc --noEmit && wrangler deploy --dry-run",
     "types": "wrangler types",
-    "test": "vitest run"
+    "test": "vitest run --no-watch"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.21.2",
