@@ -29,6 +29,15 @@ const GAME_PAGE_ROUTE = /^\/game\/(\d{1,10})$/;
 const HOWTO_ROUTE = /^\/api\/howto\/(\d{1,10})\/([\w.%-]{1,120})$/;
 
 /**
+ * Longest search accepted.
+ *
+ * There was a floor of two characters and no ceiling, so an 8,000-character
+ * query was forwarded to Steam whole - free amplification against a quota this
+ * project cannot afford to lose. No real title comes close to a hundred.
+ */
+const MAX_QUERY_LENGTH = 100;
+
+/**
  * Bumped whenever retrieval or prompting changes.
  *
  * Answers are cached for a week, so without this a deploy that improves how
@@ -57,7 +66,7 @@ export default {
     }
 
     try {
-      return await route(url, env, ctx);
+      return await route(request, url, env, ctx);
     } catch (error) {
       if (error instanceof SteamError) {
         return problem(error.status, error.message);
@@ -70,7 +79,12 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
-async function route(url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
+async function route(
+  request: Request,
+  url: URL,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
   if (url.pathname === "/api/health") {
     return json({ ok: true, version: VERSION });
   }
@@ -79,6 +93,9 @@ async function route(url: URL, env: Env, ctx: ExecutionContext): Promise<Respons
     const query = (url.searchParams.get("q") ?? "").trim();
     if (query.length < 2) {
       return problem(400, "Search for at least two characters.");
+    }
+    if (query.length > MAX_QUERY_LENGTH) {
+      return problem(400, `Search for at most ${MAX_QUERY_LENGTH} characters.`);
     }
     return cached(key(url, `/api/search?q=${encodeURIComponent(query.toLowerCase())}`), false, env, ctx, async () => {
       const results = await client(env).search(query);
@@ -98,6 +115,24 @@ async function route(url: URL, env: Env, ctx: ExecutionContext): Promise<Respons
 
   const howto = HOWTO_ROUTE.exec(url.pathname);
   if (howto) {
+    // Checked before anything else on this route, including validation: the
+    // point is to cost a flooder as little of our time as possible.
+    const allowed = await withinRate(request, env);
+    if (!allowed) {
+      return new Response(
+        JSON.stringify({ error: "Demasiadas consultas seguidas. Espera un momento." }),
+        {
+          status: 429,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            // The window is a minute, so a minute is the honest answer.
+            "Retry-After": "60",
+            "Cache-Control": "no-store",
+          },
+        },
+      );
+    }
+
     const appId = Number(howto[1]);
     // The route pattern admits `%`, so the path can still carry percent
     // encoding that does not decode - `%FF%FE` is not valid UTF-8. Left to
@@ -119,6 +154,78 @@ async function route(url: URL, env: Env, ctx: ExecutionContext): Promise<Respons
   }
 
   return problem(404, `No API route matches ${url.pathname}.`);
+}
+
+/**
+ * Whether this caller may ask the model again right now.
+ *
+ * Keyed on the caller rather than the route, so one script cannot silence the
+ * page for everyone - which is exactly what an unmetered route allowed, since
+ * the daily neuron allocation is shared by every visitor.
+ *
+ * A missing binding means the limiter is not configured, and the request is
+ * allowed. Failing open is deliberate: this protects a budget, and breaking
+ * the feature to defend it would hand over the outage for free.
+ *
+ * KNOWN GAP, measured rather than assumed. On this account the binding is
+ * present and `limit()` resolves, but never returns `success: false`: thirty
+ * concurrent calls on one key against a limit of twenty were all allowed, with
+ * the outcome logged from production. Miniflare does enforce it, so the tests
+ * below pass and would keep passing if the platform started counting. Until it
+ * does, `spentAllowance` is what actually holds the line.
+ */
+/**
+ * A second limit that does not depend on the platform counting for us.
+ *
+ * The edge cache absorbs repeated questions, so anything reaching this point
+ * is a first-time answer - the expensive kind.
+ *
+ * The ceiling is per isolate, and that is the honest description of it. A
+ * measured burst of twenty-five parallel requests from one address was spread
+ * across eight isolates, the busiest of which saw eight; a per-isolate ceiling
+ * of twenty would never have been reached. Eight is chosen so that a spread
+ * burst still trips it, while a person opening achievements one at a time
+ * never will.
+ *
+ * This is a damage cap, not a precise quota. It cannot be precise without
+ * shared state, and a Durable Object for this would cost more than the budget
+ * it defends.
+ */
+const recentByCaller = new Map<string, number[]>();
+const FRESH_ANSWER_WINDOW_MS = 60_000;
+const MAX_FRESH_ANSWERS = 8;
+
+function spentAllowance(caller: string, now: number): boolean {
+  const seen = (recentByCaller.get(caller) ?? []).filter((at) => now - at < FRESH_ANSWER_WINDOW_MS);
+  seen.push(now);
+  recentByCaller.set(caller, seen);
+
+  // An isolate is recycled often enough that this cannot grow without bound in
+  // practice, but a burst of distinct addresses should not be able to make it
+  // the reason the Worker runs out of memory.
+  if (recentByCaller.size > 5_000) recentByCaller.clear();
+
+  return seen.length > MAX_FRESH_ANSWERS;
+}
+
+async function withinRate(request: Request, env: Env): Promise<boolean> {
+  const limiter = env.HOWTO_LIMITER;
+  if (!limiter) return true;
+
+  // `CF-Connecting-IP` is written by the edge and cannot be set by a client,
+  // so it is the one caller identity here that is worth keying on. Without it
+  // - only outside Cloudflare - every caller shares one bucket, which is
+  // stricter than intended rather than looser.
+  const caller = request.headers.get("CF-Connecting-IP") ?? "unidentified";
+  if (spentAllowance(caller, Date.now())) return false;
+
+  try {
+    const { success } = await limiter.limit({ key: caller });
+    return success;
+  } catch (error) {
+    logFailure("rate limiter unavailable", error);
+    return true;
+  }
 }
 
 /**

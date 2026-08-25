@@ -66,6 +66,12 @@ jobs:
         working-directory: web
         run: npx tsc --noEmit
 
+      # The Worker had no tests until the security work added them, so CI was
+      # typechecking a runtime it never exercised. These run in workerd.
+      - name: Test
+        working-directory: web
+        run: npm test
+
       - name: Deploy to Cloudflare
         working-directory: web
         env:
