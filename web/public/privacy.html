@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="description" content="What Cazalogros stores, what it sends, and who else sees you. No accounts, no cookies of ours, nothing sold." />
+    <title>Privacy · Cazalogros</title>
+    <link rel="canonical" href="https://cazalogros.cloudils.com/privacy" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cazalogros" />
+    <meta property="og:title" content="Privacy — Cazalogros" />
+    <meta property="og:description" content="What Cazalogros stores, what it sends, and who else sees you." />
+    <meta property="og:url" content="https://cazalogros.cloudils.com/privacy" />
+    <meta name="twitter:card" content="summary" />
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 28 9v14l-12 7L4 23V9z' fill='%230e1318' stroke='%2366c0f4' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='m11 16 3.5 3.5L22 12' fill='none' stroke='%2366c0f4' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+  </head>
+  <body class="doc-page">
+    <header class="topbar">
+      <a class="brand" href="/">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <path class="brand-badge" d="M16 2 28 9v14l-12 7L4 23V9z" />
+          <path class="brand-check" d="m11 16 3.5 3.5L22 12" />
+        </svg>
+        <span class="brand-text">
+          <strong>Cazalogros</strong>
+          <span>logros de Steam, explicados</span>
+        </span>
+      </a>
+    </header>
+
+    <main class="doc">
+      <h1>Privacy</h1>
+      <p class="doc-date">Last updated: 28 August 2026</p>
+
+      <div class="doc-summary">
+        <h2>The short version</h2>
+        <p>
+          There are no accounts, no sign-up, no email, and no payment. This site
+          sets no cookies of its own. Nothing is sold, rented, or shared for
+          advertising, because nothing is collected that could be.
+        </p>
+        <p>
+          The one identifier the site can handle is a SteamID, it is optional,
+          and you can erase it at any time from the profile panel.
+        </p>
+      </div>
+
+      <h2>What is stored in your browser</h2>
+      <p>
+        If you enter a SteamID so the page can show which achievements you
+        already hold, it is saved in your own browser under
+        <code>localStorage</code>, with the key <code>histlow.steamid</code>.
+      </p>
+      <p>
+        It stays on your device. It is not copied into any database, because
+        this site has no database of any kind. Clearing it is immediate: open
+        <strong>Mi perfil</strong> and use the clear button, or clear site data
+        in your browser.
+      </p>
+
+      <h2>What your browser sends to this site</h2>
+      <p>Three kinds of request, and nothing else:</p>
+      <ul>
+        <li>What you type into the search box, to look up a game</li>
+        <li>Which game you open</li>
+        <li>Which achievement you expand, to fetch its steps</li>
+      </ul>
+      <p>
+        When a SteamID is saved, it is attached to the request that loads a
+        game, so the page can mark what you already have.
+      </p>
+
+      <h2>Server logs, stated plainly</h2>
+      <p>
+        This site runs on Cloudflare, which records incoming requests. Those
+        records include the full address requested, your IP address, and your
+        browser's user-agent string.
+      </p>
+      <p>
+        <strong>That means a saved SteamID appears in those logs</strong>,
+        because it travels as part of the address. A SteamID is a public profile
+        identifier rather than a secret, but it is still tied to a person, and
+        it would be dishonest not to say so here. It is not stored anywhere
+        else, and responses containing your personal progress are marked so that
+        they are never kept in any shared cache.
+      </p>
+      <p>
+        If you would rather that not happen, do not save a SteamID. Everything
+        except your personal progress works exactly the same without one.
+      </p>
+
+      <h2>Who else sees you</h2>
+      <p>
+        This distinction matters more than it usually gets credit for, so it is
+        split rather than lumped together.
+      </p>
+
+      <h3>Reached directly by your browser — these see your IP address</h3>
+      <ul>
+        <li>
+          <strong>Steam's image servers</strong>
+          (<code>steamstatic.com</code>, <code>steamcdn-a.akamaihd.net</code>,
+          <code>media.steampowered.com</code>) — achievement icons and cover
+          art are loaded straight from Steam.
+        </li>
+        <li>
+          <strong>Cloudflare Web Analytics</strong>
+          (<code>static.cloudflareinsights.com</code>) — counts page views. It
+          sets no cookies and does not follow you to other sites.
+        </li>
+      </ul>
+
+      <h3>Reached by this site's server on your behalf — these do not see you</h3>
+      <ul>
+        <li><strong>Steam's Web API and store</strong> — game, achievement and rarity data</li>
+        <li><strong>Steam Community</strong> — the player-written guides the steps are built from</li>
+        <li><strong>Cloudflare Workers AI</strong> — rewrites guide passages into steps in Spanish</li>
+      </ul>
+      <p>
+        Requests to these are made by the server, not by you, so your IP address
+        is never handed to them.
+      </p>
+
+      <h2>What this site never does</h2>
+      <ul>
+        <li>Set advertising or tracking cookies</li>
+        <li>Sell, rent, or share data with advertisers or data brokers</li>
+        <li>Ask for an email address, a password, or a payment method</li>
+        <li>Build a profile of you across other websites</li>
+      </ul>
+
+      <h2>Children</h2>
+      <p>
+        This site is not directed at children and asks for no personal details
+        from anyone.
+      </p>
+
+      <h2>Changes</h2>
+      <p>
+        If this policy changes, the date at the top changes with it. There is no
+        mailing list to notify, by design.
+      </p>
+
+      <h2>Contact</h2>
+      <p class="doc-todo">
+        <!-- TODO: replace before this is treated as final. -->
+        A contact address has not been published yet. Until one is, questions
+        about this policy can be raised through the project's repository.
+      </p>
+    </main>
+
+    <footer class="footer">
+      <a href="/">Home</a> · <a href="/terms">Terms</a> ·
+      Data from Steam. Steps are summarised from guides written by players.
+    </footer>
+  </body>
+</html>
