@@ -938,3 +938,112 @@ main {
     display: none;
   }
 }
+
+/* -- documents ------------------------------------------------------------ */
+
+/*
+ * Privacy and terms. Prose rather than an interface, so the column is narrow
+ * enough to read comfortably rather than as wide as the achievement list.
+ */
+.doc {
+  width: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding-bottom: 3rem;
+}
+
+.doc h1 {
+  margin: 0 0 0.35rem;
+  font-size: clamp(1.9rem, 4vw, 2.5rem);
+}
+
+.doc-date {
+  margin: 0 0 2rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.doc h2 {
+  margin: 2.4rem 0 0.75rem;
+  font-size: 1.15rem;
+}
+
+.doc h3 {
+  margin: 1.6rem 0 0.6rem;
+  color: var(--accent);
+  font-size: 0.95rem;
+}
+
+.doc p,
+.doc li {
+  color: #c7d2dc;
+  /* 65-75 characters is the comfortable range; the column above lands there. */
+  line-height: 1.7;
+}
+
+.doc ul {
+  margin: 0.75rem 0;
+  padding-left: 1.2rem;
+}
+
+.doc li {
+  margin-bottom: 0.5rem;
+}
+
+.doc code {
+  padding: 0.1rem 0.35rem;
+  border-radius: 5px;
+  background: var(--panel-2);
+  color: var(--accent);
+  font-size: 0.87em;
+}
+
+.doc strong {
+  color: var(--text);
+}
+
+/* The plain-language answer, before the detail that qualifies it. */
+.doc-summary {
+  margin: 0 0 1rem;
+  padding: 1.1rem 1.3rem;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.doc-summary h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.doc-summary p:last-child {
+  margin-bottom: 0;
+}
+
+/* Marks text that is a placeholder, so it cannot be mistaken for finished. */
+.doc-todo {
+  padding: 0.8rem 1rem;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+
+/* The bar is as wide as the prose here, so the wordmark starts on the same
+   line the text does rather than floating out to the left of it. */
+.doc-page .topbar,
+.doc-page .footer {
+  max-width: 44rem;
+}
+
+.doc-page .topbar {
+  padding-bottom: 2rem;
+}
+
+.doc-page .footer a {
+  color: var(--muted);
+}
+
+.doc-page .footer a:hover {
+  color: var(--accent);
+}
