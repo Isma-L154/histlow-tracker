@@ -58,19 +58,12 @@ jobs:
         working-directory: web
         run: npx wrangler types
 
-      # A deploy is not the place to discover a type error. Run the typecheck
-      # on its own rather than through `npm run check`, which also invokes
-      # `wrangler deploy --dry-run`: this gate needs no Cloudflare credential,
-      # so a failure here can only mean the code is broken.
+      # A last look before publishing. The full suite runs in `ci` on the pull
+      # request, which is where a failure can still stop something; this is the
+      # cheap check that the merge commit itself compiles.
       - name: Typecheck
         working-directory: web
         run: npx tsc --noEmit
-
-      # The Worker had no tests until the security work added them, so CI was
-      # typechecking a runtime it never exercised. These run in workerd.
-      - name: Test
-        working-directory: web
-        run: npm test
 
       - name: Deploy to Cloudflare
         working-directory: web
