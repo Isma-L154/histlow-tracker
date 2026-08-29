@@ -1,5 +1,9 @@
 # Steam HistLow Tracker
 
+*Two Steam side projects in one repository: a wishlist watcher that alerts only
+when a game beats its all-time low price, and [Cazalogros](#cazalogros), a
+browser for a game's achievements ranked by how rare they really are.*
+
 Watches a public Steam wishlist and raises an alert only when a game's sale
 **beats its all-time low price on Steam** — a new record, not a return to an
 old one.
