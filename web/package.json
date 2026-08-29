@@ -2,7 +2,7 @@
   "name": "histlow-achievements",
   "version": "0.1.0",
   "private": true,
-  "description": "Steam achievement browser: every achievement for a game, ordered by how rare it actually is.",
+  "description": "Cazalogros: every achievement in a Steam game, ordered by how rare it really is, with how each one is earned.",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
