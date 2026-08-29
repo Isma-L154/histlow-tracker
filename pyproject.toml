@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "histlow-tracker"
 version = "0.1.0"
-description = "Alerts when a wishlisted Steam game hits its all-time low price."
+description = "Alerts when a wishlisted Steam game beats its all-time low price on Steam."
 readme = "README.md"
 requires-python = ">=3.11"
 
