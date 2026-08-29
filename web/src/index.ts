@@ -15,7 +15,7 @@
  */
 
 import { VERSION, json, problem, logFailure } from "./http.ts";
-import { SteamError, SteamClient } from "./steam.ts";
+import { SteamError, SteamClient, type GameAchievements } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
@@ -237,17 +237,39 @@ async function withinRate(request: Request, env: Env): Promise<boolean> {
  * will report the problem in the reader's own language.
  */
 async function gamePage(appId: number, url: URL, env: Env): Promise<Response> {
-  const shell = await env.ASSETS.fetch(new URL("/index.html", url.origin));
-  const html = await shell.text();
+  const page = `${url.origin}/game/${appId}`;
 
-  let described = html;
+  let game: GameAchievements | null = null;
   try {
-    const game = await client(env).gameAchievements(appId, null);
-    described = describeGame(html, game, url.origin);
+    game = await client(env).gameAchievements(appId, null);
   } catch (error) {
-    // An unknown id, or Steam being down. The page still works; only the
-    // preview card falls back to the site's generic one.
-    if (!(error instanceof SteamError)) logFailure("game page render failed", error);
+    // An id Steam does not know, or a game with no achievements, is a normal
+    // answer and not worth a line. An outage, a block page, or a rejected API
+    // key is the operator's problem, and this is the only place that would
+    // ever say so: the reader gets an error in their own language from the
+    // client, and a preview scraper reports nothing to anybody.
+    const unknownGame = error instanceof SteamError && error.upstreamStatus < 500 && error.status === 404;
+    if (!unknownGame) logFailure("game page lookup failed", error);
+  }
+
+  let described: string;
+  try {
+    const shell = await env.ASSETS.fetch(new URL("/index.html", url.origin));
+    const rewrite = describeGame(await shell.text(), game, page);
+
+    // A pattern that matches nothing returns the shell untouched and says
+    // nothing. Since the fallback is now a polished card rather than a visibly
+    // bare one, nobody would notice by looking - so it is said out loud.
+    if (rewrite.missed.length > 0) {
+      logFailure("preview rewrite found no match", `tags: ${rewrite.missed.join(", ")}`);
+    }
+    described = rewrite.html;
+  } catch (error) {
+    // The shell itself is missing or unreadable. Nothing here can recover, and
+    // this runs before the handler's own catch, so it would otherwise leave
+    // the runtime to answer with an unlogged 1101.
+    logFailure("game page shell unavailable", error);
+    return problem(500, "Something went wrong handling that request.");
   }
 
   return new Response(described, {
