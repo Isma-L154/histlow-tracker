@@ -9,6 +9,8 @@
  * only ever reach the page through `textContent` or an attribute setter.
  */
 
+import { handledInPage } from "./nav.js";
+
 const SITE_TITLE = "Cazalogros";
 const STORAGE_KEY = "histlow.steamid";
 const SEARCH_DEBOUNCE_MS = 250;
@@ -18,6 +20,7 @@ const MAX_RESULTS = 12;
 const GUIDES_BASE = "https://steamcommunity.com/app";
 
 const el = {
+  brand: document.querySelector(".brand"),
   form: document.getElementById("search-form"),
   search: document.getElementById("search-input"),
   results: document.getElementById("results"),
@@ -728,6 +731,23 @@ function goToGame(appId) {
   route();
 }
 
+/**
+ * The same, back to the home page.
+ *
+ * No second history entry when the reader is already home: the brand sits in
+ * the header of every page and gets clicked idly, and three idle clicks used
+ * to mean three presses of Back before anything appeared to happen.
+ */
+function goHome() {
+  if (location.pathname !== "/") history.pushState({}, "", "/");
+  // `href="#"` sent the reader to the top of the document, and a full
+  // navigation to "/" still does. Cancelling the navigation has to keep that,
+  // or arriving from deep in a long achievement list lands them halfway down
+  // a page that just got much shorter.
+  scrollTo(0, 0);
+  route();
+}
+
 function route() {
   // Links shared before the move still arrive as #/game/123. Rewriting them
   // in place keeps every bookmark and pasted message working, and leaves the
@@ -756,6 +776,16 @@ window.addEventListener("hashchange", route);
 el.hero.addEventListener("click", (event) => {
   const example = event.target.closest("[data-appid]");
   if (example) goToGame(Number(example.dataset.appid));
+});
+
+// The brand is a plain link to "/", so it opens in a new tab, works from the
+// keyboard, and still goes home with scripting off. Once the page is running
+// there is no reason to reload the whole document for it: the router already
+// knows how to draw the home page.
+el.brand.addEventListener("click", (event) => {
+  if (!handledInPage(event)) return;
+  event.preventDefault();
+  goHome();
 });
 
 if (state.steamId) {

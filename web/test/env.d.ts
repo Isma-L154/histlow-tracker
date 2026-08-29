@@ -11,3 +11,15 @@ declare namespace Cloudflare {
     STEAM_WEB_API_KEY: string;
   }
 }
+
+/**
+ * The shipped HTML, as text.
+ *
+ * Vite resolves a `?raw` import to the file's contents; TypeScript has no idea
+ * what an `.html` module is, and `tsc --noEmit` is a CI gate, so the shape is
+ * declared here rather than silenced at each import.
+ */
+declare module "*.html?raw" {
+  const contents: string;
+  export default contents;
+}
