@@ -18,10 +18,17 @@ const PAGES: ReadonlyArray<[name: string, html: string]> = [
   ["terms.html", terms],
 ];
 
-/** The opening tag of the brand link, which is the site's way home. */
-function brandAnchor(html: string): string {
-  const match = /<a class="brand"[^>]*>/.exec(html);
-  expect(match).not.toBeNull();
+/**
+ * The brand link: its opening tag and everything inside it.
+ *
+ * Attribute order is not part of the contract, so the class is matched
+ * wherever it sits in the tag. `app.js` looks this element up by class and
+ * dereferences it at module scope, so a rename that got past this test would
+ * take the whole client down with it, search box included.
+ */
+function brand(html: string): string {
+  const match = /<a[^>]*class="brand"[^>]*>[\s\S]*?<\/a>/.exec(html);
+  expect(match, "no element with class 'brand'").not.toBeNull();
   return match![0];
 }
 
@@ -29,11 +36,13 @@ describe("the brand is a link home", () => {
   it.each(PAGES)("%s points the brand at the home page", (_name, html) => {
     // `href="#"` looks like a link and behaves like one on the home page, but
     // from /game/440 it only rewrites the fragment: the reader stays put.
-    expect(brandAnchor(html)).toMatch(/href="\/"/);
+    expect(brand(html)).toMatch(/href="\/"/);
   });
 
-  it("writes the brand link the same way on every page", () => {
-    const [first, ...rest] = PAGES.map(([, html]) => brandAnchor(html));
-    for (const anchor of rest) expect(anchor).toBe(first);
+  it.each(PAGES)("%s gives the brand link a name a screen reader can read", (_name, html) => {
+    // The name is computed from the link's own text, so the wordmark has to
+    // stay text. Moving it into the SVG or a background image would leave an
+    // icon with no accessible name at all.
+    expect(brand(html)).toMatch(/>\s*Cazalogros\s*</);
   });
 });

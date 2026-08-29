@@ -9,6 +9,8 @@
  * only ever reach the page through `textContent` or an attribute setter.
  */
 
+import { handledInPage } from "./nav.js";
+
 const SITE_TITLE = "Cazalogros";
 const STORAGE_KEY = "histlow.steamid";
 const SEARCH_DEBOUNCE_MS = 250;
@@ -729,9 +731,20 @@ function goToGame(appId) {
   route();
 }
 
-/** The same, back to the home page. */
+/**
+ * The same, back to the home page.
+ *
+ * No second history entry when the reader is already home: the brand sits in
+ * the header of every page and gets clicked idly, and three idle clicks used
+ * to mean three presses of Back before anything appeared to happen.
+ */
 function goHome() {
-  history.pushState({}, "", "/");
+  if (location.pathname !== "/") history.pushState({}, "", "/");
+  // `href="#"` sent the reader to the top of the document, and a full
+  // navigation to "/" still does. Cancelling the navigation has to keep that,
+  // or arriving from deep in a long achievement list lands them halfway down
+  // a page that just got much shorter.
+  scrollTo(0, 0);
   route();
 }
 
@@ -770,11 +783,7 @@ el.hero.addEventListener("click", (event) => {
 // there is no reason to reload the whole document for it: the router already
 // knows how to draw the home page.
 el.brand.addEventListener("click", (event) => {
-  // A modified click is a request for a second tab or a saved file, not for
-  // this page to change. Leave those to the browser.
-  if (event.defaultPrevented || event.button !== 0) return;
-  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-
+  if (!handledInPage(event)) return;
   event.preventDefault();
   goHome();
 });
