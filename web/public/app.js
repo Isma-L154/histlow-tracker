@@ -18,6 +18,7 @@ const MAX_RESULTS = 12;
 const GUIDES_BASE = "https://steamcommunity.com/app";
 
 const el = {
+  brand: document.querySelector(".brand"),
   form: document.getElementById("search-form"),
   search: document.getElementById("search-input"),
   results: document.getElementById("results"),
@@ -728,6 +729,12 @@ function goToGame(appId) {
   route();
 }
 
+/** The same, back to the home page. */
+function goHome() {
+  history.pushState({}, "", "/");
+  route();
+}
+
 function route() {
   // Links shared before the move still arrive as #/game/123. Rewriting them
   // in place keeps every bookmark and pasted message working, and leaves the
@@ -756,6 +763,20 @@ window.addEventListener("hashchange", route);
 el.hero.addEventListener("click", (event) => {
   const example = event.target.closest("[data-appid]");
   if (example) goToGame(Number(example.dataset.appid));
+});
+
+// The brand is a plain link to "/", so it opens in a new tab, works from the
+// keyboard, and still goes home with scripting off. Once the page is running
+// there is no reason to reload the whole document for it: the router already
+// knows how to draw the home page.
+el.brand.addEventListener("click", (event) => {
+  // A modified click is a request for a second tab or a saved file, not for
+  // this page to change. Leave those to the browser.
+  if (event.defaultPrevented || event.button !== 0) return;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+  event.preventDefault();
+  goHome();
 });
 
 if (state.steamId) {
