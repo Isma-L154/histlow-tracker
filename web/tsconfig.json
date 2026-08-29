@@ -21,7 +21,8 @@
     "noEmit": true,
     "skipLibCheck": true,
     "allowImportingTsExtensions": true,
-    "rewriteRelativeImportExtensions": true
+    "rewriteRelativeImportExtensions": true,
+    "allowJs": true
   },
   "include": [
     "src/**/*.ts",
