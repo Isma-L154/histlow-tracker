@@ -43,6 +43,25 @@ function text(value: string): string {
 }
 
 /**
+ * Replaces `pattern` with `tag`, taking the replacement literally.
+ *
+ * `String.replace` reads `$&`, `` $` ``, `$'` and `$1` in a *string*
+ * replacement as instructions. Every tag below is built from a game name that
+ * came from Steam, and `attribute()` cannot defend against this: it runs
+ * before the replacement is assembled, and its own `&amp;` is what supplies
+ * the ampersand that turns a bare `$` into `$&`. A game called `$&` used to
+ * splice the matched tag - angle brackets, quotes and all - into the middle of
+ * an attribute value, which is the precise escape `attribute()` exists to
+ * prevent.
+ *
+ * A replacer function's return value is never scanned for those sequences, so
+ * passing one closes the hole for all of them at once.
+ */
+function put(html: string, pattern: RegExp, tag: string): string {
+  return html.replace(pattern, () => tag);
+}
+
+/**
  * Rewrites the shell's metadata to describe one game.
  *
  * Replaces rather than appends: duplicate `og:title` tags leave the choice of
@@ -55,28 +74,32 @@ export function describeGame(html: string, game: GameAchievements, origin: strin
     `de verdad, y cómo se consigue cada uno.`;
   const url = `${origin}/game/${game.appId}`;
 
-  let out = html
-    .replace(/<title>[^<]*<\/title>/, `<title>${text(title)}</title>`)
-    .replace(
-      /<meta name="description" content="[^"]*" \/>/,
-      `<meta name="description" content="${attribute(description)}" />`,
-    )
-    .replace(
-      /<meta property="og:title" content="[^"]*" \/>/,
-      `<meta property="og:title" content="${attribute(title)}" />`,
-    )
-    .replace(
-      /<meta property="og:url" content="[^"]*" \/>/,
-      `<meta property="og:url" content="${attribute(url)}" />`,
-    )
-    .replace(
-      /<link rel="canonical" href="[^"]*" \/>/,
-      `<link rel="canonical" href="${attribute(url)}" />`,
-    );
+  let out = put(html, /<title>[^<]*<\/title>/, `<title>${text(title)}</title>`);
+  out = put(
+    out,
+    /<meta name="description" content="[^"]*" \/>/,
+    `<meta name="description" content="${attribute(description)}" />`,
+  );
+  out = put(
+    out,
+    /<meta property="og:title" content="[^"]*" \/>/,
+    `<meta property="og:title" content="${attribute(title)}" />`,
+  );
+  out = put(
+    out,
+    /<meta property="og:url" content="[^"]*" \/>/,
+    `<meta property="og:url" content="${attribute(url)}" />`,
+  );
+  out = put(
+    out,
+    /<link rel="canonical" href="[^"]*" \/>/,
+    `<link rel="canonical" href="${attribute(url)}" />`,
+  );
 
   // The description tag spans several lines in the shell, so it is matched
-  // separately rather than folded into the single-line pattern above.
-  out = out.replace(
+  // separately rather than folded into the single-line patterns above.
+  out = put(
+    out,
     /<meta\s+property="og:description"\s+content="[^"]*"\s*\/>/,
     `<meta property="og:description" content="${attribute(description)}" />`,
   );
@@ -90,23 +113,26 @@ export function describeGame(html: string, game: GameAchievements, origin: strin
   // A game Steam does not know, or has no artwork for, keeps the site's card.
   // That is a worse preview than the cover and a better one than none.
   if (game.headerImage) {
-    out = out
-      .replace(
-        /<meta property="og:image" content="[^"]*" \/>/,
-        `<meta property="og:image" content="${attribute(game.headerImage)}" />`,
-      )
-      .replace(
-        /<meta property="og:image:width" content="[^"]*" \/>/,
-        `<meta property="og:image:width" content="${HEADER_WIDTH}" />`,
-      )
-      .replace(
-        /<meta property="og:image:height" content="[^"]*" \/>/,
-        `<meta property="og:image:height" content="${HEADER_HEIGHT}" />`,
-      )
-      .replace(
-        /<meta property="og:image:alt" content="[^"]*" \/>/,
-        `<meta property="og:image:alt" content="${attribute(`Portada de ${game.name}`)}" />`,
-      );
+    out = put(
+      out,
+      /<meta property="og:image" content="[^"]*" \/>/,
+      `<meta property="og:image" content="${attribute(game.headerImage)}" />`,
+    );
+    out = put(
+      out,
+      /<meta property="og:image:width" content="[^"]*" \/>/,
+      `<meta property="og:image:width" content="${HEADER_WIDTH}" />`,
+    );
+    out = put(
+      out,
+      /<meta property="og:image:height" content="[^"]*" \/>/,
+      `<meta property="og:image:height" content="${HEADER_HEIGHT}" />`,
+    );
+    out = put(
+      out,
+      /<meta property="og:image:alt" content="[^"]*" \/>/,
+      `<meta property="og:image:alt" content="${attribute(`Portada de ${game.name}`)}" />`,
+    );
   }
 
   return out;

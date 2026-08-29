@@ -85,6 +85,24 @@ describe("describeGame", () => {
     expect(out).not.toContain("<script>alert(1)</script>");
   });
 
+  it.each(["$&", "$'", "$`", "$$"])("treats %s in a game name as text, not a replacement pattern", (hostile) => {
+    // `String.replace` reads `$&`, `$'` and ``$` `` in the *replacement* as
+    // instructions, and `attribute()` cannot help: it escapes the name before
+    // the replacement is built, and its own `&amp;` supplies the ampersand
+    // that turns a bare `$` into `$&`. A game called `$&` used to splice the
+    // matched tag - angle brackets, quotes and all - inside an attribute
+    // value, which is the exact escape `attribute()` exists to prevent.
+    const out = describeGame(shell, game({ name: `Half-Life ${hostile}` }), ORIGIN);
+
+    for (const property of ["og:title", "og:image:alt"]) {
+      const [value] = metas(out, property);
+      expect(value, `${property} was corrupted`).not.toContain("<meta");
+      expect(value).not.toContain("<");
+    }
+    // The name has to survive intact, not merely survive safely.
+    expect(metas(out, "og:title")[0]).toContain("Half-Life");
+  });
+
   it("leaves the page body alone", () => {
     // Only <head> is being rewritten. A pattern loose enough to reach the body
     // would take the brand link with it, and `app.js` looks that up by class.
