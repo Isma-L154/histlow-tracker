@@ -1,0 +1,39 @@
+<!--
+  Source for public/og.png, the card a shared link renders as.
+
+  Kept out of public/ on purpose: it is the source, not an asset the site
+  serves. Nothing builds it automatically - a build step for one image that
+  changes when the tagline changes would be a step to keep working forever.
+  Regenerate by hand, from web/:
+
+    node -e "require('sharp')('design/og.svg',{density:192}).resize(1200,630).png({compressionLevel:9}).toFile('public/og.png')"
+
+  1200x630 is the size every scraper crops to. The colours are the ones in
+  public/styles.css, and the badge is the favicon's, so the card and the page
+  a reader lands on are recognisably the same site.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="-12%" r="78%">
+      <stop offset="0%" stop-color="#10202e"/>
+      <stop offset="70%" stop-color="#0b0f14" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="#0b0f14"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+
+  <!-- The same badge-and-check the header and the favicon use, scaled up. -->
+  <g transform="translate(96 168) scale(6.5)">
+    <path d="M16 2 28 9v14l-12 7L4 23V9z" fill="#0e1318" stroke="#66c0f4" stroke-width="2" stroke-linejoin="round"/>
+    <path d="m11 16 3.5 3.5L22 12" fill="none" stroke="#66c0f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <g font-family="Segoe UI, DejaVu Sans, Helvetica, Arial, sans-serif">
+    <text x="352" y="288" fill="#e9eff5" font-size="104" font-weight="700" letter-spacing="-2">Cazalogros</text>
+    <text x="356" y="356" fill="#8a97a6" font-size="42">logros de Steam, explicados</text>
+    <text x="356" y="452" fill="#66c0f4" font-size="34" font-weight="600">cazalogros.cloudils.com</text>
+  </g>
+
+  <rect x="0" y="624" width="1200" height="6" fill="#66c0f4"/>
+</svg>

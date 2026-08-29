@@ -11,6 +11,15 @@
 import type { GameAchievements } from "./steam.ts";
 
 /**
+ * The size Steam serves cover art at, the same for every game.
+ *
+ * Declared so a scraper can reserve the space before the image arrives. The
+ * wide shape is also why the card is a `summary_large_image` one.
+ */
+const HEADER_WIDTH = 460;
+const HEADER_HEIGHT = 215;
+
+/**
  * Escapes text for use inside a double-quoted HTML attribute.
  *
  * Game titles are written by developers and arrive from Steam, so they are
@@ -72,14 +81,32 @@ export function describeGame(html: string, game: GameAchievements, origin: strin
     `<meta property="og:description" content="${attribute(description)}" />`,
   );
 
+  // The shell ships the site's own card, so the game's cover art replaces it
+  // rather than joining it: two `og:image` tags leave the choice of which one
+  // wins to whichever scraper is reading, and they do not agree. The declared
+  // dimensions have to travel with the image, or they describe a picture that
+  // is not there.
+  //
+  // A game Steam does not know, or has no artwork for, keeps the site's card.
+  // That is a worse preview than the cover and a better one than none.
   if (game.headerImage) {
-    // Steam's cover art is 460x215, which every scraper renders as a wide card.
-    out = out.replace(
-      /<meta name="twitter:card" content="[^"]*" \/>/,
-      `<meta name="twitter:card" content="summary_large_image" />\n` +
-        `    <meta property="og:image" content="${attribute(game.headerImage)}" />\n` +
-        `    <meta property="og:image:alt" content="${attribute(`Portada de ${game.name}`)}" />`,
-    );
+    out = out
+      .replace(
+        /<meta property="og:image" content="[^"]*" \/>/,
+        `<meta property="og:image" content="${attribute(game.headerImage)}" />`,
+      )
+      .replace(
+        /<meta property="og:image:width" content="[^"]*" \/>/,
+        `<meta property="og:image:width" content="${HEADER_WIDTH}" />`,
+      )
+      .replace(
+        /<meta property="og:image:height" content="[^"]*" \/>/,
+        `<meta property="og:image:height" content="${HEADER_HEIGHT}" />`,
+      )
+      .replace(
+        /<meta property="og:image:alt" content="[^"]*" \/>/,
+        `<meta property="og:image:alt" content="${attribute(`Portada de ${game.name}`)}" />`,
+      );
   }
 
   return out;
