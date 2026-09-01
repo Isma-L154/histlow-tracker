@@ -34,6 +34,21 @@
   box-sizing: border-box;
 }
 
+/*
+ * `hidden` has to beat the stylesheet.
+ *
+ * The browser hides `[hidden]` with its own `display: none`, and any author
+ * `display` declaration outranks it - so `.filters { display: flex }` left the
+ * chips on screen with the property set, filtering against unlock data the
+ * visitor did not have. The same trap caught `.achievement` earlier.
+ *
+ * `!important` here rather than a rule per element, because the next element to
+ * grow a `display` is the one nobody will think to check.
+ */
+[hidden] {
+  display: none !important;
+}
+
 body {
   display: flex;
   flex-direction: column;
@@ -682,15 +697,6 @@ main {
   color: var(--muted);
   font-size: 0.9rem;
   line-height: 1.5;
-}
-
-/*
- * `display: grid` on the row above outranks the browser's own
- * `[hidden] { display: none }`, so without this the filter would update its
- * counter while changing nothing on screen.
- */
-.achievement[hidden] {
-  display: none;
 }
 
 .achievement.is-unlocked {
