@@ -61,15 +61,15 @@ let searchTimer = null;
 /**
  * What to tell the reader when the API says no.
  *
- * The API answers in English because that is its contract with any caller;
- * this page is in Spanish. Translating by status rather than by message text
- * keeps the two from having to agree on wording.
+ * Translating by status rather than by message text keeps the page and the
+ * API from having to agree on wording: the API states a condition, and this
+ * decides how to say it to a reader.
  */
 const ERRORS = {
-  400: "Escribe al menos dos caracteres para buscar.",
-  404: "Este juego no tiene logros en Steam, o ese identificador no existe.",
-  502: "Steam no está respondiendo ahora mismo. Prueba otra vez en un momento.",
-  503: "Falta configurar la clave de Steam en el servidor.",
+  400: "Type at least two characters to search.",
+  404: "This game has no achievements on Steam, or that id does not exist.",
+  502: "Steam is not responding right now. Try again in a moment.",
+  503: "The Steam key is not configured on the server.",
 };
 
 async function api(path, signal) {
@@ -78,7 +78,7 @@ async function api(path, signal) {
     response = await fetch(path, { signal, headers: { Accept: "application/json" } });
   } catch (error) {
     if (error.name === "AbortError") throw error;
-    throw new Error("No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.");
+    throw new Error("Could not connect. Check your connection and try again.");
   }
 
   let body = null;
@@ -88,7 +88,7 @@ async function api(path, signal) {
     // Falls through to the generic message below.
   }
   if (!response.ok) {
-    throw new Error(ERRORS[response.status] ?? body?.error ?? `La API respondió ${response.status}.`);
+    throw new Error(ERRORS[response.status] ?? body?.error ?? `The API answered ${response.status}.`);
   }
   return body;
 }
@@ -129,7 +129,7 @@ function renderResults(results) {
   el.results.replaceChildren();
   if (results.length === 0) {
     hideResults();
-    setStatus("Ningún juego coincide con esa búsqueda.");
+    setStatus("No game matches that search.");
     return;
   }
 
@@ -186,7 +186,7 @@ async function loadGame(appId) {
   gameRequest?.abort();
   gameRequest = new AbortController();
 
-  setStatus("Cargando logros…");
+  setStatus("Loading achievements…");
   el.game.hidden = true;
   el.hero.hidden = true;
 
@@ -211,7 +211,7 @@ function renderGame(game) {
   const cover = artwork(game.headerImage);
   if (cover) {
     el.cover.src = cover;
-    el.cover.alt = `Portada de ${game.name}`;
+    el.cover.alt = `${game.name} cover art`;
     el.cover.hidden = false;
   } else {
     el.cover.hidden = true;
@@ -244,16 +244,16 @@ function renderProgress(game) {
   const unexplained = state.steamId !== null && !known;
   el.progressNotice.hidden = !unexplained;
   el.progressNotice.textContent = unexplained
-    ? "Steam no da tu progreso en este juego. Suele ser porque no está en tu biblioteca, o porque tus datos de juego son privados."
+    ? "Steam is not sharing your progress for this game. Usually that means it is not in your library, or your game details are private."
     : "";
 
   if (!known) {
-    el.visibleCount.textContent = `${game.total} logros`;
+    el.visibleCount.textContent = `${game.total} achievements`;
     return;
   }
 
   const percent = game.total > 0 ? Math.round((game.unlockedCount / game.total) * 100) : 0;
-  el.progressText.textContent = `${game.unlockedCount} de ${game.total} logros · ${percent}%`;
+  el.progressText.textContent = `${game.unlockedCount} of ${game.total} achievements · ${percent}%`;
   el.progressFill.style.width = `${percent}%`;
 }
 
@@ -261,12 +261,12 @@ function renderLinks(game) {
   el.links.replaceChildren();
   const targets = [
     [
-      "Guías de logros",
-      `${GUIDES_BASE}/${game.appId}/guides/?browsefilter=toprated&requiredtags%5B%5D=Achievements&l=spanish`,
+      "Achievement guides",
+      `${GUIDES_BASE}/${game.appId}/guides/?browsefilter=toprated&requiredtags%5B%5D=Achievements&l=english`,
       "M4 5h16M4 12h16M4 19h10",
     ],
     [
-      "Ficha de la tienda",
+      "Store page",
       `https://store.steampowered.com/app/${game.appId}/`,
       "M5 7h14l-1 12H6zM9 7V5a3 3 0 0 1 6 0v2",
     ],
@@ -334,7 +334,7 @@ function renderAchievement(appId, achievement) {
     badge.className = "badge";
     badge.textContent = achievement.unlockedAt
       ? `✓ ${formatDate(achievement.unlockedAt)}`
-      : "✓ Conseguido";
+      : "✓ Unlocked";
     summary.append(badge);
   }
 
@@ -348,7 +348,7 @@ function renderAchievement(appId, achievement) {
   description.className = "achievement-description";
   // Hidden achievements come back with an empty description from Steam.
   description.textContent =
-    achievement.description || "Logro oculto: Steam no publica la descripción.";
+    achievement.description || "Hidden achievement: Steam does not publish the description.";
   detail.append(description);
 
   const panel = document.createElement("div");
@@ -358,7 +358,7 @@ function renderAchievement(appId, achievement) {
   const reveal = document.createElement("button");
   reveal.type = "button";
   reveal.className = "howto-button";
-  reveal.textContent = "¿Cómo se consigue?";
+  reveal.textContent = "How is it earned?";
   reveal.setAttribute("aria-expanded", "false");
   reveal.addEventListener("click", () => toggleHowTo(reveal, panel, appId, achievement));
 
@@ -398,7 +398,7 @@ function rarityMeter(percent, tier) {
   const value = document.createElement("span");
   value.className = `rarity-percent ${tier.className}`;
   value.textContent = percent === null ? "—" : `${percent.toFixed(1)}%`;
-  value.title = `${tier.label}${percent === null ? "" : ` · ${percent.toFixed(1)}% de los jugadores`}`;
+  value.title = `${tier.label}${percent === null ? "" : ` · ${percent.toFixed(1)}% of players`}`;
 
   wrap.append(bar, value);
   return wrap;
@@ -444,7 +444,7 @@ async function toggleHowTo(button, panel, appId, achievement) {
   if (panel.dataset.loaded === "true") return;
 
   panel.replaceChildren(
-    note("Buscando en las guías de la comunidad… la primera consulta de cada juego tarda unos segundos."),
+    note("Searching community guides… the first lookup for each game takes a few seconds."),
   );
 
   try {
@@ -466,8 +466,8 @@ function renderHowTo(panel, data, appId, achievement) {
     panel.append(
       note(
         data.passages.length > 0
-          ? "Las guías que mencionan este logro no explican cómo conseguirlo."
-          : `Ninguna de las ${data.guidesSearched} guías revisadas explica este logro. Puede que nadie lo haya escrito todavía.`,
+          ? "The guides that mention this achievement do not explain how to earn it."
+          : `None of the ${data.guidesSearched} guides checked explains this achievement. Perhaps nobody has written it up yet.`,
       ),
       searchLink(appId, achievement.name),
     );
@@ -494,7 +494,7 @@ function renderHowTo(panel, data, appId, achievement) {
   const disclaimer = document.createElement("p");
   disclaimer.className = "howto-disclaimer";
   disclaimer.textContent =
-    "Resumen automático de guías escritas por otros jugadores. Si algo no cuadra, el enlace lleva al original.";
+    "Automatic summary of guides written by other players. If something looks wrong, the link goes to the original.";
   panel.append(disclaimer);
 }
 
@@ -560,11 +560,11 @@ function note(message) {
  * labels line up with how these achievements get talked about elsewhere.
  */
 function rarityTier(percent) {
-  if (percent === null) return { label: "Sin datos", className: "rarity-unknown" };
-  if (percent < 5) return { label: "Legendario", className: "rarity-legendary" };
-  if (percent < 15) return { label: "Raro", className: "rarity-rare" };
-  if (percent < 40) return { label: "Poco común", className: "rarity-uncommon" };
-  return { label: "Común", className: "rarity-common" };
+  if (percent === null) return { label: "No data", className: "rarity-unknown" };
+  if (percent < 5) return { label: "Legendary", className: "rarity-legendary" };
+  if (percent < 15) return { label: "Rare", className: "rarity-rare" };
+  if (percent < 40) return { label: "Uncommon", className: "rarity-uncommon" };
+  return { label: "Common", className: "rarity-common" };
 }
 
 /*
@@ -617,7 +617,7 @@ function applyFilter() {
 
   const total = state.game?.total ?? 0;
   el.visibleCount.textContent =
-    visible === total ? `${total} logros` : `${visible} de ${total} logros`;
+    visible === total ? `${total} achievements` : `${visible} of ${total} achievements`;
 }
 
 // -- profile ----------------------------------------------------------------
@@ -625,12 +625,12 @@ function applyFilter() {
 el.steamIdSave.addEventListener("click", () => {
   const value = el.steamId.value.trim();
   if (!/^\d{17}$/.test(value)) {
-    setProfileStatus("Un SteamID64 son exactamente 17 dígitos.", true);
+    setProfileStatus("A SteamID64 is exactly 17 digits.", true);
     return;
   }
   state.steamId = value;
   store(STORAGE_KEY, value);
-  setProfileStatus("Guardado. Recargando los logros con tu progreso…");
+  setProfileStatus("Saved. Reloading the achievements with your progress…");
   el.profile.open = false;
   if (state.game) loadGame(state.game.appId);
 });
@@ -639,7 +639,7 @@ el.steamIdClear.addEventListener("click", () => {
   state.steamId = null;
   el.steamId.value = "";
   store(STORAGE_KEY, null);
-  setProfileStatus("Quitado. Ya no se marca ningún logro como conseguido.");
+  setProfileStatus("Removed. No achievement is marked as unlocked any more.");
   if (state.game) loadGame(state.game.appId);
 });
 
@@ -658,7 +658,7 @@ function store(key, value) {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, value);
   } catch {
-    setProfileStatus("Este navegador no permite guardar datos, así que se olvidará al salir.", true);
+    setProfileStatus("This browser will not store data, so this will be forgotten when you leave.", true);
   }
 }
 
@@ -714,8 +714,8 @@ function artwork(url) {
 function formatDate(iso) {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
-    ? "Conseguido"
-    : date.toLocaleDateString("es-CR", { year: "numeric", month: "short", day: "numeric" });
+    ? "Unlocked"
+    : date.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "numeric" });
 }
 
 // -- routing ----------------------------------------------------------------
@@ -790,6 +790,6 @@ el.brand.addEventListener("click", (event) => {
 
 if (state.steamId) {
   el.steamId.value = state.steamId;
-  setProfileStatus("Guardado en este navegador.");
+  setProfileStatus("Saved in this browser.");
 }
 route();

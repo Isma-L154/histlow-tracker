@@ -22,22 +22,22 @@ export interface HowTo {
 }
 
 /** Sentinel the model is told to emit when the passages fall short. */
-const NO_ANSWER = "SIN_INFORMACION";
+const NO_ANSWER = "NO_INFORMATION";
 
 const SYSTEM = [
-  "Eres un asistente que explica cómo conseguir logros de videojuegos en Steam.",
+  "You explain how Steam achievements are earned.",
   "",
-  "Reglas estrictas:",
-  "- Usa ÚNICAMENTE la información de los fragmentos de guía que se te entregan.",
-  "- No uses conocimiento propio del juego. Si no está en los fragmentos, no existe.",
-  "- No inventes nombres de objetos, zonas, jefes, niveles ni requisitos.",
-  `- Si los fragmentos no explican cómo conseguir el logro, responde exactamente ${NO_ANSWER} y nada más.`,
-  "- Los fragmentos pueden estar en inglés o en ruso: responde siempre en español.",
+  "Strict rules:",
+  "- Use ONLY the information in the guide passages you are given.",
+  "- Do not use your own knowledge of the game. If it is not in the passages, it does not exist.",
+  "- Never invent names of items, areas, bosses, levels or requirements.",
+  `- If the passages do not explain how the achievement is earned, reply exactly ${NO_ANSWER} and nothing else.`,
+  "- The passages may be in English, Spanish or Russian: always answer in English.",
   "",
-  "Formato de respuesta:",
-  "- Una frase inicial que resuma qué hay que hacer.",
-  "- Después, los pasos concretos en una lista con guiones, en orden.",
-  "- Máximo 200 palabras. Sin introducción ni despedida.",
+  "Answer format:",
+  "- One opening sentence summarising what has to be done.",
+  "- Then the concrete steps as a dash list, in order.",
+  "- At most 200 words. No preamble and no sign-off.",
 ].join("\n");
 
 export async function explainAchievement(
@@ -51,7 +51,7 @@ export async function explainAchievement(
   const context = passages
     .map((passage, index) =>
       [
-        `--- Fragmento ${index + 1} (guía: "${passage.guideTitle}", sección: "${passage.section}") ---`,
+        `--- Passage ${index + 1} (guide: "${passage.guideTitle}", section: "${passage.section}") ---`,
         passage.text,
       ].join("\n"),
     )
@@ -59,12 +59,12 @@ export async function explainAchievement(
 
   const prompt = [
     `Logro: "${achievement.name}"`,
-    achievement.description ? `Descripción oficial de Steam: "${achievement.description}"` : "",
+    achievement.description ? `Official Steam description: "${achievement.description}"` : "",
     "",
-    "Fragmentos de guías de la comunidad:",
+    "Community guide passages:",
     context,
     "",
-    `¿Cómo se consigue el logro "${achievement.name}"?`,
+    `How is the achievement "${achievement.name}" earned?`,
   ]
     .filter(Boolean)
     .join("\n");
@@ -96,7 +96,7 @@ export async function explainAchievement(
   return {
     steps: answered
       ? text
-      : "Las guías encontradas mencionan este logro, pero no explican cómo conseguirlo.",
+      : "The guides found mention this achievement, but do not explain how it is earned.",
     answered,
   };
 }
