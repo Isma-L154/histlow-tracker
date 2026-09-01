@@ -31,9 +31,21 @@ beforeAll(async () => {
   css = await response.text();
 });
 
+/**
+ * The stylesheet with its comments stripped.
+ *
+ * This file's comments quote CSS declarations verbatim — including the ones
+ * these tests look for — so matching against the raw text would let a comment
+ * that merely describes a rule count as one, and turn CI red on a documentation
+ * change.
+ */
+function declarations(): string {
+  return css.replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
 /** The body of every rule whose selector is exactly `[hidden]`. */
 function globalHiddenRules(): string[] {
-  return [...css.matchAll(/(?:^|\n)\s*\[hidden\]\s*\{([^}]*)\}/g)].map((match) => match[1]!);
+  return [...declarations().matchAll(/(?:^|[\n;}])\s*\[hidden\]\s*\{([^}]*)\}/g)].map((m) => m[1]!);
 }
 
 describe("the hidden attribute outranks the stylesheet", () => {
@@ -49,8 +61,17 @@ describe("the hidden attribute outranks the stylesheet", () => {
   });
 
   it("has nothing else that could outrank it", () => {
-    // `!important` yields only to another `!important`, so a second one on
-    // `display` would put the guarantee back in doubt.
-    expect([...css.matchAll(/display:\s*[^;]*!important/g)]).toHaveLength(1);
+    // `!important` yields only to another `!important`, so a competing one on
+    // `display` would put the guarantee back in doubt. A second
+    // `display: none !important` would not, because it agrees with the guard —
+    // and this stylesheet already reaches for `!important` inside its
+    // reduced-motion block, so a blanket count would forbid legitimate rules
+    // such as hiding the topbar in a print stylesheet.
+    // The lookahead sits immediately after the colon and swallows the spacing
+    // itself. Written as `display:\s*(?!none…)`, `\s*` can give the space back
+    // so the lookahead is tested one character late, and the guard matches
+    // itself.
+    const rivals = [...declarations().matchAll(/display:(?!\s*none\s*!important)[^;}]*!important/g)];
+    expect(rivals.map((m) => m[0])).toEqual([]);
   });
 });
