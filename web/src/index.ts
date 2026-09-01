@@ -44,7 +44,7 @@ const MAX_QUERY_LENGTH = 100;
  * passages are found would keep serving the answers the old logic produced -
  * and the improvement would be invisible exactly where it mattered.
  */
-const HOWTO_LOGIC_VERSION = 3;
+const HOWTO_LOGIC_VERSION = 4;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {

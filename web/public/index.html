@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
-    <meta name="description" content="Todos los logros de un juego de Steam, ordenados por lo raros que son de verdad, y cómo se consigue cada uno." />
+    <meta name="description" content="Every achievement in a Steam game, ordered by how rare it really is, and how each one is earned." />
     <title>Cazalogros</title>
 
     <!-- The site answers on one address; say which, so a link carrying a
@@ -14,18 +14,18 @@
     <!-- What a shared link looks like when it is not a bare URL. -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Cazalogros" />
-    <meta property="og:title" content="Cazalogros — logros de Steam, explicados" />
+    <meta property="og:title" content="Cazalogros — every Steam achievement, explained" />
     <meta
       property="og:description"
-      content="Todos los logros de un juego de Steam, ordenados por lo raros que son de verdad, y cómo se consigue cada uno."
+      content="Every achievement in a Steam game, ordered by how rare it really is, and how each one is earned."
     />
     <meta property="og:url" content="https://cazalogros.cloudils.com/" />
-    <meta property="og:locale" content="es_ES" />
+    <meta property="og:locale" content="en_US" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta property="og:image" content="https://cazalogros.cloudils.com/og.png" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Cazalogros — logros de Steam, explicados" />
+    <meta property="og:image:alt" content="Cazalogros — every Steam achievement, explained" />
     <link rel="stylesheet" href="/styles.css" />
     <link
       rel="icon"
@@ -41,18 +41,18 @@
         </svg>
         <span class="brand-text">
           <strong>Cazalogros</strong>
-          <span>logros de Steam, explicados</span>
+          <span>every Steam achievement, explained</span>
         </span>
       </a>
 
       <form class="search" id="search-form" role="search" autocomplete="off">
-        <label class="visually-hidden" for="search-input">Buscar un juego</label>
+        <label class="visually-hidden" for="search-input">Search for a game</label>
         <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.5-3.5" />
         </svg>
-        <input id="search-input" type="search" name="q" placeholder="Buscar un juego…" spellcheck="false" />
-        <ul class="results" id="results" role="listbox" aria-label="Resultados" hidden></ul>
+        <input id="search-input" type="search" name="q" placeholder="Search for a game…" spellcheck="false" />
+        <ul class="results" id="results" role="listbox" aria-label="Results" hidden></ul>
       </form>
 
       <details class="profile" id="profile">
@@ -61,17 +61,17 @@
             <circle cx="12" cy="8" r="4" />
             <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
           </svg>
-          <span>Mi perfil</span>
+          <span>My profile</span>
         </summary>
         <div class="profile-body">
           <label for="steamid-input">
-            SteamID64 (17 dígitos)
-            <span class="hint">Se guarda solo en este navegador. Con él marcamos los logros que ya tienes.</span>
+            SteamID64 (17 digits)
+            <span class="hint">Stored only in this browser. We use it to mark the achievements you already hold.</span>
           </label>
           <div class="profile-row">
             <input id="steamid-input" type="text" inputmode="numeric" pattern="\d{17}" maxlength="17" placeholder="76561199000000000" />
-            <button type="button" id="steamid-save" class="primary">Guardar</button>
-            <button type="button" id="steamid-clear" class="ghost">Quitar</button>
+            <button type="button" id="steamid-save" class="primary">Save</button>
+            <button type="button" id="steamid-clear" class="ghost">Remove</button>
           </div>
           <p class="profile-status" id="profile-status" role="status"></p>
         </div>
@@ -80,13 +80,13 @@
 
     <main id="main">
       <section class="hero" id="hero">
-        <h1>Descubre cómo se consigue cada logro</h1>
+        <h1>Find out how every achievement is earned</h1>
         <p class="hero-lead">
-          Busca un juego y verás todos sus logros ordenados del más raro al más común. Los pasos
-          salen de las guías que escribió la comunidad, resumidos en español.
+          Search for a game and see every achievement ordered from the rarest to the most common.
+          The steps come from guides the community wrote, summarised here.
         </p>
         <div class="hero-examples">
-          <span class="hero-examples-label">Prueba con</span>
+          <span class="hero-examples-label">Try</span>
           <button type="button" class="example" data-appid="367520">Hollow Knight</button>
           <button type="button" class="example" data-appid="1245620">ELDEN RING</button>
           <button type="button" class="example" data-appid="782330">DOOM Eternal</button>
@@ -113,13 +113,13 @@
         </div>
 
         <div class="toolbar">
-          <div class="filters" id="filters" role="group" aria-label="Filtrar logros" hidden>
-            <button type="button" data-filter="all" class="chip is-active">Todos</button>
-            <button type="button" data-filter="missing" class="chip">Me faltan</button>
-            <button type="button" data-filter="unlocked" class="chip">Conseguidos</button>
+          <div class="filters" id="filters" role="group" aria-label="Filter achievements" hidden>
+            <button type="button" data-filter="all" class="chip is-active">All</button>
+            <button type="button" data-filter="missing" class="chip">Missing</button>
+            <button type="button" data-filter="unlocked" class="chip">Unlocked</button>
           </div>
           <p class="count" id="visible-count"></p>
-          <p class="scale-note">La barra y el porcentaje son cuánta gente lo tiene: cuanto menos, más raro.</p>
+          <p class="scale-note">The bar and the percentage are how many people hold it: the fewer, the rarer.</p>
         </div>
 
         <ol class="achievements" id="achievements"></ol>
@@ -127,7 +127,7 @@
     </main>
 
     <footer class="footer">
-      Datos de Steam. Los pasos salen de guías escritas por la comunidad.
+      Data from Steam. The steps come from guides written by the community.
       <br />
       <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>
     </footer>
