@@ -11,6 +11,7 @@
 
 import { handledInPage } from "./nav.js";
 import { DICTIONARY, pickLanguage, t, translate } from "./i18n.js";
+import { completionDifficulty } from "./difficulty.js";
 
 const SITE_TITLE = "HowToAchieve";
 const STORAGE_KEY = "histlow.steamid";
@@ -42,6 +43,9 @@ const el = {
   progressBar: document.getElementById("progress-bar"),
   progressFill: document.getElementById("progress-fill"),
   progressNotice: document.getElementById("progress-notice"),
+  difficulty: document.getElementById("difficulty"),
+  difficultyScore: document.getElementById("difficulty-score"),
+  difficultyTier: document.getElementById("difficulty-tier"),
   links: document.getElementById("game-links"),
   filters: document.getElementById("filters"),
   visibleCount: document.getElementById("visible-count"),
@@ -224,6 +228,7 @@ function renderGame(game) {
   }
 
   renderProgress(game);
+  renderDifficulty(game);
   renderLinks(game);
 
   // The filters only mean something once we know what the player already has.
@@ -260,6 +265,27 @@ function renderProgress(game) {
   const percent = game.total > 0 ? Math.round((game.unlockedCount / game.total) * 100) : 0;
   el.progressText.textContent = `${say("game.progress", { unlocked: game.unlockedCount, total: game.total })} · ${percent}%`;
   el.progressFill.style.width = `${percent}%`;
+}
+
+/**
+ * How hard the game is to finish, from percentages the page already holds.
+ *
+ * Absent rather than zero when there is too little to read. A game with four
+ * achievements has a rarest one, and saying "10/10" about it would be a number
+ * with nothing behind it.
+ */
+function renderDifficulty(game) {
+  const difficulty = completionDifficulty(game.achievements.map((a) => a.globalPercent));
+  el.difficulty.hidden = difficulty === null;
+  if (!difficulty) return;
+
+  el.difficulty.dataset.tier = difficulty.tier;
+  el.difficultyScore.textContent = say("difficulty.score", { score: difficulty.score });
+  el.difficultyTier.textContent = say(`difficulty.${difficulty.tier}`);
+  // Where the number comes from, on the element rather than in a paragraph
+  // nobody reads. It matters: this is a rarity reading, and a bare score next
+  // to a game title reads as a community verdict.
+  el.difficulty.title = say("difficulty.basis");
 }
 
 function renderLinks(game) {
