@@ -47,3 +47,9 @@ desktop.ini
 
 # Local security-scan output
 static_analysis_semgrep_*/
+
+# A shell command that writes to %SystemDrive% in cmd syntax, run somewhere
+# that does not expand it, creates a directory of that literal name here
+# instead of touching the system drive. It happened once and a `git add -A`
+# committed a megabyte of Windows icon caches with it.
+%SystemDrive%/
