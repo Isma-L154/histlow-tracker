@@ -10,9 +10,11 @@
  */
 
 import { handledInPage } from "./nav.js";
+import { DICTIONARY, pickLanguage, t, translate } from "./i18n.js";
 
 const SITE_TITLE = "HowToAchieve";
 const STORAGE_KEY = "histlow.steamid";
+const LANGUAGE_KEY = "histlow.language";
 const SEARCH_DEBOUNCE_MS = 250;
 const MAX_RESULTS = 12;
 
@@ -21,6 +23,7 @@ const GUIDES_BASE = "https://steamcommunity.com/app";
 
 const el = {
   brand: document.querySelector(".brand"),
+  language: document.querySelector(".language"),
   form: document.getElementById("search-form"),
   search: document.getElementById("search-input"),
   results: document.getElementById("results"),
@@ -46,6 +49,10 @@ const el = {
 };
 
 const state = {
+  // The Worker already resolved this from Accept-Language and wrote it into
+  // `lang`, so reading the document rather than re-deciding keeps the client
+  // from disagreeing with the HTML it was handed.
+  language: pickLanguage("", document.documentElement.lang) ,
   steamId: readStoredSteamId(),
   game: null,
   filter: "all",
@@ -65,12 +72,7 @@ let searchTimer = null;
  * API from having to agree on wording: the API states a condition, and this
  * decides how to say it to a reader.
  */
-const ERRORS = {
-  400: "Type at least two characters to search.",
-  404: "This game has no achievements on Steam, or that id does not exist.",
-  502: "Steam is not responding right now. Try again in a moment.",
-  503: "The Steam key is not configured on the server.",
-};
+const ERROR_KEYS = { 400: "error.400", 404: "error.404", 502: "error.502", 503: "error.503" };
 
 async function api(path, signal) {
   let response;
@@ -78,7 +80,7 @@ async function api(path, signal) {
     response = await fetch(path, { signal, headers: { Accept: "application/json" } });
   } catch (error) {
     if (error.name === "AbortError") throw error;
-    throw new Error("Could not connect. Check your connection and try again.");
+    throw new Error(say("error.offline"));
   }
 
   let body = null;
@@ -88,7 +90,10 @@ async function api(path, signal) {
     // Falls through to the generic message below.
   }
   if (!response.ok) {
-    throw new Error(ERRORS[response.status] ?? body?.error ?? `The API answered ${response.status}.`);
+    const known = ERROR_KEYS[response.status];
+    throw new Error(
+      known ? say(known) : (body?.error ?? say("error.api", { status: response.status })),
+    );
   }
   return body;
 }
@@ -129,7 +134,7 @@ function renderResults(results) {
   el.results.replaceChildren();
   if (results.length === 0) {
     hideResults();
-    setStatus("No game matches that search.");
+    setStatus(say("status.noMatch"));
     return;
   }
 
@@ -186,7 +191,7 @@ async function loadGame(appId) {
   gameRequest?.abort();
   gameRequest = new AbortController();
 
-  setStatus("Loading achievements…");
+  setStatus(say("status.loading"));
   el.game.hidden = true;
   el.hero.hidden = true;
 
@@ -211,7 +216,7 @@ function renderGame(game) {
   const cover = artwork(game.headerImage);
   if (cover) {
     el.cover.src = cover;
-    el.cover.alt = `${game.name} cover art`;
+    el.cover.alt = say("game.cover", { name: game.name });
     el.cover.hidden = false;
   } else {
     el.cover.hidden = true;
@@ -244,16 +249,16 @@ function renderProgress(game) {
   const unexplained = state.steamId !== null && !known;
   el.progressNotice.hidden = !unexplained;
   el.progressNotice.textContent = unexplained
-    ? "Steam is not sharing your progress for this game. Usually that means it is not in your library, or your game details are private."
+    ? say("game.noProgress")
     : "";
 
   if (!known) {
-    el.visibleCount.textContent = `${game.total} achievements`;
+    el.visibleCount.textContent = say("game.count", { total: game.total });
     return;
   }
 
   const percent = game.total > 0 ? Math.round((game.unlockedCount / game.total) * 100) : 0;
-  el.progressText.textContent = `${game.unlockedCount} of ${game.total} achievements · ${percent}%`;
+  el.progressText.textContent = `${say("game.progress", { unlocked: game.unlockedCount, total: game.total })} · ${percent}%`;
   el.progressFill.style.width = `${percent}%`;
 }
 
@@ -261,12 +266,12 @@ function renderLinks(game) {
   el.links.replaceChildren();
   const targets = [
     [
-      "Achievement guides",
+      say("game.guides"),
       `${GUIDES_BASE}/${game.appId}/guides/?browsefilter=toprated&requiredtags%5B%5D=Achievements&l=english`,
       "M4 5h16M4 12h16M4 19h10",
     ],
     [
-      "Store page",
+      say("game.store"),
       `https://store.steampowered.com/app/${game.appId}/`,
       "M5 7h14l-1 12H6zM9 7V5a3 3 0 0 1 6 0v2",
     ],
@@ -334,7 +339,7 @@ function renderAchievement(appId, achievement) {
     badge.className = "badge";
     badge.textContent = achievement.unlockedAt
       ? `✓ ${formatDate(achievement.unlockedAt)}`
-      : "✓ Unlocked";
+      : `✓ ${say("achievement.unlocked")}`;
     summary.append(badge);
   }
 
@@ -348,7 +353,7 @@ function renderAchievement(appId, achievement) {
   description.className = "achievement-description";
   // Hidden achievements come back with an empty description from Steam.
   description.textContent =
-    achievement.description || "Hidden achievement: Steam does not publish the description.";
+    achievement.description || say("achievement.hidden");
   detail.append(description);
 
   const panel = document.createElement("div");
@@ -358,7 +363,7 @@ function renderAchievement(appId, achievement) {
   const reveal = document.createElement("button");
   reveal.type = "button";
   reveal.className = "howto-button";
-  reveal.textContent = "How is it earned?";
+  reveal.textContent = say("achievement.reveal");
   reveal.setAttribute("aria-expanded", "false");
   reveal.addEventListener("click", () => toggleHowTo(reveal, panel, appId, achievement));
 
@@ -398,7 +403,7 @@ function rarityMeter(percent, tier) {
   const value = document.createElement("span");
   value.className = `rarity-percent ${tier.className}`;
   value.textContent = percent === null ? "—" : `${percent.toFixed(1)}%`;
-  value.title = `${tier.label}${percent === null ? "" : ` · ${percent.toFixed(1)}% of players`}`;
+  value.title = `${tier.label}${percent === null ? "" : ` · ${say("rarity.players", { percent: percent.toFixed(1) })}`}`;
 
   wrap.append(bar, value);
   return wrap;
@@ -444,7 +449,7 @@ async function toggleHowTo(button, panel, appId, achievement) {
   if (panel.dataset.loaded === "true") return;
 
   panel.replaceChildren(
-    note("Searching community guides… the first lookup for each game takes a few seconds."),
+    note(say("howto.searching")),
   );
 
   try {
@@ -466,8 +471,8 @@ function renderHowTo(panel, data, appId, achievement) {
     panel.append(
       note(
         data.passages.length > 0
-          ? "The guides that mention this achievement do not explain how to earn it."
-          : `None of the ${data.guidesSearched} guides checked explains this achievement. Perhaps nobody has written it up yet.`,
+          ? say("howto.notExplained")
+          : say("howto.noneExplain", { count: data.guidesSearched }),
       ),
       searchLink(appId, achievement.name),
     );
@@ -479,7 +484,7 @@ function renderHowTo(panel, data, appId, achievement) {
   if (data.passages.length > 0) {
     const sources = document.createElement("p");
     sources.className = "howto-sources";
-    sources.append(document.createTextNode("Written from: "));
+    sources.append(document.createTextNode(say("howto.sources")));
     // Several passages can come from one guide; each guide is credited once.
     const seen = new Set();
     for (const passage of data.passages) {
@@ -494,7 +499,7 @@ function renderHowTo(panel, data, appId, achievement) {
   const disclaimer = document.createElement("p");
   disclaimer.className = "howto-disclaimer";
   disclaimer.textContent =
-    "Automatic summary of guides written by other players. If something looks wrong, the link goes to the original.";
+    say("howto.disclaimer");
   panel.append(disclaimer);
 }
 
@@ -537,7 +542,7 @@ function renderSteps(text) {
 /** The escape hatch when we have no answer: search Steam for it by hand. */
 function searchLink(appId, achievementName) {
   const anchor = link(
-    "Search Steam yourself",
+    say("howto.searchSteam"),
     `${GUIDES_BASE}/${appId}/guides/?searchText=${encodeURIComponent(achievementName)}` +
       "&browsefilter=toprated&l=english",
   );
@@ -560,11 +565,11 @@ function note(message) {
  * labels line up with how these achievements get talked about elsewhere.
  */
 function rarityTier(percent) {
-  if (percent === null) return { label: "No data", className: "rarity-unknown" };
-  if (percent < 5) return { label: "Legendary", className: "rarity-legendary" };
-  if (percent < 15) return { label: "Rare", className: "rarity-rare" };
-  if (percent < 40) return { label: "Uncommon", className: "rarity-uncommon" };
-  return { label: "Common", className: "rarity-common" };
+  if (percent === null) return { label: say("rarity.unknown"), className: "rarity-unknown" };
+  if (percent < 5) return { label: say("rarity.legendary"), className: "rarity-legendary" };
+  if (percent < 15) return { label: say("rarity.rare"), className: "rarity-rare" };
+  if (percent < 40) return { label: say("rarity.uncommon"), className: "rarity-uncommon" };
+  return { label: say("rarity.common"), className: "rarity-common" };
 }
 
 /*
@@ -617,7 +622,9 @@ function applyFilter() {
 
   const total = state.game?.total ?? 0;
   el.visibleCount.textContent =
-    visible === total ? `${total} achievements` : `${visible} of ${total} achievements`;
+    visible === total
+      ? say("game.count", { total })
+      : say("game.countFiltered", { visible, total });
 }
 
 // -- profile ----------------------------------------------------------------
@@ -625,12 +632,12 @@ function applyFilter() {
 el.steamIdSave.addEventListener("click", () => {
   const value = el.steamId.value.trim();
   if (!/^\d{17}$/.test(value)) {
-    setProfileStatus("A SteamID64 is exactly 17 digits.", true);
+    setProfileStatus(say("profile.badId"), true);
     return;
   }
   state.steamId = value;
   store(STORAGE_KEY, value);
-  setProfileStatus("Saved. Reloading the achievements with your progress…");
+  setProfileStatus(say("profile.saving"));
   el.profile.open = false;
   if (state.game) loadGame(state.game.appId);
 });
@@ -639,7 +646,7 @@ el.steamIdClear.addEventListener("click", () => {
   state.steamId = null;
   el.steamId.value = "";
   store(STORAGE_KEY, null);
-  setProfileStatus("Removed. No achievement is marked as unlocked any more.");
+  setProfileStatus(say("profile.removed"));
   if (state.game) loadGame(state.game.appId);
 });
 
@@ -658,7 +665,7 @@ function store(key, value) {
     if (value === null) localStorage.removeItem(key);
     else localStorage.setItem(key, value);
   } catch {
-    setProfileStatus("This browser will not store data, so this will be forgotten when you leave.", true);
+    setProfileStatus(say("profile.noStorage"), true);
   }
 }
 
@@ -668,6 +675,53 @@ function setProfileStatus(message, isError = false) {
 }
 
 // -- shared helpers ---------------------------------------------------------
+
+/**
+ * One interface string, in whatever language is showing.
+ *
+ * Wrapped rather than importing `t` directly so the language is read at the
+ * moment of use. Reading it once into a constant would leave every string
+ * rendered before a toggle stuck in the old language.
+ */
+function say(key, values) {
+  return t(state.language, key, values);
+}
+
+/**
+ * Switches language without reloading or losing the game on screen.
+ *
+ * A reload would work and would throw away the achievement list, the open
+ * how-to panels and the scroll position - for a change that is purely
+ * presentational.
+ */
+function setLanguage(language) {
+  if (!(language in DICTIONARY) || language === state.language) return;
+
+  state.language = language;
+  document.documentElement.lang = language;
+  translate(document, language);
+  markLanguage();
+
+  // Anything the client drew itself is not marked up with `data-i18n`, so it
+  // has to be drawn again from the state that produced it.
+  if (state.game) renderGame(state.game);
+  if (state.steamId) setProfileStatus(say("profile.saved"));
+
+  try {
+    localStorage.setItem(LANGUAGE_KEY, language);
+  } catch {
+    // Same as the SteamID: a browser refusing storage is allowed to, and the
+    // choice simply lasts for this visit.
+  }
+}
+
+/** Tells both buttons, and a screen reader, which language is showing. */
+function markLanguage() {
+  for (const button of el.language.querySelectorAll("[data-language]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.language === state.language));
+  }
+}
+
 
 function setStatus(message) {
   el.status.textContent = message;
@@ -714,8 +768,8 @@ function artwork(url) {
 function formatDate(iso) {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
-    ? "Unlocked"
-    : date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+    ? say("achievement.unlocked")
+    : date.toLocaleDateString(state.language, { year: "numeric", month: "short", day: "numeric" });
 }
 
 // -- routing ----------------------------------------------------------------
@@ -782,14 +836,40 @@ el.hero.addEventListener("click", (event) => {
 // keyboard, and still goes home with scripting off. Once the page is running
 // there is no reason to reload the whole document for it: the router already
 // knows how to draw the home page.
+el.language.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-language]");
+  if (button) setLanguage(button.dataset.language);
+});
+
 el.brand.addEventListener("click", (event) => {
   if (!handledInPage(event)) return;
   event.preventDefault();
   goHome();
 });
 
+// The Worker wrote `lang` from Accept-Language, which is right for a first
+// visit and wrong for someone who has chosen. An explicit choice wins.
+try {
+  const chosen = localStorage.getItem(LANGUAGE_KEY);
+  if (chosen && chosen !== state.language) setLanguage(chosen);
+} catch {
+  // No storage, so no stored choice to honour.
+}
+
+// Then translate anyway, against whatever language is now showing.
+//
+// Normally this changes nothing: the Worker already substituted, so every
+// string is replaced with the one it already holds. It costs one pass over
+// twenty elements and buys the difference between two failure modes. If the
+// server-side rewrite ever misses - a pattern that stops matching after an
+// edit to the markup - a reader would otherwise be left with English text
+// under `lang="es"`, permanently and with nothing to indicate it. This way
+// they get a brief flicker instead, which is recoverable and visible.
+translate(document, state.language);
+markLanguage();
+
 if (state.steamId) {
   el.steamId.value = state.steamId;
-  setProfileStatus("Saved in this browser.");
+  setProfileStatus(say("profile.saved"));
 }
 route();
