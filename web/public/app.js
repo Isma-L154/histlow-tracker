@@ -11,7 +11,7 @@
 
 import { handledInPage } from "./nav.js";
 
-const SITE_TITLE = "Cazalogros";
+const SITE_TITLE = "HowToAchieve";
 const STORAGE_KEY = "histlow.steamid";
 const SEARCH_DEBOUNCE_MS = 250;
 const MAX_RESULTS = 12;
