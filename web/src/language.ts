@@ -34,6 +34,18 @@ export function languageFor(request: Request): string {
 const ATTRIBUTES = ["placeholder", "aria-label", "title", "alt"];
 
 /**
+ * The inside of a tag, up to but not past its closing bracket.
+ *
+ * Quote-aware rather than `[^>]*`, because a `>` is legal inside an attribute
+ * value. `<p data-i18n="x" title="a > b">` used to end the tag at that inner
+ * bracket, and the rewrite then swallowed the rest of the attribute — leaving
+ * broken HTML from markup that was perfectly valid. Nothing in the shipped
+ * shell contains one today, which is exactly why it would have been found by a
+ * reader rather than by a deploy.
+ */
+const WITHIN_TAG = `(?:"[^"]*"|'[^']*'|[^>"'])*`;
+
+/**
  * Rewrites a shell into one language.
  *
  * Matches the same `data-i18n` markers the client uses, so the markup declares
@@ -61,7 +73,7 @@ export function localise(html: string, language: string): string {
   // cross another tag boundary, so a marker on an element with children is left
   // alone rather than silently eating them.
   out = out.replace(
-    /(<([a-z0-9]+)\b[^>]*\sdata-i18n="([^"]+)"[^>]*>)([^<]*)(<\/\2>)/gi,
+    new RegExp(`(<([a-z0-9]+)\\b${WITHIN_TAG}\\sdata-i18n="([^"]+)"${WITHIN_TAG}>)([^<]*)(</\\2>)`, "gi"),
     (whole, open: string, _tag: string, key: string, _text: string, close: string) => {
       const value = t(language, key);
       return value === "" ? whole : `${open}${escapeText(value)}${close}`;
@@ -75,7 +87,7 @@ export function localise(html: string, language: string): string {
     // inventing one here would put it in a different order than the client
     // would, and the two outputs have to agree.
     out = out.replace(
-      new RegExp(`<[a-z0-9]+\\b[^>]*\\s${marker}="([^"]+)"[^>]*>`, "gi"),
+      new RegExp(`<[a-z0-9]+\\b${WITHIN_TAG}\\s${marker}="([^"]+)"${WITHIN_TAG}>`, "gi"),
       (tag: string, key: string) => {
         const value = t(language, key);
         if (value === "") return tag;
