@@ -22,6 +22,7 @@ import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide }
 import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
 import { languageFor, localise, pageCacheKey } from "./language.ts";
+import { parseProfile } from "./profile.ts";
 
 const GAME_ROUTE = /^\/api\/game\/(\d{1,10})$/;
 // The page a person shares, as opposed to the endpoint behind it.
@@ -39,6 +40,23 @@ const HOWTO_ROUTE = /^\/api\/howto\/(\d{1,10})\/([\w.%-]{1,120})$/;
  * project cannot afford to lose. No real title comes close to a hundred.
  */
 const MAX_QUERY_LENGTH = 100;
+
+/**
+ * What to say about an input that is not a profile.
+ *
+ * One message per way of being wrong. A single "that is not a profile" would
+ * cover an empty box, a mistyped id and a link from the wrong site alike, and
+ * the reader would have to guess which of the three they had done.
+ */
+const PROFILE_PROBLEMS: Record<string, string> = {
+  empty: "Paste your Steam profile link, or your SteamID64.",
+  "too long": "That is longer than any Steam profile link.",
+  "wrong length for an id": "A SteamID64 is exactly 17 digits.",
+  "unrecognised link": "That link is not a Steam profile. It should start with steamcommunity.com.",
+  "not an id": "A /profiles/ link should end in a 17-digit SteamID64.",
+  unreadable: "That link could not be read. Try copying it again from your browser.",
+  default: "That is not a Steam profile link, a SteamID64, or a custom profile name.",
+};
 
 /**
  * Bumped whenever retrieval or prompting changes.
@@ -97,7 +115,7 @@ export default {
       return await route(request, url, env, ctx);
     } catch (error) {
       if (error instanceof SteamError) {
-        return problem(error.status, error.message);
+        return problem(error.status, error.message, error.reason);
       }
       // Nothing from an unexpected failure is echoed: it could quote a URL,
       // and one of those carries the API key.
@@ -115,6 +133,27 @@ async function route(
 ): Promise<Response> {
   if (url.pathname === "/api/health") {
     return json({ ok: true, version: VERSION });
+  }
+
+  if (url.pathname === "/api/steamid") {
+    const parsed = parseProfile(url.searchParams.get("q") ?? "");
+    if (parsed.kind === "invalid") {
+      // The reason travels, because the panel shows it. "That is not a profile"
+      // for an empty box and for a name Steam has never heard of would be two
+      // different problems wearing one message.
+      const reason = parsed.reason in PROFILE_PROBLEMS ? parsed.reason : "default";
+      return problem(400, PROFILE_PROBLEMS[reason]!, `profile.${reason}`);
+    }
+
+    // A name maps to an id essentially forever, so this is worth caching hard.
+    // Keyed on what was parsed rather than on what was typed, so the same
+    // profile pasted five different ways is one entry.
+    return cached(key(url, `/api/steamid/${parsed.kind}/${parsed.value}`), false, env, ctx, async () => {
+      if (parsed.kind === "id") {
+        return json({ steamId: parsed.value, profileName: await client(env).profileName(parsed.value) });
+      }
+      return json(await client(env).resolveVanity(parsed.value));
+    });
   }
 
   if (url.pathname === "/api/search") {

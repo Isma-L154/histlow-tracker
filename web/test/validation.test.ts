@@ -9,6 +9,7 @@
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import worker from "../src/index.ts";
+import { DICTIONARY } from "../public/i18n.js";
 
 const BASE = "https://example.com";
 
@@ -62,5 +63,65 @@ describe("route patterns", () => {
 
   it("answers health without any credential", async () => {
     expect((await get("/api/health")).status).toBe(200);
+  });
+});
+
+describe("profile resolution bounds", () => {
+  it("refuses an empty query", async () => {
+    expect((await get("/api/steamid?q=")).status).toBe(400);
+  });
+
+  it("refuses an input past the cap before Steam sees it", async () => {
+    // Same reasoning as the search ceiling: an unbounded parameter forwarded
+    // upstream is free amplification against a quota this project cannot
+    // afford to lose.
+    expect((await get(`/api/steamid?q=${"a".repeat(500)}`)).status).toBe(400);
+  });
+
+  it.each([
+    ["a link from another site", "https%3A%2F%2Fexample.com%2Fwhoever"],
+    ["a mistyped id", "7656119800000000"],
+    ["a name with a space", "some%20name"],
+  ])("refuses %s", async (_name, query) => {
+    expect((await get(`/api/steamid?q=${query}`)).status).toBe(400);
+  });
+
+  it("says something different for each way of being wrong", async () => {
+    // The panel shows these, so one message for every failure would make a
+    // mistyped id indistinguishable from a link to the wrong site.
+    const messages = await Promise.all(
+      ["", "7656119800000000", "https%3A%2F%2Fexample.com%2Fx", `${"a".repeat(500)}`].map(async (q) =>
+        ((await (await get(`/api/steamid?q=${q}`)).json()) as { error: string }).error,
+      ),
+    );
+    expect(new Set(messages).size).toBe(messages.length);
+  });
+
+  it("never echoes the query back", async () => {
+    // `logFailure` redacts a steamid from a URL; an error message that quoted
+    // the input would put one straight back into the response.
+    const body = await (await get("/api/steamid?q=7656119800000000")).text();
+    expect(body).not.toContain("7656119800000000");
+  });
+});
+
+describe("profile errors carry a code, not just prose", () => {
+  it.each([
+    ["", "profile.empty"],
+    ["7656119800000000", "profile.wrong length for an id"],
+    ["https%3A%2F%2Fexample.com%2Fx", "profile.unrecognised link"],
+    ["https%3A%2F%2Fsteamcommunity.com%2Fprofiles%2Fnotanid", "profile.not an id"],
+  ])("%s reports %s", async (query, reason) => {
+    // The client shows these in two languages, so it cannot use the sentence.
+    // Without a code it falls back to the status table - which is written
+    // about games, and answers a bad profile link with "this game has no
+    // achievements on Steam".
+    const body = (await (await get(`/api/steamid?q=${query}`)).json()) as { reason?: string };
+    expect(body.reason).toBe(reason);
+  });
+
+  it("uses a code the dictionary actually has", async () => {
+    const body = (await (await get("/api/steamid?q=")).json()) as { reason: string };
+    expect(DICTIONARY.en[body.reason], `${body.reason} is not in the dictionary`).toBeDefined();
   });
 });

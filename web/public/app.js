@@ -94,10 +94,11 @@ async function api(path, signal) {
     // Falls through to the generic message below.
   }
   if (!response.ok) {
-    const known = ERROR_KEYS[response.status];
-    throw new Error(
-      known ? say(known) : (body?.error ?? say("error.api", { status: response.status })),
-    );
+    // A `reason` is specific and translatable, so it wins. The status table is
+    // the fallback, and it is written about games - a 404 from the profile
+    // route means something else entirely, which is why the reason exists.
+    const key = body?.reason && DICTIONARY.en[body.reason] ? body.reason : ERROR_KEYS[response.status];
+    throw new Error(key ? say(key) : (body?.error ?? say("error.api", { status: response.status })));
   }
   return body;
 }
@@ -655,16 +656,39 @@ function applyFilter() {
 
 // -- profile ----------------------------------------------------------------
 
-el.steamIdSave.addEventListener("click", () => {
-  const value = el.steamId.value.trim();
-  if (!/^\d{17}$/.test(value)) {
-    setProfileStatus(say("profile.badId"), true);
+el.steamIdSave.addEventListener("click", async () => {
+  const typed = el.steamId.value.trim();
+  if (typed === "") return;
+
+  setProfileStatus(say("profile.looking"));
+  el.steamIdSave.disabled = true;
+
+  let resolved;
+  try {
+    // The Worker does the resolving: it holds the Steam key, and the id it
+    // returns has been confirmed to exist rather than merely to look right.
+    resolved = await api(`/api/steamid?q=${encodeURIComponent(typed)}`);
+  } catch (error) {
+    // The message is the Worker's, which distinguishes a mistyped id from a
+    // name Steam has never heard of. Repeating a generic one here would throw
+    // that away.
+    setProfileStatus(error.message, true);
     return;
+  } finally {
+    el.steamIdSave.disabled = false;
   }
-  state.steamId = value;
-  store(STORAGE_KEY, value);
-  setProfileStatus(say("profile.saving"));
-  el.profile.open = false;
+
+  state.steamId = resolved.steamId;
+  store(STORAGE_KEY, resolved.steamId);
+  // Confirm who was found, not just that something was. Echoing seventeen
+  // digits back tells the reader nothing they can check.
+  setProfileStatus(
+    resolved.profileName
+      ? say("profile.found", { name: resolved.profileName })
+      : say("profile.foundNameless"),
+  );
+  // Deliberately left open. The status line now names who was found, and
+  // closing the panel on success would hide the one thing worth reading.
   if (state.game) loadGame(state.game.appId);
 });
 

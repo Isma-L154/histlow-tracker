@@ -75,15 +75,36 @@
         </summary>
         <div class="profile-body">
           <label for="steamid-input">
-            <span data-i18n="profile.steamid">SteamID64 (17 digits)</span>
+            <span data-i18n="profile.prompt">Your Steam profile</span>
             <span class="hint" data-i18n="profile.hint">Stored only in this browser. We use it to mark the achievements you already hold.</span>
           </label>
           <div class="profile-row">
-            <input id="steamid-input" type="text" inputmode="numeric" pattern="\d{17}" maxlength="17" placeholder="76561199000000000" />
+            <!--
+              `type="text"` and no pattern, on purpose: this used to demand
+              seventeen digits, which almost nobody knows. A profile link is
+              what people actually have, and the Worker turns it into an id.
+            -->
+            <input
+              id="steamid-input"
+              type="text"
+              autocomplete="off"
+              spellcheck="false"
+              maxlength="200"
+              placeholder="steamcommunity.com/id/yourname"
+              data-i18n-placeholder="profile.placeholder"
+            />
             <button type="button" id="steamid-save" class="primary" data-i18n="profile.save">Save</button>
             <button type="button" id="steamid-clear" class="ghost" data-i18n="profile.remove">Remove</button>
           </div>
           <p class="profile-status" id="profile-status" role="status"></p>
+          <details class="profile-help">
+            <summary data-i18n="profile.helpTitle">Where do I find this?</summary>
+            <ol>
+              <li data-i18n="profile.help1">Open Steam and click your name, then Profile.</li>
+              <li data-i18n="profile.help2">Copy the address from your browser.</li>
+              <li data-i18n="profile.help3">Paste it above. Any form of it works.</li>
+            </ol>
+          </details>
         </div>
       </details>
     </header>
