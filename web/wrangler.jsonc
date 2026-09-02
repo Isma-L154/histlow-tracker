@@ -38,13 +38,20 @@
     // writes the title and cover art into the HTML so a shared link previews
     // as the game rather than as the site.
     //
-    // The document routes join it for the rename: `run_worker_first` matches
-    // paths and not hosts, so the only way to redirect the old address is for
-    // the Worker to see the request. Listing the four kinds of URL a person
-    // could have shared - rather than setting this to `true` - keeps
-    // stylesheets, scripts and images served without invoking Worker code at
-    // all. Nobody bookmarks a stylesheet.
-    "run_worker_first": ["/api/*", "/game/*", "/", "/privacy", "/terms"],
+    // The rename widened this. Redirecting the old address needs the Worker to
+    // see the request, and `run_worker_first` matches paths, not hosts - so
+    // every path that can be typed, shared or linked has to reach it,
+    // including ones that match no file and fall through to the shell.
+    //
+    // Hence a catch-all with the static extensions negated, rather than a list
+    // of known routes: a list would have missed exactly those fall-through
+    // paths, and missed them silently. Stylesheets, scripts and images still
+    // never invoke Worker code. Nobody bookmarks a stylesheet.
+    //
+    // Measured rather than assumed - with a marker header on the asset
+    // response, `/nothing-here` reaches the Worker under this pattern and did
+    // not under a list of literal routes.
+    "run_worker_first": ["/*", "!/*.css", "!/*.js", "!/*.png", "!/*.svg", "!/*.ico", "!/*.txt", "!/*.xml"],
     "not_found_handling": "single-page-application"
   },
 

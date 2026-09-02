@@ -35,6 +35,11 @@ describe("the old host", () => {
     ["an api route", "/api/health"],
     ["a path that does not exist", "/nothing-here"],
   ])("redirects %s permanently", async (_name, path) => {
+    // These call the handler directly, so they prove what it does once it is
+    // reached - not that it is reached. Whether a path invokes the Worker at
+    // all is decided by `run_worker_first` in wrangler.jsonc, which this pool
+    // does not apply. The fall-through case above is exactly where those two
+    // differ, and it was verified separately against a running server.
     const response = await get(`${OLD}${path}`);
     // 301 rather than 302: the move is permanent, and a temporary redirect
     // would leave search engines indexing the old address indefinitely.
