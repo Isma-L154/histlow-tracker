@@ -1,6 +1,6 @@
 name: deploy-web
 
-# Publishes Cazalogros to Cloudflare whenever main changes.
+# Publishes HowToAchieve to Cloudflare whenever main changes.
 #
 # Before this existed, `main` and production only matched because someone had
 # run `wrangler deploy` by hand at the right moment. Nothing enforced it, and
@@ -84,7 +84,7 @@ jobs:
           # supposed to serve. Deriving it from config would make the check
           # agree with a wrong deployment instead of catching it. Update it
           # here if the site ever moves again.
-          url="https://cazalogros.cloudils.com/api/health"
+          url="https://howtoachieve.cloudils.com/api/health"
           # Wide enough to cover a custom domain issuing its certificate for
           # the first time, which takes longer than a redeploy. Too short and
           # the deploy succeeds while this reports failure.
@@ -99,3 +99,23 @@ jobs:
           done
           echo "::error::Production did not report healthy after the deploy."
           exit 1
+
+      # The former address must keep answering, and answering with a redirect
+      # rather than with the site. It is the part of the rename most likely to
+      # break quietly: every link shared before the move points at it, and
+      # nothing else in the pipeline would notice it serving a duplicate site
+      # or a 404 instead.
+      - name: Verify the former address still redirects
+        run: |
+          set -euo pipefail
+          old="https://cazalogros.cloudils.com/game/367520"
+          expected="https://howtoachieve.cloudils.com/game/367520"
+
+          code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$old")"
+          location="$(curl -sSI --max-time 20 "$old" | tr -d '\r' | awk 'tolower($1) == "location:" { print $2 }')"
+
+          if [ "$code" != "301" ] || [ "$location" != "$expected" ]; then
+            echo "::error::Expected 301 to $expected, got $code to ${location:-nothing}."
+            exit 1
+          fi
+          echo "former address redirects: $code -> $location"

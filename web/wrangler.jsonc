@@ -9,6 +9,14 @@
   // separate DNS step to keep in sync with this file.
   "routes": [
     {
+      "pattern": "howtoachieve.cloudils.com",
+      "custom_domain": true
+    },
+    // The former address. Kept so it reaches this Worker and can be answered
+    // with a permanent redirect - shared links, bookmarks and four sitemap
+    // entries point at it. Removing it here would not free the name; it would
+    // only turn every one of those links into an error.
+    {
       "pattern": "cazalogros.cloudils.com",
       "custom_domain": true
     }
@@ -20,16 +28,32 @@
   "workers_dev": false,
 
   // Serves the static site and the API from one deployment. Requests under
-  // /api/ hit the Worker; everything else is served straight from ./public
-  // without invoking Worker code at all, so browsing the page costs nothing
-  // against the request budget that matters.
+  // /api/ hit the Worker, and so does every document request - see
+  // `run_worker_first` below for why the rename made that necessary. What it
+  // costs is one invocation per page view rather than none; what it saves is
+  // every stylesheet, script and image, which is the bulk of the requests and
+  // the reason the budget was a concern in the first place.
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
     // `/game/*` joins the list because those pages are built by the Worker: it
     // writes the title and cover art into the HTML so a shared link previews
     // as the game rather than as the site.
-    "run_worker_first": ["/api/*", "/game/*"],
+    //
+    // The rename widened this. Redirecting the old address needs the Worker to
+    // see the request, and `run_worker_first` matches paths, not hosts - so
+    // every path that can be typed, shared or linked has to reach it,
+    // including ones that match no file and fall through to the shell.
+    //
+    // Hence a catch-all with the static extensions negated, rather than a list
+    // of known routes: a list would have missed exactly those fall-through
+    // paths, and missed them silently. Stylesheets, scripts and images still
+    // never invoke Worker code. Nobody bookmarks a stylesheet.
+    //
+    // Measured rather than assumed - with a marker header on the asset
+    // response, `/nothing-here` reaches the Worker under this pattern and did
+    // not under a list of literal routes.
+    "run_worker_first": ["/*", "!/*.css", "!/*.js", "!/*.png", "!/*.svg", "!/*.ico", "!/*.txt", "!/*.xml"],
     "not_found_handling": "single-page-application"
   },
 

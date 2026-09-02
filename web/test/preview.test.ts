@@ -12,7 +12,7 @@ import shell from "../public/index.html?raw";
 import { describeGame } from "../src/preview.ts";
 import type { GameAchievements } from "../src/steam.ts";
 
-const ORIGIN = "https://cazalogros.cloudils.com";
+const ORIGIN = "https://howtoachieve.cloudils.com";
 const PAGE = `${ORIGIN}/game/367520`;
 
 function game(overrides: Partial<GameAchievements> = {}): GameAchievements {
@@ -157,7 +157,7 @@ describe("describeGame", () => {
     it("keeps the site's own card and wording", () => {
       const out = describeGame(shell, null, PAGE).html;
       expect(metas(out, "og:image")).toEqual([`${ORIGIN}/og.png`]);
-      expect(metas(out, "og:title")[0]).toBe("Cazalogros — every Steam achievement, explained");
+      expect(metas(out, "og:title")[0]).toBe("HowToAchieve — every Steam achievement, explained");
     });
   });
 

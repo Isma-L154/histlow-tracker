@@ -3,4 +3,4 @@
 User-agent: *
 Disallow: /api/
 
-Sitemap: https://cazalogros.cloudils.com/sitemap.xml
+Sitemap: https://howtoachieve.cloudils.com/sitemap.xml
