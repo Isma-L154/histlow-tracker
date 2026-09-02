@@ -72,7 +72,7 @@ Layering is one-directional: `domain` depends on nothing, adapters depend on
 
 A second, independent module in this repository: a web page that lists every
 achievement in a Steam game, ordered by how rare it actually is, and explains
-**how each one is earned** — in Spanish, on the page, rather than linking out.
+**how each one is earned** — on the page, rather than linking out.
 
 Live at **[cazalogros.cloudils.com](https://cazalogros.cloudils.com)**.
 

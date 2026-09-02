@@ -169,10 +169,10 @@ export async function fetchGuide(id: string): Promise<Guide | null> {
 
   return {
     id,
-    title: collapse(title) || `Guía ${id}`,
+    title: collapse(title) || `Guide ${id}`,
     // The block is the author's name followed by their online status on its own
     // line, so the first non-empty line is the name.
-    author: collapse(author.split("\n").find((line) => line.trim().length > 0) ?? "") || "Autor desconocido",
+    author: collapse(author.split("\n").find((line) => line.trim().length > 0) ?? "") || "Unknown author",
     url: guideUrl(id),
     sections,
   };

@@ -79,7 +79,7 @@ describe("describeGame", () => {
 
   it("rewrites the title, the url and the canonical link", () => {
     const out = described(game());
-    expect(metas(out, "og:title")).toEqual(["Hollow Knight — logros y cómo conseguirlos"]);
+    expect(metas(out, "og:title")).toEqual(["Hollow Knight — achievements and how to earn them"]);
     expect(metas(out, "og:url")).toEqual([`${ORIGIN}/game/367520`]);
     expect(out).toContain(`<link rel="canonical" href="${ORIGIN}/game/367520" />`);
   });
@@ -157,7 +157,7 @@ describe("describeGame", () => {
     it("keeps the site's own card and wording", () => {
       const out = describeGame(shell, null, PAGE).html;
       expect(metas(out, "og:image")).toEqual([`${ORIGIN}/og.png`]);
-      expect(metas(out, "og:title")[0]).toBe("Cazalogros — logros de Steam, explicados");
+      expect(metas(out, "og:title")[0]).toBe("Cazalogros — every Steam achievement, explained");
     });
   });
 

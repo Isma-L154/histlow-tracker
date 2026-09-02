@@ -120,10 +120,10 @@ export function describeGame(
   // saying it is better than saying nothing.
   if (!game) return out;
 
-  const title = `${game.name} — logros y cómo conseguirlos`;
+  const title = `${game.name} — achievements and how to earn them`;
   const description =
-    `Los ${game.total} logros de ${game.name}, ordenados por lo raros que son ` +
-    `de verdad, y cómo se consigue cada uno.`;
+    `All ${game.total} achievements in ${game.name}, ordered by how rare they ` +
+    `really are, and how each one is earned.`;
 
   put(out, "title", /<title>[^<]*<\/title>/, `<title>${text(title)}</title>`);
   put(out, 'meta name="description"', /<meta name="description" content="[^"]*" \/>/,
@@ -153,7 +153,7 @@ export function describeGame(
     put(out, 'meta property="og:image:height"', /<meta property="og:image:height" content="[^"]*" \/>/,
       `<meta property="og:image:height" content="${HEADER_HEIGHT}" />`);
     put(out, 'meta property="og:image:alt"', /<meta property="og:image:alt" content="[^"]*" \/>/,
-      `<meta property="og:image:alt" content="${attribute(`Portada de ${game.name}`)}" />`);
+      `<meta property="og:image:alt" content="${attribute(`${game.name} cover art`)}" />`);
   }
 
   return out;
