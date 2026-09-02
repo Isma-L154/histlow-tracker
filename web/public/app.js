@@ -855,6 +855,17 @@ try {
 } catch {
   // No storage, so no stored choice to honour.
 }
+
+// Then translate anyway, against whatever language is now showing.
+//
+// Normally this changes nothing: the Worker already substituted, so every
+// string is replaced with the one it already holds. It costs one pass over
+// twenty elements and buys the difference between two failure modes. If the
+// server-side rewrite ever misses - a pattern that stops matching after an
+// edit to the markup - a reader would otherwise be left with English text
+// under `lang="es"`, permanently and with nothing to indicate it. This way
+// they get a brief flicker instead, which is recoverable and visible.
+translate(document, state.language);
 markLanguage();
 
 if (state.steamId) {
