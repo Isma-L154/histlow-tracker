@@ -21,6 +21,7 @@ import { SteamError, SteamClient, type GameAchievements } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
+import { languageFor, localise } from "./language.ts";
 
 const GAME_ROUTE = /^\/api\/game\/(\d{1,10})$/;
 // The page a person shares, as opposed to the endpoint behind it.
@@ -76,13 +77,16 @@ export default {
 
     const page = GAME_PAGE_ROUTE.exec(url.pathname);
     if (page && request.method === "GET") {
-      return gamePage(Number(page[1]), url, env);
+      return gamePage(Number(page[1]), url, env, languageFor(request));
     }
 
     if (!url.pathname.startsWith("/api/")) {
       // Everything else is a static file, or the SPA fallback for a path that
-      // does not match one.
-      return env.ASSETS.fetch(request);
+      // does not match one. Documents are translated before they leave, so the
+      // first paint is already in the reader's language; anything that is not
+      // HTML passes straight through.
+      const asset = await env.ASSETS.fetch(request);
+      return translated(asset, languageFor(request));
     }
 
     if (request.method !== "GET") {
@@ -253,6 +257,24 @@ async function withinRate(request: Request, env: Env): Promise<boolean> {
 }
 
 /**
+ * Translates an asset response if it is a document, and passes it through if
+ * it is not.
+ *
+ * Reading the body of every stylesheet and image to look for markers would
+ * undo the point of keeping them off Worker code in the first place, so the
+ * content type decides.
+ */
+async function translated(response: Response, language: string): Promise<Response> {
+  if (!(response.headers.get("Content-Type") ?? "").includes("text/html")) return response;
+
+  const out = new Response(localise(await response.text(), language), response);
+  // Two versions of every page now exist, so the cache has to be told what
+  // distinguishes them.
+  out.headers.append("Vary", "Accept-Language");
+  return out;
+}
+
+/**
  * The HTML for one game's page, described so a shared link previews properly.
  *
  * Preview bots do not run JavaScript, so the title and image a person sees in
@@ -260,7 +282,7 @@ async function withinRate(request: Request, env: Env): Promise<boolean> {
  * find the game is not an error here: the shell still renders, and the client
  * will report the problem in the reader's own language.
  */
-async function gamePage(appId: number, url: URL, env: Env): Promise<Response> {
+async function gamePage(appId: number, url: URL, env: Env, language: string): Promise<Response> {
   const page = `${url.origin}/game/${appId}`;
 
   let game: GameAchievements | null = null;
@@ -279,7 +301,7 @@ async function gamePage(appId: number, url: URL, env: Env): Promise<Response> {
   let described: string;
   try {
     const shell = await env.ASSETS.fetch(new URL("/index.html", url.origin));
-    const rewrite = describeGame(await shell.text(), game, page);
+    const rewrite = describeGame(localise(await shell.text(), language), game, page);
 
     // A pattern that matches nothing returns the shell untouched and says
     // nothing. Since the fallback is now a polished card rather than a visibly
@@ -301,6 +323,9 @@ async function gamePage(appId: number, url: URL, env: Env): Promise<Response> {
       "Content-Type": "text/html; charset=utf-8",
       // Same shape for every visitor, and the underlying data barely moves.
       "Cache-Control": `public, max-age=${env.CACHE_SECONDS}`,
+      // Two versions of this page now exist. Without this, whichever language
+      // was requested first would be served to everyone until it expired.
+      Vary: "Accept-Language",
     },
   });
 }

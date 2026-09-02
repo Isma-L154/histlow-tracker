@@ -523,6 +523,44 @@ main {
   font-size: 0.86rem;
 }
 
+/* -- language toggle ----------------------------------------------------- */
+
+.language {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+}
+
+.lang {
+  padding: 0.3rem 0.6rem;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.lang:hover {
+  color: var(--text);
+}
+
+/*
+ * The current language is marked with `aria-pressed`, so the styling keys off
+ * that rather than off a class. One source of truth, and a state a screen
+ * reader is told about instead of only a colour.
+ */
+.lang[aria-pressed="true"] {
+  background: var(--panel-hover);
+  color: var(--text);
+}
+
 /* -- steam links --------------------------------------------------------- */
 
 .links {

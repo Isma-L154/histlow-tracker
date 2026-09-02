@@ -41,19 +41,29 @@
         </svg>
         <span class="brand-text">
           <strong>HowToAchieve</strong>
-          <span>every Steam achievement, explained</span>
+          <span data-i18n="brand.tagline">every Steam achievement, explained</span>
         </span>
       </a>
 
       <form class="search" id="search-form" role="search" autocomplete="off">
-        <label class="visually-hidden" for="search-input">Search for a game</label>
+        <label class="visually-hidden" for="search-input" data-i18n="search.label">Search for a game</label>
         <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
           <circle cx="11" cy="11" r="7" />
           <path d="m20 20-3.5-3.5" />
         </svg>
-        <input id="search-input" type="search" name="q" placeholder="Search for a game…" spellcheck="false" />
-        <ul class="results" id="results" role="listbox" aria-label="Results" hidden></ul>
+        <input id="search-input" type="search" name="q" placeholder="Search for a game…" data-i18n-placeholder="search.placeholder" spellcheck="false" />
+        <ul class="results" id="results" role="listbox" aria-label="Results" data-i18n-aria-label="search.results" hidden></ul>
       </form>
+
+      <div class="language" role="group" aria-label="Language" data-i18n-aria-label="language.label">
+        <!--
+          Two buttons rather than a select. The choice is between exactly two
+          things, both fit on screen, and a native select on a phone opens a
+          full-screen sheet for what should be one tap.
+        -->
+        <button type="button" class="lang" data-language="en" lang="en">EN</button>
+        <button type="button" class="lang" data-language="es" lang="es">ES</button>
+      </div>
 
       <details class="profile" id="profile">
         <summary>
@@ -61,17 +71,17 @@
             <circle cx="12" cy="8" r="4" />
             <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
           </svg>
-          <span>My profile</span>
+          <span data-i18n="profile.title">My profile</span>
         </summary>
         <div class="profile-body">
           <label for="steamid-input">
-            SteamID64 (17 digits)
-            <span class="hint">Stored only in this browser. We use it to mark the achievements you already hold.</span>
+            <span data-i18n="profile.steamid">SteamID64 (17 digits)</span>
+            <span class="hint" data-i18n="profile.hint">Stored only in this browser. We use it to mark the achievements you already hold.</span>
           </label>
           <div class="profile-row">
             <input id="steamid-input" type="text" inputmode="numeric" pattern="\d{17}" maxlength="17" placeholder="76561199000000000" />
-            <button type="button" id="steamid-save" class="primary">Save</button>
-            <button type="button" id="steamid-clear" class="ghost">Remove</button>
+            <button type="button" id="steamid-save" class="primary" data-i18n="profile.save">Save</button>
+            <button type="button" id="steamid-clear" class="ghost" data-i18n="profile.remove">Remove</button>
           </div>
           <p class="profile-status" id="profile-status" role="status"></p>
         </div>
@@ -80,13 +90,13 @@
 
     <main id="main">
       <section class="hero" id="hero">
-        <h1>Find out how every achievement is earned</h1>
-        <p class="hero-lead">
+        <h1 data-i18n="hero.title">Find out how every achievement is earned</h1>
+        <p class="hero-lead" data-i18n="hero.lead">
           Search for a game and see every achievement ordered from the rarest to the most common.
           The steps come from guides the community wrote, summarised here.
         </p>
         <div class="hero-examples">
-          <span class="hero-examples-label">Try</span>
+          <span class="hero-examples-label" data-i18n="hero.try">Try</span>
           <button type="button" class="example" data-appid="367520">Hollow Knight</button>
           <button type="button" class="example" data-appid="1245620">ELDEN RING</button>
           <button type="button" class="example" data-appid="782330">DOOM Eternal</button>
@@ -113,13 +123,13 @@
         </div>
 
         <div class="toolbar">
-          <div class="filters" id="filters" role="group" aria-label="Filter achievements" hidden>
-            <button type="button" data-filter="all" class="chip is-active">All</button>
-            <button type="button" data-filter="missing" class="chip">Missing</button>
-            <button type="button" data-filter="unlocked" class="chip">Unlocked</button>
+          <div class="filters" id="filters" role="group" aria-label="Filter achievements" data-i18n-aria-label="filters.label" hidden>
+            <button type="button" data-filter="all" class="chip is-active" data-i18n="filters.all">All</button>
+            <button type="button" data-filter="missing" class="chip" data-i18n="filters.missing">Missing</button>
+            <button type="button" data-filter="unlocked" class="chip" data-i18n="filters.unlocked">Unlocked</button>
           </div>
           <p class="count" id="visible-count"></p>
-          <p class="scale-note">The bar and the percentage are how many people hold it: the fewer, the rarer.</p>
+          <p class="scale-note" data-i18n="scale.note">The bar and the percentage are how many people hold it: the fewer, the rarer.</p>
         </div>
 
         <ol class="achievements" id="achievements"></ol>
@@ -127,9 +137,10 @@
     </main>
 
     <footer class="footer">
-      Data from Steam. The steps come from guides written by the community.
+      <span data-i18n="footer.credit">Data from Steam. The steps come from guides written by the community.</span>
       <br />
-      <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a>
+      <a href="/privacy" data-i18n="footer.privacy">Privacy</a> ·
+      <a href="/terms" data-i18n="footer.terms">Terms</a>
     </footer>
 
     <script type="module" src="/app.js"></script>
