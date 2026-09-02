@@ -523,6 +523,51 @@ main {
   font-size: 0.86rem;
 }
 
+/* -- completion difficulty ----------------------------------------------- */
+
+.difficulty {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.86rem;
+  color: var(--muted);
+  /* Says there is more to know without shouting it. */
+  cursor: help;
+}
+
+.difficulty-score {
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * The tier colours borrow the rarity ramp, because it is the same underlying
+ * measure - how few people have these - read at the level of a whole game.
+ */
+.difficulty-tier {
+  font-weight: 600;
+}
+
+.difficulty[data-tier="veryHard"] .difficulty-tier,
+.difficulty[data-tier="brutal"] .difficulty-tier {
+  color: var(--rarity-legendary);
+}
+
+.difficulty[data-tier="demanding"] .difficulty-tier {
+  color: var(--rarity-rare);
+}
+
+.difficulty[data-tier="someWork"] .difficulty-tier,
+.difficulty[data-tier="straightforward"] .difficulty-tier {
+  color: var(--rarity-uncommon);
+}
+
 /* -- language toggle ----------------------------------------------------- */
 
 .language {
