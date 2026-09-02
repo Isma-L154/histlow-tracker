@@ -21,7 +21,7 @@ import { SteamError, SteamClient, type GameAchievements } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
-import { languageFor, localise } from "./language.ts";
+import { languageFor, localise, pageCacheKey } from "./language.ts";
 
 const GAME_ROUTE = /^\/api\/game\/(\d{1,10})$/;
 // The page a person shares, as opposed to the endpoint behind it.
@@ -254,21 +254,6 @@ async function withinRate(request: Request, env: Env): Promise<boolean> {
     logFailure("rate limiter unavailable", error);
     return true;
   }
-}
-
-/**
- * Where a rendered game page is cached.
- *
- * The language is part of the key, and that is the whole point. `Vary` cannot
- * carry it — Cloudflare's cache only considers `Vary: Accept-Encoding` — so a
- * key this Worker owns is what keeps one reader's language away from the next.
- *
- * Exported so the invariant can be asserted. The test pool does not exercise
- * `caches.default`, so a key that quietly stopped varying by language would
- * otherwise pass every test and fail every reader.
- */
-export function pageCacheKey(appId: number, language: string): string {
-  return `https://page.invalid/game/v2/${appId}/${language}`;
 }
 
 /**
