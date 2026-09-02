@@ -44,7 +44,7 @@ const MAX_QUERY_LENGTH = 100;
  * passages are found would keep serving the answers the old logic produced -
  * and the improvement would be invisible exactly where it mattered.
  */
-const HOWTO_LOGIC_VERSION = 3;
+const HOWTO_LOGIC_VERSION = 4;
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -359,7 +359,11 @@ async function targetedGuides(appId: number, name: string): Promise<Guide[]> {
  */
 async function corpus(appId: number, env: Env, ctx: ExecutionContext): Promise<Guide[]> {
   const cache = caches.default;
-  const cacheKey = `https://corpus.invalid/guides/${appId}`;
+  // Versioned because the cached payload holds display strings - the guide
+  // title and author fallbacks - so a week-old entry would keep serving the
+  // Spanish ones after this deploy. Bump alongside any change to what
+  // `fetchGuide` puts in a `Guide`.
+  const cacheKey = `https://corpus.invalid/guides/v2/${appId}`;
 
   const hit = await cache.match(cacheKey);
   if (hit) return (await hit.json()) as Guide[];
