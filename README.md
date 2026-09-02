@@ -1,7 +1,7 @@
 # Steam HistLow Tracker
 
 *Two Steam side projects in one repository: a wishlist watcher that alerts only
-when a game beats its all-time low price, and [Cazalogros](#cazalogros), a
+when a game beats its all-time low price, and [HowToAchieve](#howtoachieve), a
 browser for a game's achievements ranked by how rare they really are.*
 
 Watches a public Steam wishlist and raises an alert only when a game's sale
@@ -60,7 +60,7 @@ tests/                 Unit tests; no network access required
 docs/                  iOS Shortcut setup, operations runbook
 config.json            Non-secret runtime configuration
 .env.example           Template for local runs
-web/                   Cazalogros - the achievement browser (see below)
+web/                   HowToAchieve - the achievement browser (see below)
   src/                 Cloudflare Worker: Steam client, guide corpus, how-to
   public/              The page itself: no framework, no build step
 ```
@@ -68,13 +68,13 @@ web/                   Cazalogros - the achievement browser (see below)
 Layering is one-directional: `domain` depends on nothing, adapters depend on
 `domain`, `selector` is pure, and only `pipeline` wires them together.
 
-# Cazalogros
+# HowToAchieve
 
 A second, independent module in this repository: a web page that lists every
 achievement in a Steam game, ordered by how rare it actually is, and explains
 **how each one is earned** — on the page, rather than linking out.
 
-Live at **[cazalogros.cloudils.com](https://cazalogros.cloudils.com)**.
+Live at **[howtoachieve.cloudils.com](https://howtoachieve.cloudils.com)**.
 
 Lives in [`web/`](web/) and shares nothing with the tracker but the repo.
 

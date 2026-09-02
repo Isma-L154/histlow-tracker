@@ -9,6 +9,14 @@
   // separate DNS step to keep in sync with this file.
   "routes": [
     {
+      "pattern": "howtoachieve.cloudils.com",
+      "custom_domain": true
+    },
+    // The former address. Kept so it reaches this Worker and can be answered
+    // with a permanent redirect - shared links, bookmarks and four sitemap
+    // entries point at it. Removing it here would not free the name; it would
+    // only turn every one of those links into an error.
+    {
       "pattern": "cazalogros.cloudils.com",
       "custom_domain": true
     }
@@ -29,7 +37,14 @@
     // `/game/*` joins the list because those pages are built by the Worker: it
     // writes the title and cover art into the HTML so a shared link previews
     // as the game rather than as the site.
-    "run_worker_first": ["/api/*", "/game/*"],
+    //
+    // The document routes join it for the rename: `run_worker_first` matches
+    // paths and not hosts, so the only way to redirect the old address is for
+    // the Worker to see the request. Listing the four kinds of URL a person
+    // could have shared - rather than setting this to `true` - keeps
+    // stylesheets, scripts and images served without invoking Worker code at
+    // all. Nobody bookmarks a stylesheet.
+    "run_worker_first": ["/api/*", "/game/*", "/", "/privacy", "/terms"],
     "not_found_handling": "single-page-application"
   },
 

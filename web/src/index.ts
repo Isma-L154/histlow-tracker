@@ -46,9 +46,31 @@ const MAX_QUERY_LENGTH = 100;
  */
 const HOWTO_LOGIC_VERSION = 4;
 
+/**
+ * The address the site answered on before the rename.
+ *
+ * Still routed to this Worker on purpose. Those links were shared, bookmarked
+ * and indexed, and `sitemap.xml` listed four of them, so they are answered
+ * rather than dropped.
+ */
+const FORMER_HOST = "cazalogros.cloudils.com";
+
+/** Where they go now. */
+const CANONICAL_HOST = "howtoachieve.cloudils.com";
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+
+    // Before anything else, including route matching: a reader arriving on an
+    // old link should land on the page they wanted, not on this Worker's
+    // opinion of whether their path is valid. 301 rather than 302 because the
+    // move is permanent, and a temporary redirect leaves the old address
+    // indexed indefinitely.
+    if (url.hostname === FORMER_HOST) {
+      url.hostname = CANONICAL_HOST;
+      return Response.redirect(url.toString(), 301);
+    }
 
     const page = GAME_PAGE_ROUTE.exec(url.pathname);
     if (page && request.method === "GET") {

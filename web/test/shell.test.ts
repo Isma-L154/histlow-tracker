@@ -43,6 +43,6 @@ describe("the brand is a link home", () => {
     // The name is computed from the link's own text, so the wordmark has to
     // stay text. Moving it into the SVG or a background image would leave an
     // icon with no accessible name at all.
-    expect(brand(html)).toMatch(/>\s*Cazalogros\s*</);
+    expect(brand(html)).toMatch(/>\s*HowToAchieve\s*</);
   });
 });
