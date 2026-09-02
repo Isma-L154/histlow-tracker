@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import worker, { pageCacheKey } from "../src/index.ts";
 import shell from "../public/index.html?raw";
 import { localise } from "../src/language.ts";
+import { describeGame } from "../src/preview.ts";
 import { DICTIONARY } from "../public/i18n.js";
 
 /** Every `data-i18n` key the shipped shell asks for. */
@@ -167,5 +168,50 @@ describe("pageCacheKey", () => {
 
   it("is stable for the same pair", () => {
     expect(pageCacheKey(367520, "es")).toBe(pageCacheKey(367520, "es"));
+  });
+});
+
+/**
+ * The two rewrites, one after the other.
+ *
+ * `gamePage` calls `describeGame(localise(shell, language), …)`, so two separate
+ * regex passes touch the same document. Each is tested alone elsewhere; this is
+ * about whether the first leaves the second anything it can still match.
+ */
+describe("localise then describeGame", () => {
+  const GAME = {
+    appId: 367520,
+    name: "Hollow Knight",
+    headerImage: "https://shared.cloudflare.steamstatic.com/x/header.jpg",
+    achievements: [],
+    total: 63,
+    unlockedCount: null,
+  };
+  const PAGE = "https://howtoachieve.cloudils.com/game/367520";
+
+  it.each(["en", "es"])("still rewrites every preview tag after translating to %s", (language) => {
+    const { html, missed } = describeGame(localise(shell, language), GAME, PAGE);
+
+    // `missed` is the whole point: it names any tag the second pass could not
+    // find, which is exactly what a first pass would break.
+    expect(missed, `translating to ${language} hid tags from describeGame`).toEqual([]);
+    expect(html).toContain(`<meta property="og:url" content="${PAGE}" />`);
+    expect(html).toContain("Hollow Knight — achievements and how to earn them");
+    expect([...html.matchAll(/<meta property="og:image" content="/g)]).toHaveLength(1);
+  });
+
+  it("keeps the translation after the second pass", () => {
+    const { html } = describeGame(localise(shell, "es"), GAME, PAGE);
+    expect(html).toContain(DICTIONARY.es["hero.title"]!);
+    expect(html).toMatch(/<html[^>]*\slang="es"/);
+  });
+
+  it("leaves the shared-link description in English in both", () => {
+    // Deliberate, and worth pinning: the card describes the game, is written by
+    // `describeGame` from Steam data, and is not part of the interface.
+    for (const language of ["en", "es"]) {
+      const { html } = describeGame(localise(shell, language), GAME, PAGE);
+      expect(html).toContain("All 63 achievements in Hollow Knight");
+    }
   });
 });
