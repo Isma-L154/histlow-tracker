@@ -9,9 +9,9 @@
 
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import worker, { pageCacheKey } from "../src/index.ts";
+import worker from "../src/index.ts";
 import shell from "../public/index.html?raw";
-import { localise } from "../src/language.ts";
+import { localise, pageCacheKey } from "../src/language.ts";
 import { describeGame } from "../src/preview.ts";
 import { DICTIONARY } from "../public/i18n.js";
 
