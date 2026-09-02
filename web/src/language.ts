@@ -110,3 +110,18 @@ function escapeText(value: string): string {
 function escapeAttribute(value: string): string {
   return escapeText(value).replace(/"/g, "&quot;");
 }
+
+/**
+ * Where a rendered game page is cached.
+ *
+ * The language is part of the key, and that is the whole point. `Vary` cannot
+ * carry it — Cloudflare's cache only considers `Vary: Accept-Encoding` — so a
+ * key this Worker owns is what keeps one reader's language away from the next.
+ *
+ * Exported so the invariant can be asserted. The test pool does not exercise
+ * `caches.default`, so a key that quietly stopped varying by language would
+ * otherwise pass every test and fail every reader.
+ */
+export function pageCacheKey(appId: number, language: string): string {
+  return `https://page.invalid/game/v2/${appId}/${language}`;
+}
