@@ -215,3 +215,30 @@ describe("localise then describeGame", () => {
     }
   });
 });
+
+describe("translating a document keeps its security headers", () => {
+  it.each(["/", "/privacy"])("%s still carries what _headers gives it", async (path) => {
+    // `translated()` builds a new Response around the rewritten body. Header
+    // inheritance is what keeps `_headers` applied, and it is the sort of thing
+    // a later refactor drops without noticing - #58 is open about exactly this
+    // class of loss on Worker-built responses.
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      new Request(`https://howtoachieve.cloudils.com${path}`, { headers: { "Accept-Language": "es-ES" } }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    for (const header of [
+      "Content-Security-Policy",
+      "Strict-Transport-Security",
+      "X-Content-Type-Options",
+      "Referrer-Policy",
+      "Cross-Origin-Opener-Policy",
+      "Permissions-Policy",
+    ]) {
+      expect(response.headers.get(header), `${path} lost ${header}`).not.toBeNull();
+    }
+  });
+});
