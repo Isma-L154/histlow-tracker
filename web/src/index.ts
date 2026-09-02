@@ -1,9 +1,11 @@
 /**
  * Steam achievement browser.
  *
- * One Worker serves both halves of the site. Requests under `/api/` run this
- * code; everything else is served directly from `public/` by the assets
- * runtime without invoking the Worker at all.
+ * One Worker serves both halves of the site. Every request for a document
+ * runs this code - the rename made that necessary, since the redirect from the
+ * former address has to see the request. Stylesheets, scripts and images are
+ * still served straight from `public/` by the assets runtime without invoking
+ * the Worker at all.
  *
  * The Worker exists for two reasons the browser cannot solve on its own:
  * none of Steam's endpoints send CORS headers, so a page cannot call them

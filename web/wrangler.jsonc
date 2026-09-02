@@ -28,9 +28,11 @@
   "workers_dev": false,
 
   // Serves the static site and the API from one deployment. Requests under
-  // /api/ hit the Worker; everything else is served straight from ./public
-  // without invoking Worker code at all, so browsing the page costs nothing
-  // against the request budget that matters.
+  // /api/ hit the Worker, and so does every document request - see
+  // `run_worker_first` below for why the rename made that necessary. What it
+  // costs is one invocation per page view rather than none; what it saves is
+  // every stylesheet, script and image, which is the bulk of the requests and
+  // the reason the budget was a concern in the first place.
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",

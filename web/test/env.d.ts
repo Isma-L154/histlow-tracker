@@ -19,6 +19,11 @@ declare namespace Cloudflare {
  * what an `.html` module is, and `tsc --noEmit` is a CI gate, so the shape is
  * declared here rather than silenced at each import.
  */
+declare module "*.jsonc?raw" {
+  const contents: string;
+  export default contents;
+}
+
 declare module "*.html?raw" {
   const contents: string;
   export default contents;
