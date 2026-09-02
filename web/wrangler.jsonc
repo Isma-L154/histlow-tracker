@@ -48,7 +48,7 @@
     }
   ],
 
-  // Rewrites community guide passages into steps in Spanish. On the Workers
+  // Rewrites community guide passages into steps in English. On the Workers
   // free plan this cannot bill: the daily allocation of 10,000 Neurons simply
   // stops serving once spent, and the page falls back to the raw passages.
   "ai": {

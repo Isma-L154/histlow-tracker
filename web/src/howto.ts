@@ -58,7 +58,7 @@ export async function explainAchievement(
     .join("\n\n");
 
   const prompt = [
-    `Logro: "${achievement.name}"`,
+    `Achievement: "${achievement.name}"`,
     achievement.description ? `Official Steam description: "${achievement.description}"` : "",
     "",
     "Community guide passages:",

@@ -16,7 +16,7 @@ const STORAGE_KEY = "histlow.steamid";
 const SEARCH_DEBOUNCE_MS = 250;
 const MAX_RESULTS = 12;
 
-/** Steam's own achievement-guide hub, already filtered and in Spanish. */
+/** Steam's own achievement-guide hub, already filtered to achievement guides. */
 const GUIDES_BASE = "https://steamcommunity.com/app";
 
 const el = {
@@ -479,7 +479,7 @@ function renderHowTo(panel, data, appId, achievement) {
   if (data.passages.length > 0) {
     const sources = document.createElement("p");
     sources.className = "howto-sources";
-    sources.append(document.createTextNode("Escrito a partir de: "));
+    sources.append(document.createTextNode("Written from: "));
     // Several passages can come from one guide; each guide is credited once.
     const seen = new Set();
     for (const passage of data.passages) {
@@ -537,9 +537,9 @@ function renderSteps(text) {
 /** The escape hatch when we have no answer: search Steam for it by hand. */
 function searchLink(appId, achievementName) {
   const anchor = link(
-    "Buscar a mano en Steam",
+    "Search Steam yourself",
     `${GUIDES_BASE}/${appId}/guides/?searchText=${encodeURIComponent(achievementName)}` +
-      "&browsefilter=toprated&l=spanish",
+      "&browsefilter=toprated&l=english",
   );
   anchor.className = "steam-link";
   anchor.prepend(icon("M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M20 20l-3.5-3.5"));
@@ -715,7 +715,7 @@ function formatDate(iso) {
   const date = new Date(iso);
   return Number.isNaN(date.getTime())
     ? "Unlocked"
-    : date.toLocaleDateString("en-GB", { year: "numeric", month: "short", day: "numeric" });
+    : date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
 }
 
 // -- routing ----------------------------------------------------------------
