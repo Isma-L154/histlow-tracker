@@ -77,7 +77,7 @@ export default {
 
     const page = GAME_PAGE_ROUTE.exec(url.pathname);
     if (page && request.method === "GET") {
-      return gamePage(Number(page[1]), url, env, languageFor(request));
+      return gamePage(Number(page[1]), url, env, languageFor(request), ctx);
     }
 
     if (!url.pathname.startsWith("/api/")) {
@@ -257,6 +257,21 @@ async function withinRate(request: Request, env: Env): Promise<boolean> {
 }
 
 /**
+ * Where a rendered game page is cached.
+ *
+ * The language is part of the key, and that is the whole point. `Vary` cannot
+ * carry it — Cloudflare's cache only considers `Vary: Accept-Encoding` — so a
+ * key this Worker owns is what keeps one reader's language away from the next.
+ *
+ * Exported so the invariant can be asserted. The test pool does not exercise
+ * `caches.default`, so a key that quietly stopped varying by language would
+ * otherwise pass every test and fail every reader.
+ */
+export function pageCacheKey(appId: number, language: string): string {
+  return `https://page.invalid/game/v2/${appId}/${language}`;
+}
+
+/**
  * Translates an asset response if it is a document, and passes it through if
  * it is not.
  *
@@ -268,9 +283,27 @@ async function translated(response: Response, language: string): Promise<Respons
   if (!(response.headers.get("Content-Type") ?? "").includes("text/html")) return response;
 
   const out = new Response(localise(await response.text(), language), response);
-  // Two versions of every page now exist, so the cache has to be told what
-  // distinguishes them.
+
+  // `Vary: Accept-Language` is the obvious answer and is not a sufficient one:
+  // Cloudflare's cache only considers `Vary: Accept-Encoding`, so a shared
+  // cache is free to hand one reader's language to the next. It is still sent,
+  // because caches that do honour it should - but what actually keeps the two
+  // apart is `private`, which forbids a shared cache from holding this at all.
+  //
+  // Cheap to give up here: rewriting a shell that came from the asset binding
+  // costs no upstream request.
+  out.headers.set("Cache-Control", "private, max-age=0, must-revalidate");
   out.headers.append("Vary", "Accept-Language");
+
+  // The body was rewritten; the headers were inherited from the untranslated
+  // asset, validator included. Left alone, both languages ship the same ETag,
+  // and a browser holding the English copy would revalidate, be told 304, and
+  // keep showing English on a page it had just asked for in Spanish. The
+  // language joins the validator rather than the validator being dropped, so
+  // revalidation still works - it just works per language.
+  const etag = out.headers.get("ETag");
+  if (etag) out.headers.set("ETag", etag.replace(/"$/, `-${language}"`));
+
   return out;
 }
 
@@ -282,8 +315,24 @@ async function translated(response: Response, language: string): Promise<Respons
  * find the game is not an error here: the shell still renders, and the client
  * will report the problem in the reader's own language.
  */
-async function gamePage(appId: number, url: URL, env: Env, language: string): Promise<Response> {
+async function gamePage(
+  appId: number,
+  url: URL,
+  env: Env,
+  language: string,
+  ctx: ExecutionContext,
+): Promise<Response> {
   const page = `${url.origin}/game/${appId}`;
+
+  // Cached here rather than by a header, because the language is part of what
+  // makes this response what it is and `Vary` cannot be relied on to say so.
+  // A key this Worker owns cannot be misread by anyone else's cache.
+  //
+  // This also removes a per-request Steam call that the old header-only caching
+  // only avoided when a shared cache happened to cooperate.
+  const cache = caches.default;
+  const hit = await cache.match(pageCacheKey(appId, language));
+  if (hit) return hit;
 
   let game: GameAchievements | null = null;
   try {
@@ -318,16 +367,20 @@ async function gamePage(appId: number, url: URL, env: Env, language: string): Pr
     return problem(500, "Something went wrong handling that request.");
   }
 
-  return new Response(described, {
+  const response = new Response(described, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",
-      // Same shape for every visitor, and the underlying data barely moves.
-      "Cache-Control": `public, max-age=${env.CACHE_SECONDS}`,
-      // Two versions of this page now exist. Without this, whichever language
-      // was requested first would be served to everyone until it expired.
+      // Same shape for every visitor of the same language, and the underlying
+      // data barely moves. `private` because the copy a shared cache would keep
+      // is only right for one of the two languages; the Worker's own cache
+      // above is what makes this fast, and its key says which language it holds.
+      "Cache-Control": `private, max-age=${env.CACHE_SECONDS}`,
       Vary: "Accept-Language",
     },
   });
+
+  ctx.waitUntil(cache.put(pageCacheKey(appId, language), response.clone()));
+  return response;
 }
 
 /**
