@@ -35,6 +35,14 @@
  * separated only by the tail, which is what the second term is for.
  */
 
+/**
+ * Plain JavaScript, and in `public/`, because the browser imports it directly:
+ * the page already holds every percentage this needs, so computing the score
+ * here costs nothing and asking the Worker for it would cost a request.
+ *
+ * @typedef {{ score: number, tier: string }} Difficulty
+ */
+
 /** Below this many usable percentages there is nothing worth claiming. */
 const MINIMUM_ACHIEVEMENTS = 5;
 
@@ -55,25 +63,19 @@ const DECADE_WEIGHT = 3.3;
 /** How much a list that is entirely hard tail adds on top. */
 const TAIL_WEIGHT = 3;
 
-export interface Difficulty {
-  /** 1 (anyone finishes it) to 10 (almost nobody does). */
-  score: number;
-  /** A word for the score, so the number is not the only thing said. */
-  label: string;
-}
-
 /**
- * The label bands.
+ * The bands, named rather than worded.
  *
- * Deliberately plain: this is a rarity reading, and calling a 9 "legendary"
- * would borrow authority the number has not earned.
+ * A key, not a label: this module knows nothing about languages, and the
+ * interface exists in two. The names are deliberately plain - calling a 9
+ * "legendary" would borrow authority a rarity reading has not earned.
  */
-function label(score: number): string {
-  if (score <= 2) return "Straightforward";
-  if (score <= 4) return "Some work";
-  if (score <= 6) return "Demanding";
-  if (score <= 8) return "Very hard";
-  return "Brutal";
+function tier(score) {
+  if (score <= 2) return "straightforward";
+  if (score <= 4) return "someWork";
+  if (score <= 6) return "demanding";
+  if (score <= 8) return "veryHard";
+  return "brutal";
 }
 
 /**
@@ -89,9 +91,9 @@ function label(score: number): string {
  * Null rather than a guess when there is nothing to read: an empty list, one
  * Steam has no percentages for, or one too short to say anything.
  */
-export function completionDifficulty(percentages: readonly (number | null)[]): Difficulty | null {
+export function completionDifficulty(percentages) {
   const usable = percentages.filter(
-    (value): value is number => typeof value === "number" && Number.isFinite(value) && value > 0,
+    (value) => typeof value === "number" && Number.isFinite(value) && value > 0,
   );
   if (usable.length < MINIMUM_ACHIEVEMENTS) return null;
 
@@ -101,9 +103,9 @@ export function completionDifficulty(percentages: readonly (number | null)[]): D
   const fromRarest = 10 - DECADE_WEIGHT * Math.log10(rarest / FLOOR_PERCENT);
   const score = clamp(Math.round(fromRarest + TAIL_WEIGHT * tailShare));
 
-  return { score, label: label(score) };
+  return { score, tier: tier(score) };
 }
 
-function clamp(value: number): number {
+function clamp(value) {
   return Math.min(10, Math.max(1, value));
 }

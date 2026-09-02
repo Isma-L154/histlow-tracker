@@ -28,9 +28,11 @@ describe("the dictionary", () => {
   });
 
   it("leaves no string untranslated by accident", () => {
-    // Identical strings are legitimate for a proper noun, so this lists the
-    // ones allowed to match rather than forbidding matches outright.
-    const allowed = new Set(["search.placeholder"]);
+    // Identical strings are legitimate sometimes, so this lists the ones
+    // allowed to match rather than forbidding matches outright. Both earn it:
+    // "{score}/10" is a number, and "Brutal" is the same word in Spanish.
+    // Keep this list short - every entry is a string nobody will check again.
+    const allowed = new Set(["difficulty.score", "difficulty.brutal"]);
     const same = Object.keys(DICTIONARY.en).filter(
       (key) => !allowed.has(key) && DICTIONARY.en[key] === DICTIONARY.es[key],
     );

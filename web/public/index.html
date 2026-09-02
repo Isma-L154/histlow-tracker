@@ -118,6 +118,17 @@
               <div class="progress-fill" id="progress-fill"></div>
             </div>
             <p class="notice" id="progress-notice" hidden></p>
+            <!--
+              Rendered from percentages the page already has, so it needs no
+              request. `title` carries where the number comes from, because a
+              bare 8/10 next to a game reads as a community verdict and this is
+              not one.
+            -->
+            <p class="difficulty" id="difficulty" hidden>
+              <span class="difficulty-label" data-i18n="difficulty.label">Completion difficulty</span>
+              <strong class="difficulty-score" id="difficulty-score"></strong>
+              <span class="difficulty-tier" id="difficulty-tier"></span>
+            </p>
             <p class="links" id="game-links"></p>
           </div>
         </div>

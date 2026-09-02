@@ -11,7 +11,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { completionDifficulty } from "../src/difficulty.ts";
+import { completionDifficulty } from "../public/difficulty.js";
 
 /** Deterministic pseudo-random source, so a failure can be re-run exactly. */
 function generator(seed: number): () => number {
@@ -90,13 +90,13 @@ describe("completionDifficulty", () => {
       }
     });
 
-    it("always pairs the score with the matching label", () => {
+    it("always pairs the score with the matching tier", () => {
       const random = generator(5);
       const seen = new Map<number, string>();
       for (let i = 0; i < SAMPLES; i++) {
-        const { score, label } = completionDifficulty(percentages(random))!;
-        if (seen.has(score)) expect(seen.get(score)).toBe(label);
-        seen.set(score, label);
+        const { score, tier } = completionDifficulty(percentages(random))!;
+        if (seen.has(score)) expect(seen.get(score)).toBe(tier);
+        seen.set(score, tier);
       }
     });
   });
