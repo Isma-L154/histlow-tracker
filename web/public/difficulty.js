@@ -92,8 +92,14 @@ function tier(score) {
  * Steam has no percentages for, or one too short to say anything.
  */
 export function completionDifficulty(percentages) {
+  // Zero is a reading, not a gap. Steam reports 0.0 for an achievement
+  // essentially nobody holds - glitched, removed, or brand new - and that is
+  // the strongest rarity signal there is. Excluding it used to hand the score
+  // to the next-rarest achievement instead, so a game nobody can finish came
+  // out as 1/10, and a five-achievement game with one lost the score entirely
+  // by falling under the minimum. Negatives and non-numbers are still gaps.
   const usable = percentages.filter(
-    (value) => typeof value === "number" && Number.isFinite(value) && value > 0,
+    (value) => typeof value === "number" && Number.isFinite(value) && value >= 0,
   );
   if (usable.length < MINIMUM_ACHIEVEMENTS) return null;
 

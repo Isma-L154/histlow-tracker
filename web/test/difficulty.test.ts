@@ -22,10 +22,17 @@ function generator(seed: number): () => number {
   };
 }
 
-/** A plausible achievement list: 5 to 200 percentages between 0.1 and 100. */
+/**
+ * A plausible achievement list: 5 to 200 percentages between 0 and 100.
+ *
+ * Zero is in range on purpose. Steam really does report 0.0 for an achievement
+ * essentially nobody holds, and flooring the generator at 0.1 - as this did -
+ * meant five hundred samples per property could never produce the one value
+ * that turned out to be handled wrongly.
+ */
 function percentages(random: () => number): number[] {
   const count = 5 + Math.floor(random() * 195);
-  return Array.from({ length: count }, () => Math.max(0.1, Math.round(random() * 1000) / 10));
+  return Array.from({ length: count }, () => Math.round(random() * 1000) / 10);
 }
 
 const SAMPLES = 500;
@@ -90,14 +97,54 @@ describe("completionDifficulty", () => {
       }
     });
 
-    it("always pairs the score with the matching tier", () => {
-      const random = generator(5);
+    it("names every band at its edges", () => {
+      // The previous version of this asserted that the same score produced the
+      // same tier, which `tier()` guarantees by being a pure function of the
+      // score - it could not fail. These are the boundaries themselves, which
+      // can.
+      const bands: ReadonlyArray<[low: number, high: number, tier: string]> = [
+        [1, 2, "straightforward"],
+        [3, 4, "someWork"],
+        [5, 6, "demanding"],
+        [7, 8, "veryHard"],
+        [9, 10, "brutal"],
+      ];
       const seen = new Map<number, string>();
+      const random = generator(5);
       for (let i = 0; i < SAMPLES; i++) {
         const { score, tier } = completionDifficulty(percentages(random))!;
-        if (seen.has(score)) expect(seen.get(score)).toBe(tier);
         seen.set(score, tier);
       }
+      for (const [score, tier] of seen) {
+        const band = bands.find(([low, high]) => score >= low && score <= high);
+        expect(band?.[2], `score ${score} was called ${tier}`).toBe(tier);
+      }
+    });
+  });
+
+  describe("an achievement literally nobody holds", () => {
+    it("is the strongest signal there is, not a missing one", () => {
+      // Steam reports 0.0 for an achievement essentially nobody has - glitched,
+      // removed, or brand new. Dropping it as unusable used to score such a
+      // game 1/10 "straightforward", which is the opposite of the truth.
+      const withZero = completionDifficulty([0, 60, 65, 70, 75, 80])!;
+      const without = completionDifficulty([60, 65, 70, 75, 80])!;
+      expect(withZero.score).toBeGreaterThan(without.score);
+      expect(withZero.tier).toBe("brutal");
+    });
+
+    it("still counts towards having enough to read", () => {
+      // It is an achievement. Filtering it out could push a five-achievement
+      // game under the minimum and hide the score entirely.
+      expect(completionDifficulty([0, 50, 50, 50, 50])).not.toBeNull();
+    });
+
+    it("makes a list of nothing but zeroes the hardest there is", () => {
+      // Not a separate assertion about the tail: any single zero already floors
+      // the rarest term at its maximum, so the score is at the ceiling and
+      // adding more cannot show up. What this pins is that it is the ceiling,
+      // and that a list of them is not mistaken for no data at all.
+      expect(completionDifficulty([0, 0, 0, 0, 0])).toEqual({ score: 10, tier: "brutal" });
     });
   });
 
