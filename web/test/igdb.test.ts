@@ -218,7 +218,7 @@ describe("upcoming", () => {
   function stubUpcoming(games: unknown[], dates: unknown[], formatId: unknown = EXACT) {
     return stub((url) =>
       url.endsWith("/date_formats")
-        ? json(formatId === null ? [] : [{ id: formatId }])
+        ? json(formatId === null ? [] : [{ id: formatId, format: "YYYYMMMMDD" }])
         : url.endsWith("/games")
           ? json(games)
           : json(dates),
@@ -363,7 +363,7 @@ describe("upcoming says where it stopped", () => {
   const NOW = 1_800_000_000_000;
 
   it.each([
-    ["no date format", [], [], null, /date_formats/],
+    ["no date format", [], [], null, /no full-date format/],
     ["no candidate games", [], [], 0, /no candidate games/],
     ["candidates but no exact dates ahead", [{ id: 1, name: "x" }], [], 0, /none exact and ahead/],
   ])("reports %s", async (_name, games, dates, formatId, pattern) => {
@@ -372,7 +372,7 @@ describe("upcoming says where it stopped", () => {
     // beside it with the same gap.
     stub((url) =>
       url.endsWith("/date_formats")
-        ? json(formatId === null ? [] : [{ id: formatId }])
+        ? json(formatId === null ? [] : [{ id: formatId, format: "YYYYMMMMDD" }])
         : url.endsWith("/games")
           ? json(games)
           : json(dates),
@@ -385,7 +385,7 @@ describe("upcoming says where it stopped", () => {
   it("says nothing when it found something", () => {
     return stub((url) =>
       url.endsWith("/date_formats")
-        ? json([{ id: 0 }])
+        ? json([{ id: 0, format: "YYYYMMMMDD" }])
         : url.endsWith("/games")
           ? json([{ id: 1, name: "Real" }])
           : json([{ game: 1, date: 100, date_format: 0 }]),
@@ -393,5 +393,47 @@ describe("upcoming says where it stopped", () => {
       expect(lookup.stoppedAt).toBeNull();
       expect(lookup.releases).toHaveLength(1);
     });
+  });
+});
+
+describe("resolving the exact date format", () => {
+  const NOW = 1_800_000_000_000;
+
+  it("picks the format that ends in a day, whatever it is called", async () => {
+    // The query filter `where format = "YYYYMMMMDD"` matched nothing in
+    // production and could not say whether the string, the field name or the
+    // comparison was wrong. Reading the table and matching in memory cannot be
+    // wrong about a string.
+    stub((url) =>
+      url.endsWith("/date_formats")
+        ? json([
+            { id: 2, format: "YYYY" },
+            { id: 5, format: "YYYYQ4" },
+            { id: 9, format: "YYYYMMMMDD" },
+            { id: 7, format: "TBD" },
+          ])
+        : url.endsWith("/games")
+          ? json([{ id: 1, name: "Real" }])
+          : json([{ game: 1, date: 100, date_format: 9 }]),
+    );
+    const lookup = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(lookup.releases.map((r) => r.name)).toEqual(["Real"]);
+  });
+
+  it("reports the formats it was offered when none is a full date", async () => {
+    // So the next attempt reads the answer rather than guessing at a string.
+    stub((url) =>
+      url.endsWith("/date_formats")
+        ? json([{ id: 2, format: "YYYY" }, { id: 5, format: "YYYYQ4" }])
+        : json([]),
+    );
+    const lookup = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(lookup.stoppedAt).toContain("YYYY");
+    expect(lookup.stoppedAt).toContain("YYYYQ4");
+  });
+
+  it("does not mistake a quarter for a full date", async () => {
+    stub((url) => (url.endsWith("/date_formats") ? json([{ id: 5, format: "YYYYQ4" }]) : json([])));
+    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).releases).toEqual([]);
   });
 });

@@ -184,10 +184,17 @@ export class IgdbClient {
    * games have no exact date yet, and those drop out.
    */
   async upcoming(limit: number, now: number): Promise<UpcomingLookup> {
-    const exact = await this.exactDateFormatId();
+    const format = await this.exactDateFormat();
+    const exact = format.id;
     // Without it, nothing rather than everything: a countdown to a guessed
-    // date is worse than no countdown.
-    if (exact === null) return { releases: [], stoppedAt: "no exact date format in date_formats" };
+    // date is worse than no countdown. The formats that were offered travel
+    // with the reason, so the next attempt reads rather than guesses.
+    if (exact === null) {
+      return {
+        releases: [],
+        stoppedAt: `no full-date format among [${format.saw.join(", ") || "nothing returned"}]`,
+      };
+    }
 
     const seconds = Math.floor(now / 1000);
     const candidates = await this.query<{
@@ -257,16 +264,40 @@ export class IgdbClient {
     };
   }
 
-  /** The `date_formats` row meaning a full day-month-year date. */
-  private async exactDateFormatId(): Promise<number | null> {
+  /**
+   * The `date_formats` row meaning a full day-month-year date.
+   *
+   * The whole table is fetched and matched in memory rather than filtered in
+   * the query. Asking for `where format = "YYYYMMMMDD"` returned nothing in
+   * production - the string, the field name or the comparison was wrong, and
+   * the query could not say which. There are about seven rows; reading them all
+   * costs nothing and cannot be wrong about a string.
+   *
+   * The match is on the format ending in a day component, because only a full
+   * date does. Quarters end in a quarter, a year-only format in the year.
+   *
+   * When nothing matches, the formats that were offered are reported, so the
+   * next person reads the answer instead of guessing at it as I did.
+   */
+  private async exactDateFormat(): Promise<{ id: number | null; saw: string[] }> {
     try {
-      const rows = await this.query<{ id?: number }>(
+      const rows = await this.query<{ id?: number; format?: string }>(
         "date_formats",
-        `fields id; where format = "YYYYMMMMDD"; limit 1;`,
+        `fields id, format; limit 50;`,
       );
-      return identifier(rows[0]?.id);
+
+      const saw: string[] = [];
+      let id: number | null = null;
+      for (const row of rows) {
+        if (row === null || typeof row !== "object" || typeof row.format !== "string") continue;
+        saw.push(row.format);
+        if (id === null && /dd$/i.test(row.format.replace(/[^A-Za-z]/g, ""))) {
+          id = identifier(row.id);
+        }
+      }
+      return { id, saw };
     } catch {
-      return null;
+      return { id: null, saw: [] };
     }
   }
 
