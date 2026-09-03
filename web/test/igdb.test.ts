@@ -212,95 +212,149 @@ describe("completionTime", () => {
 
 describe("upcoming", () => {
   const NOW = 1_800_000_000_000;
-  const EXACT = 3;
+  const EXACT = 0;
 
-  /** IGDB's answers, with the date-format lookup already resolved. */
-  function stubReleases(rows: unknown[]) {
+  /** IGDB's three answers: the format id, the ranked games, then their dates. */
+  function stubUpcoming(games: unknown[], dates: unknown[], formatId: unknown = EXACT) {
     return stub((url) =>
-      url.endsWith("/date_formats") ? json([{ id: EXACT }]) : json(rows),
+      url.endsWith("/date_formats")
+        ? json(formatId === null ? [] : [{ id: formatId }])
+        : url.endsWith("/games")
+          ? json(games)
+          : json(dates),
     );
   }
 
-  it("asks only for PC dates still ahead, with an anticipation figure", async () => {
-    const calls = stubReleases([]);
+  it("ranks across all of IGDB, not within a window of dates", async () => {
+    // The bug this replaces: fetching release dates nearest-first and ranking
+    // what came back meant anything dated beyond the window was never
+    // considered, however wanted. A wave of small titles next month buried the
+    // one game everybody waits for. `games` now ranks natively by `hypes`.
+    const calls = stubUpcoming([{ id: 1, name: "Wanted" }], [{ game: 1, date: 999, date_format: EXACT }]);
     await new IgdbClient("id", "tok").upcoming(6, NOW);
-    const body = String(calls[1]!.init!.body);
 
-    expect(body).toContain(`date > ${Math.floor(NOW / 1000)}`);
-    expect(body).toContain("platform = 6");
-    expect(body).toContain("game.hypes != null");
+    const games = String(calls[1]!.init!.body);
+    expect(games).toContain("sort hypes desc");
+    expect(games).toContain(`first_release_date > ${Math.floor(NOW / 1000)}`);
+    expect(games).toContain("platforms = 6");
   });
 
-  it("does not ask IGDB to sort by a nested field", async () => {
-    // `hypes` belongs to the game, not to the release date, and sorting by a
-    // nested field is not documented. The ordering happens here instead.
-    const calls = stubReleases([]);
+  it("keeps the order IGDB ranked them in", async () => {
+    stubUpcoming(
+      [
+        { id: 1, name: "Most wanted" },
+        { id: 2, name: "Less wanted" },
+      ],
+      [
+        // Deliberately the other way round by date, to prove date does not win.
+        { game: 2, date: 100, date_format: EXACT },
+        { game: 1, date: 900, date_format: EXACT },
+      ],
+    );
+    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(releases.map((r) => r.name)).toEqual(["Most wanted", "Less wanted"]);
+  });
+
+  it("accepts a date-format id of zero", async () => {
+    // IGDB's reference tables number from zero, and `positive()` - right for
+    // every other field here, where zero means absent - rejected it. The whole
+    // feature returned an empty list for ever, in silence. The same mistake as
+    // the difficulty score treating a 0% achievement as no data.
+    stubUpcoming([{ id: 1, name: "Real" }], [{ game: 1, date: 100, date_format: 0 }], 0);
+    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).map((r) => r.name)).toEqual(["Real"]);
+  });
+
+  it("asks IGDB for exact dates only", async () => {
+    // IGDB pins "Q4 2026" to the start of the quarter, so a placeholder looks
+    // like a real date. The filter is in the query rather than applied after.
+    const calls = stubUpcoming([{ id: 1, name: "x" }], []);
     await new IgdbClient("id", "tok").upcoming(6, NOW);
-    expect(String(calls[1]!.init!.body)).not.toContain("sort game.hypes");
-  });
-
-  it("orders by anticipation, not by date", async () => {
-    stubReleases([
-      { date: 100, date_format: EXACT, game: { name: "Soon but ignored", hypes: 5 } },
-      { date: 900, date_format: EXACT, game: { name: "Later but wanted", hypes: 900 } },
-    ]);
-    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
-    expect(releases.map((r) => r.name)).toEqual(["Later but wanted", "Soon but ignored"]);
-  });
-
-  it("drops a date IGDB did not mark as exact", async () => {
-    // IGDB pins "Q4 2026" to the start of the quarter, so the date looks real.
-    // Counting down to it would invent a precision nobody has.
-    stubReleases([
-      { date: 100, date_format: EXACT, game: { name: "Real date", hypes: 1 } },
-      { date: 200, date_format: 7, game: { name: "Some quarter", hypes: 999 } },
-    ]);
-    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
-    expect(releases.map((r) => r.name)).toEqual(["Real date"]);
+    expect(String(calls[2]!.init!.body)).toContain(`date_format = ${EXACT}`);
   });
 
   it("shows nothing at all if the exact format cannot be resolved", async () => {
     // Nothing rather than everything: without the format, every placeholder
     // would be presented as a real date.
-    stub((url) => (url.endsWith("/date_formats") ? json([]) : json([{ date: 1, game: { name: "x", hypes: 1 } }])));
+    stubUpcoming([{ id: 1, name: "x" }], [{ game: 1, date: 1, date_format: 0 }], null);
     expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toEqual([]);
   });
 
-  it("keeps one entry per game", async () => {
-    // A game can carry several dates on one platform. The rows arrive in date
-    // order, so the earliest is the one kept.
-    stubReleases([
-      { date: 100, date_format: EXACT, game: { name: "Twice", hypes: 5 } },
-      { date: 500, date_format: EXACT, game: { name: "Twice", hypes: 5 } },
-    ]);
+  it("drops a wanted game that has no exact date yet", async () => {
+    // Ordinary, and the reason the candidate list is over-fetched.
+    stubUpcoming(
+      [
+        { id: 1, name: "No date yet" },
+        { id: 2, name: "Dated" },
+      ],
+      [{ game: 2, date: 100, date_format: EXACT }],
+    );
+    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).map((r) => r.name)).toEqual(["Dated"]);
+  });
+
+  it("keeps a game's earliest date when it has several", async () => {
+    stubUpcoming(
+      [{ id: 1, name: "Twice" }],
+      [
+        { game: 1, date: 100, date_format: EXACT },
+        { game: 1, date: 500, date_format: EXACT },
+      ],
+    );
     const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
     expect(releases).toHaveLength(1);
     expect(releases[0]!.releasedAt).toBe(100);
   });
 
+  it("tells apart two games that share a title", async () => {
+    // Keyed by id, not by name: a demo and its game can carry the same title,
+    // and collapsing them loses the wrong one.
+    stubUpcoming(
+      [
+        { id: 1, name: "Same Title" },
+        { id: 2, name: "Same Title" },
+      ],
+      [
+        { game: 1, date: 100, date_format: EXACT },
+        { game: 2, date: 200, date_format: EXACT },
+      ],
+    );
+    expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toHaveLength(2);
+  });
+
   it("builds a cover url only when there is a cover", async () => {
-    stubReleases([
-      { date: 1, date_format: EXACT, game: { name: "With art", hypes: 2, cover: { image_id: "abc" } } },
-      { date: 2, date_format: EXACT, game: { name: "Without art", hypes: 1 } },
-    ]);
+    stubUpcoming(
+      [
+        { id: 1, name: "With art", cover: { image_id: "abc" } },
+        { id: 2, name: "Without art" },
+      ],
+      [
+        { game: 1, date: 1, date_format: EXACT },
+        { game: 2, date: 2, date_format: EXACT },
+      ],
+    );
     const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
     expect(releases[0]!.coverUrl).toBe("https://images.igdb.com/igdb/image/upload/t_cover_big/abc.jpg");
     expect(releases[1]!.coverUrl).toBeNull();
   });
 
   it.each([
-    ["a row with no name", { date: 1, date_format: 3, game: {} }],
-    ["a row with no date", { date_format: 3, game: { name: "Someday", hypes: 1 } }],
+    ["a game with no name", { id: 1 }],
+    ["a game with no id", { name: "Nameless" }],
     ["a row that is not an object", null],
   ])("drops %s rather than rendering a blank card", async (_name, row) => {
-    stubReleases([row]);
+    stubUpcoming([row], [{ game: 1, date: 1, date_format: EXACT }]);
     expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toEqual([]);
   });
 
   it("honours the limit", async () => {
-    stubReleases(
-      Array.from({ length: 30 }, (_, i) => ({ date: i + 1, date_format: EXACT, game: { name: `G${i}`, hypes: i } })),
-    );
+    const games = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, name: `G${i}` }));
+    const dates = games.map((g) => ({ game: g.id, date: 100 + g.id, date_format: EXACT }));
+    stubUpcoming(games, dates);
     expect(await new IgdbClient("id", "tok").upcoming(4, NOW)).toHaveLength(4);
+  });
+
+  it("does not ask IGDB for dates when no game qualified", async () => {
+    const calls = stubUpcoming([], []);
+    expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toEqual([]);
+    expect(calls, "asked for dates for nothing").toHaveLength(2);
   });
 });
