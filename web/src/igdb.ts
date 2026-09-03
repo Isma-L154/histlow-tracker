@@ -152,20 +152,24 @@ export class IgdbClient {
   /**
    * The most anticipated games with a real release date ahead of them.
    *
-   * Queried through `release_dates` rather than `games`, because `games` only
-   * carries `first_release_date` — which IGDB sets even for a placeholder,
-   * pinning a "Q4 2026" title to the start of its quarter. Counting down to
-   * that would invent a precision nobody has.
+   * Two queries, in this order, because the order is the whole point.
    *
-   * Precision comes from `date_format`, whose id for a full date is resolved by
-   * name rather than assumed. Same reasoning as Steam's external-game source: a
-   * guessed constant that is wrong does not fail, it silently selects the wrong
-   * thing.
+   * The obvious shape - fetch release dates nearest first, rank what comes back
+   * by anticipation - is wrong, and quietly. Anything dated beyond the fetch
+   * window is never considered however wanted it is, so a wave of small titles
+   * releasing next month can bury the one game everybody is waiting for. The
+   * ranking has to happen across all of IGDB, not across a slice of it.
    *
-   * Sorted here rather than by IGDB. `hypes` belongs to the game, not to the
-   * release date, and sorting by a nested field is not something the API
-   * documents — so rows are fetched by date and ordered by anticipation in
-   * memory, which for a few dozen rows costs nothing.
+   * So `games` ranks first, natively, by `hypes` - which lives on the game and
+   * is what `sort` can actually order by. Then the exact dates for those games
+   * are fetched separately, because `games` carries only
+   * `first_release_date`, which IGDB sets even for a placeholder: a "Q4 2026"
+   * title is pinned to the start of its quarter, and counting down to that
+   * invents a precision nobody has.
+   *
+   * Precision comes from `date_format`, whose id is resolved by name rather
+   * than assumed. Over-fetches candidates because some of the most anticipated
+   * games have no exact date yet, and those drop out.
    */
   async upcoming(limit: number, now: number): Promise<UpcomingRelease[]> {
     const exact = await this.exactDateFormatId();
@@ -174,43 +178,62 @@ export class IgdbClient {
     if (exact === null) return [];
 
     const seconds = Math.floor(now / 1000);
-    const rows = await this.query<{
-      date?: number;
-      date_format?: number;
-      game?: { name?: string; hypes?: number; cover?: { image_id?: string } };
+    const candidates = await this.query<{
+      id?: number;
+      name?: string;
+      cover?: { image_id?: string };
     }>(
-      "release_dates",
-      `fields date, date_format, game.name, game.hypes, game.cover.image_id;` +
-        ` where date > ${seconds} & platform = ${PC_PLATFORM} & game.hypes != null;` +
-        ` sort date asc; limit ${Math.min(200, limit * 20)};`,
+      "games",
+      `fields id, name, cover.image_id;` +
+        ` where first_release_date > ${seconds} & platforms = ${PC_PLATFORM} & hypes != null;` +
+        ` sort hypes desc; limit ${Math.min(100, limit * 5)};`,
     );
 
-    const ranked: Array<UpcomingRelease & { hypes: number }> = [];
-    const seen = new Set<string>();
-
-    for (const row of rows) {
-      if (row === null || typeof row !== "object" || row.date_format !== exact) continue;
-
-      const name = row.game?.name;
-      const date = positive(row.date);
-      // A game can carry several dates on one platform; the earliest wins,
-      // and the rows arrive in date order.
-      if (!name || date === null || seen.has(name)) continue;
-      seen.add(name);
-
-      const imageId = row.game?.cover?.image_id;
-      ranked.push({
-        name,
-        releasedAt: date,
+    // Keyed by id rather than by name: two IGDB entries can share a title - a
+    // demo and its game, a remaster - and collapsing those loses the wrong one.
+    const games = new Map<number, { name: string; coverUrl: string | null }>();
+    for (const row of candidates) {
+      if (row === null || typeof row !== "object") continue;
+      const id = identifier(row.id);
+      if (id === null || !row.name) continue;
+      const imageId = row.cover?.image_id;
+      games.set(id, {
+        name: row.name,
         coverUrl: imageId ? `${IMAGE_BASE}/t_cover_big/${imageId}.jpg` : null,
-        hypes: positive(row.game?.hypes) ?? 0,
       });
     }
+    if (games.size === 0) return [];
 
-    return ranked
-      .sort((a, b) => b.hypes - a.hypes)
-      .slice(0, limit)
-      .map(({ hypes: _hypes, ...release }) => release);
+    const dates = await this.query<{ game?: number; date?: number; date_format?: number }>(
+      "release_dates",
+      `fields game, date, date_format;` +
+        ` where game = (${[...games.keys()].join(",")}) & platform = ${PC_PLATFORM}` +
+        ` & date > ${seconds} & date_format = ${exact};` +
+        ` sort date asc; limit 200;`,
+    );
+
+    // `candidates` came back ranked, so walking it preserves that order and the
+    // dates only have to be looked up. A game with several PC dates keeps its
+    // earliest, which is what arriving in date order gives.
+    const earliest = new Map<number, number>();
+    for (const row of dates) {
+      if (row === null || typeof row !== "object") continue;
+      const game = identifier(row.game);
+      const date = positive(row.date);
+      if (game === null || date === null || earliest.has(game)) continue;
+      earliest.set(game, date);
+    }
+
+    const releases: UpcomingRelease[] = [];
+    for (const [id, game] of games) {
+      const releasedAt = earliest.get(id);
+      // No exact date yet. Ordinary for an anticipated game, and the reason
+      // this over-fetches candidates.
+      if (releasedAt === undefined) continue;
+      releases.push({ ...game, releasedAt });
+      if (releases.length === limit) break;
+    }
+    return releases;
   }
 
   /** The `date_formats` row meaning a full day-month-year date. */
@@ -220,7 +243,7 @@ export class IgdbClient {
         "date_formats",
         `fields id; where format = "YYYYMMMMDD"; limit 1;`,
       );
-      return positive(rows[0]?.id);
+      return identifier(rows[0]?.id);
     } catch {
       return null;
     }
@@ -256,7 +279,7 @@ export class IgdbClient {
         "external_game_sources",
         `fields id; where name = "Steam"; limit 1;`,
       );
-      return positive(rows[0]?.id);
+      return identifier(rows[0]?.id);
     } catch {
       // The endpoint is newer than the field it replaces. Falling back to the
       // deprecated filter is better than failing outright.
@@ -334,4 +357,16 @@ export function usable(token: Token, now: number): boolean {
 /** A finite number above zero, or null. IGDB uses both 0 and absence for "no". */
 function positive(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+/**
+ * An identifier, or null. Zero is a value here.
+ *
+ * `positive` is right for a time or a hype count, where IGDB uses zero and
+ * absence interchangeably for "none". It is wrong for an id: reference tables
+ * can number from zero, and rejecting that made the whole upcoming-releases
+ * list return empty for ever, in silence.
+ */
+function identifier(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
