@@ -10,6 +10,8 @@ import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:
 import { describe, expect, it } from "vitest";
 import worker from "../src/index.ts";
 import { DICTIONARY } from "../public/i18n.js";
+import { credentials } from "../src/igdb.ts";
+import { storable } from "../src/http.ts";
 
 const BASE = "https://example.com";
 
@@ -159,5 +161,84 @@ describe("the profile route protects the Steam key", () => {
   ])("%s the dictionary has", (_name, reason) => {
     expect(DICTIONARY.en[reason], `${reason} is missing`).toBeDefined();
     expect(DICTIONARY.es[reason], `${reason} is missing in Spanish`).toBeDefined();
+  });
+});
+
+describe("the completion-time route tells a failure from an absence", () => {
+  /**
+   * Replaces fetch, and supplies the credentials, for one call.
+   *
+   * The credentials matter: without them the route takes its "not configured"
+   * branch and never reaches IGDB at all. Both of these tests passed for that
+   * reason before it was noticed, which is worse than failing.
+   */
+  async function withIgdb<T>(handler: (url: string) => Response, run: () => Promise<T>): Promise<T> {
+    const real = globalThis.fetch;
+    const configured = env as unknown as { TWITCH_CLIENT_ID?: string; TWITCH_CLIENT_SECRET?: string };
+    configured.TWITCH_CLIENT_ID = "test-client-id";
+    configured.TWITCH_CLIENT_SECRET = "test-client-secret";
+    globalThis.fetch = ((input: RequestInfo | URL) =>
+      Promise.resolve(handler(typeof input === "string" ? input : String(input)))) as typeof fetch;
+    try {
+      return await run();
+    } finally {
+      globalThis.fetch = real;
+      delete configured.TWITCH_CLIENT_ID;
+      delete configured.TWITCH_CLIENT_SECRET;
+    }
+  }
+
+  it("reaches IGDB at all when the credentials are there", () => {
+    // Guards the guard. If this ever stops being true, every test below starts
+    // asserting the behaviour of the unconfigured branch instead.
+    expect(credentials({ TWITCH_CLIENT_ID: "a", TWITCH_CLIENT_SECRET: "b" })).not.toBeNull();
+  });
+
+  it("does not cache an IGDB outage as a day of no data", async () => {
+    // The bug this replaces: every failure was swallowed into a 200 saying
+    // "no data", which `cached` then stored for a day. One outage during the
+    // first request for a game poisoned that game for everyone until it
+    // expired - long after IGDB had recovered.
+    const response = await withIgdb(
+      () => new Response("nope", { status: 500 }),
+      () => get("/api/time/918274655"),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control"), "an outage cached like an answer").toMatch(
+      /no-store|max-age=(?:[0-9]|[1-9][0-9]|[1-9][0-9]{2})\b/,
+    );
+  });
+
+  it("does cache a game IGDB genuinely has nothing for", async () => {
+    // The other half. A game with no reported times is a stable fact, and
+    // re-asking IGDB about it on every visit would spend the budget on an
+    // answer that will not change.
+    const response = await withIgdb(
+      (url) =>
+        url.includes("id.twitch.tv")
+          ? new Response(JSON.stringify({ access_token: "t", expires_in: 5_000_000 }))
+          : new Response("[]", { headers: { "Content-Type": "application/json" } }),
+      () => get("/api/time/918274656"),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ completionTime: null });
+    expect(response.headers.get("Cache-Control") ?? "").not.toMatch(/no-store/);
+  });
+});
+
+describe("storable", () => {
+  it.each([
+    ["a plain success", null, true, true],
+    ["a success that set its own lifetime", "public, max-age=60", true, true],
+    ["a stable failure with a lifetime", "public, max-age=3600", false, true],
+    ["a transient failure", null, false, false],
+    ["anything marked no-store", "no-store", true, false],
+    ["a failure marked no-store", "no-store", false, false],
+    ["no-store among other directives", "private, no-store, max-age=0", true, false],
+  ])("%s", (_name, control, ok, expected) => {
+    // Asserted here because the test pool does not exercise `caches.default`.
+    // Without this, a rule that stopped honouring `no-store` would pass every
+    // other test in the suite and cache the responses written to avoid it.
+    expect(storable(control, ok)).toBe(expected);
   });
 });

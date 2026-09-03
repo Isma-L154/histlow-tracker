@@ -16,13 +16,17 @@
  * sibling modules.
  */
 
-import { VERSION, json, problem, logFailure } from "./http.ts";
+import { VERSION, json, problem, logFailure, storable } from "./http.ts";
 import { SteamError, SteamClient, type GameAchievements } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
 import { languageFor, localise, pageCacheKey } from "./language.ts";
 import { parseProfile } from "./profile.ts";
+import { IgdbClient, accessToken, credentials, usable } from "./igdb.ts";
+
+/** How long a game takes to finish, when IGDB knows. */
+const COMPLETION_TIME_ROUTE = /^\/api\/time\/(\d{1,10})$/;
 
 const GAME_ROUTE = /^\/api\/game\/(\d{1,10})$/;
 // The page a person shares, as opposed to the endpoint behind it.
@@ -190,6 +194,40 @@ async function route(
     });
   }
 
+  const time = COMPLETION_TIME_ROUTE.exec(url.pathname);
+  if (time) {
+    // Enumerable, and every unseen id spends the IGDB credential. The same
+    // reasoning as the profile route: caching protects the repeats, not the
+    // walk, so the walk is limited.
+    if (!(await withinRate(request, env, "PROFILE"))) {
+      return problem(429, "Too many lookups. Wait a minute and try again.", "profile.tooMany");
+    }
+
+    return cached(key(url, `/api/time/${time[1]}`), false, env, ctx, async () => {
+      const creds = credentials(env);
+      // Not configured is a state, not a failure, and it will not change until
+      // someone deploys. Cacheable like any other answer.
+      if (!creds) return json({ completionTime: null });
+
+      try {
+        const token = await igdbToken(creds, ctx);
+        const completionTime = await new IgdbClient(creds.clientId, token).completionTime(Number(time[1]));
+        // IGDB having nothing for a game is a stable fact. Re-asking on every
+        // visit would spend the budget on an answer that will not change.
+        return json({ completionTime });
+      } catch (error) {
+        // An outage, a rate limit or a revoked credential is the operator's
+        // problem: the reader gets the page without the section either way.
+        // But it must not be cached as though IGDB had answered - one failure
+        // during the first request for a game would otherwise poison that game
+        // for a day, long after IGDB recovered. The same distinction the
+        // profile route makes, which this got wrong until review.
+        logFailure("igdb completion time failed", error);
+        return json({ completionTime: null }, { headers: { "Cache-Control": "no-store" } });
+      }
+    });
+  }
+
   const game = GAME_ROUTE.exec(url.pathname);
   if (game) {
     const appId = Number(game[1]);
@@ -325,6 +363,44 @@ async function withinRate(request: Request, env: Env, which: "HOWTO" | "PROFILE"
  * undo the point of keeping them off Worker code in the first place, so the
  * content type decides.
  */
+/**
+ * An IGDB access token, kept at the edge.
+ *
+ * Twitch tokens last about sixty days, so asking for one per request would add
+ * a round trip to every page and spend a rate limit on work whose answer barely
+ * changes. Stored with a lifetime shorter than its own expiry, so the cache
+ * gives it up before Twitch does.
+ */
+async function igdbToken(
+  creds: { clientId: string; clientSecret: string },
+  ctx: ExecutionContext,
+): Promise<string> {
+  const cache = caches.default;
+  const cacheKey = "https://token.invalid/igdb/v1";
+
+  const hit = await cache.match(cacheKey);
+  if (hit) {
+    const stored = (await hit.json()) as { value: string; expiresAt: number };
+    if (usable(stored, Date.now())) return stored.value;
+  }
+
+  const token = await accessToken(creds, Date.now());
+  const lifetime = Math.max(60, Math.floor((token.expiresAt - Date.now()) / 1000));
+  ctx.waitUntil(
+    cache.put(
+      cacheKey,
+      // `private` is a signal, not a boundary: what actually keeps this out of
+      // reach is that `token.invalid` is not a routable path, so nothing but
+      // this Worker can address the entry. Worth revisiting if this zone ever
+      // gains a second Worker, which would share `caches.default`.
+      new Response(JSON.stringify(token), {
+        headers: { "Content-Type": "application/json", "Cache-Control": `private, max-age=${lifetime}` },
+      }),
+    ),
+  );
+  return token.value;
+}
+
 async function translated(response: Response, language: string): Promise<Response> {
   if (!(response.headers.get("Content-Type") ?? "").includes("text/html")) return response;
 
@@ -605,13 +681,19 @@ async function cached(
 
   const response = await produce();
   // A producer that set its own lifetime knows something this helper does not,
-  // so it wins - including about a failure. Most failures are transient and
-  // must not be cached, which is why success is the default; but "Steam has
-  // never heard of that name" is a stable answer, and not caching it leaves a
-  // route that spends the API key on every repeat of the same wrong guess.
-  const producerDecided = response.headers.has("Cache-Control");
-  if (response.ok || producerDecided) {
-    if (!producerDecided) {
+  // so it wins - in both directions.
+  //
+  // Upwards: most failures are transient and must not be cached, which is why
+  // success is the default; but "Steam has never heard of that name" is a
+  // stable answer, and not caching it leaves a route that spends the API key on
+  // every repeat of the same wrong guess.
+  //
+  // Downwards: `no-store` means what it says. Without this the rule above
+  // cached the very responses written to avoid being cached - an IGDB outage
+  // saying "no data" would have been stored for a day.
+  const control = response.headers.get("Cache-Control");
+  if (storable(control, response.ok)) {
+    if (control === null) {
       response.headers.set("Cache-Control", `public, max-age=${env.CACHE_SECONDS}`);
     }
     ctx.waitUntil(cache.put(cacheKey, response.clone()));

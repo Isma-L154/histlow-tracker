@@ -89,8 +89,17 @@
     "binding": "AI"
   },
 
-  // The Steam Web API key is a secret, set with `wrangler secret put
-  // STEAM_WEB_API_KEY`. It is never committed and never reaches the browser.
+  // Secrets, set with `wrangler secret put NAME`. None is ever committed and
+  // none ever reaches the browser.
+  //
+  //   STEAM_WEB_API_KEY     the Steam Web API key
+  //   TWITCH_CLIENT_ID      IGDB authenticates through Twitch: register an
+  //   TWITCH_CLIENT_SECRET  application at dev.twitch.tv/console/apps, with
+  //                         http://localhost as the redirect URL. Free.
+  //
+  // The Twitch pair is optional. Without it the completion time is simply
+  // absent and everything else works, which is what let that code ship before
+  // the credentials existed.
   "vars": {
     // Achievement text and icons effectively never change, and global unlock
     // percentages move slowly. A day of edge caching keeps the page instant

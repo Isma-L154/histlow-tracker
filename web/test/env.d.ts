@@ -9,6 +9,12 @@
 declare namespace Cloudflare {
   interface Env {
     STEAM_WEB_API_KEY: string;
+    /**
+     * Optional, unlike the Steam key. The IGDB-backed section hides itself when
+     * these are absent, so the type has to allow absent.
+     */
+    TWITCH_CLIENT_ID?: string;
+    TWITCH_CLIENT_SECRET?: string;
   }
 }
 

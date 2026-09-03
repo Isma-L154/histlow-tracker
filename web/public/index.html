@@ -150,6 +150,15 @@
               <strong class="difficulty-score" id="difficulty-score"></strong>
               <span class="difficulty-tier" id="difficulty-tier"></span>
             </p>
+            <!--
+              Absent, not empty, when IGDB has nothing. A game with no reported
+              times is ordinary, and a blank row saying so would be noise on
+              every one of them.
+            -->
+            <p class="difficulty" id="completion-time" hidden>
+              <span class="difficulty-label" data-i18n="time.label">Time to 100%</span>
+              <strong class="difficulty-score" id="completion-hours"></strong>
+            </p>
             <p class="links" id="game-links"></p>
           </div>
         </div>
