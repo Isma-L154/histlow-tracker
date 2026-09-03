@@ -169,7 +169,7 @@ async function route(
     // A name maps to an id essentially forever, so this is worth caching hard.
     // Keyed on what was parsed rather than on what was typed, so the same
     // profile pasted five different ways is one entry.
-    return cached(key(url, `/api/steamid/${parsed.kind}/${parsed.value}`), false, env, ctx, async () => {
+    return cached(key(url, `/api/steamid/${parsed.kind}/${parsed.value}`, env), false, env, ctx, async () => {
       try {
         if (parsed.kind === "id") {
           return json({ steamId: parsed.value, profileName: await client(env).profileName(parsed.value) });
@@ -196,7 +196,7 @@ async function route(
     if (query.length > MAX_QUERY_LENGTH) {
       return problem(400, `Search for at most ${MAX_QUERY_LENGTH} characters.`);
     }
-    return cached(key(url, `/api/search?q=${encodeURIComponent(query.toLowerCase())}`), false, env, ctx, async () => {
+    return cached(key(url, `/api/search?q=${encodeURIComponent(query.toLowerCase())}`, env), false, env, ctx, async () => {
       const results = await client(env).search(query);
       return json({ results });
     });
@@ -207,7 +207,7 @@ async function route(
     // visitor of the day is served from cache, and the first cannot be told
     // apart from a crawler anyway. Hours, not minutes - this changes daily at
     // most, and it is the home page.
-    return cached(key(url, "/api/upcoming"), false, env, ctx, async () => {
+    return cached(key(url, "/api/upcoming", env), false, env, ctx, async () => {
       const creds = credentials(env);
       if (!creds) return json({ releases: [] });
 
@@ -234,7 +234,7 @@ async function route(
       return problem(429, "Too many lookups. Wait a minute and try again.", "profile.tooMany");
     }
 
-    return cached(key(url, `/api/time/${time[1]}`), false, env, ctx, async () => {
+    return cached(key(url, `/api/time/${time[1]}`, env), false, env, ctx, async () => {
       const creds = credentials(env);
       // Not configured is a state, not a failure, and it will not change until
       // someone deploys. Cacheable like any other answer.
@@ -268,7 +268,7 @@ async function route(
   if (game) {
     const appId = Number(game[1]);
     const steamId = resolveSteamId(url, env);
-    return cached(key(url, `/api/game/${appId}`), steamId !== null, env, ctx, async () => {
+    return cached(key(url, `/api/game/${appId}`, env), steamId !== null, env, ctx, async () => {
       const payload = await client(env).gameAchievements(appId, steamId);
       return json(payload);
     });
@@ -306,7 +306,7 @@ async function route(
       return problem(400, "That achievement identifier is not valid.");
     }
     return cached(
-      key(url, `/api/howto/v${HOWTO_LOGIC_VERSION}/${appId}/${encodeURIComponent(achievementKey)}`),
+      key(url, `/api/howto/v${HOWTO_LOGIC_VERSION}/${appId}/${encodeURIComponent(achievementKey)}`, env),
       false,
       env,
       ctx,
@@ -623,6 +623,10 @@ async function corpus(appId: number, env: Env, ctx: ExecutionContext): Promise<G
   // title and author fallbacks - so a week-old entry would keep serving the
   // Spanish ones after this deploy. Bump alongside any change to what
   // `fetchGuide` puts in a `Guide`.
+  // Manually versioned rather than scoped to the deployment, unlike the answer
+  // caches. Rebuilding this means scraping six guide pages, so a cold corpus
+  // after every publish would cost real time on the first visit to each game.
+  // Bump the segment when `fetchGuide` changes what it puts in a `Guide`.
   const cacheKey = `https://corpus.invalid/guides/v2/${appId}`;
 
   const hit = await cache.match(cacheKey);
@@ -681,8 +685,23 @@ function resolveSteamId(url: URL, env: Env): string | null {
  * miss the cache on every request, which is exactly the traffic the cache is
  * there to keep away from the Steam key's quota.
  */
-function key(url: URL, canonical: string): string {
-  return new URL(canonical, url.origin).toString();
+function key(url: URL, canonical: string, env: Env): string {
+  return new URL(`/${deployment(env)}${canonical}`, url.origin).toString();
+}
+
+/**
+ * The running deployment's id, which changes on every publish.
+ *
+ * Scoping cache keys to it means a deploy that changes what a route returns
+ * invalidates that route by construction, rather than by somebody remembering
+ * to bump a constant. The cost is a cold cache after each deploy, which for
+ * this site is a few extra upstream calls and is the cheaper mistake.
+ *
+ * The fallback keeps local development and tests working, where the binding is
+ * absent; it is a constant there, which is what those want anyway.
+ */
+function deployment(env: Env): string {
+  return env.CF_VERSION?.id ?? "dev";
 }
 
 /**
