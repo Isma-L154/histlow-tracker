@@ -127,6 +127,23 @@
     "DEFAULT_STEAM_ID": ""
   },
 
+  // The deployment's own id, so every cached answer is scoped to the version
+  // that produced it.
+  //
+  // Without it a route keeps serving what it returned before a fix, and there
+  // is no way to invalidate from outside: `cached` keys on a normalised path
+  // and deliberately ignores the query string, so a cache-busting parameter
+  // does nothing. That cost real time twice in two days - the completion time
+  // and the release list both looked broken after their fixes deployed, and
+  // both were serving pre-fix answers.
+  //
+  // The alternative was a constant somebody remembers to bump. Two routes were
+  // versioned that way, each after being caught by this; the third would have
+  // been caught the same way.
+  "version_metadata": {
+    "binding": "CF_VERSION"
+  },
+
   "observability": {
     "enabled": true,
     "head_sampling_rate": 1
