@@ -213,9 +213,11 @@ async function route(
 
       try {
         const token = await igdbToken(creds, ctx);
-        const releases = await new IgdbClient(creds.clientId, token).upcoming(UPCOMING_COUNT, Date.now());
-        if (releases.length === 0) console.log("igdb upcoming", "no releases matched");
-        return json({ releases }, { headers: { "Cache-Control": "public, max-age=21600" } });
+        const lookup = await new IgdbClient(creds.clientId, token).upcoming(UPCOMING_COUNT, Date.now());
+        // Which stage, and with what counts. One line, on a route cached for
+        // hours, and the difference between a diagnosis and an afternoon.
+        if (lookup.stoppedAt) console.log("igdb upcoming", lookup.stoppedAt);
+        return json({ releases: lookup.releases }, { headers: { "Cache-Control": "public, max-age=21600" } });
       } catch (error) {
         // Same rule as the completion time: an outage must not be cached as
         // though IGDB had answered.
