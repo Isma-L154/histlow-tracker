@@ -78,6 +78,21 @@ Live at **[howtoachieve.cloudils.com](https://howtoachieve.cloudils.com)**.
 
 Lives in [`web/`](web/) and shares nothing with the tracker but the repo.
 
+### Credentials
+
+Set with `wrangler secret put NAME` from `web/`, never committed:
+
+| Secret | Needed for |
+|---|---|
+| `STEAM_WEB_API_KEY` | Everything. The Worker refuses to build a Steam client without it. |
+| `TWITCH_CLIENT_ID` | Optional. IGDB, for completion times. |
+| `TWITCH_CLIENT_SECRET` | Optional, the other half of the pair. |
+
+IGDB authenticates through Twitch: register an application at
+[dev.twitch.tv/console/apps](https://dev.twitch.tv/console/apps) with
+`http://localhost` as the redirect URL. It is free. Without the pair, the
+completion time is simply absent and the rest of the site is unaffected.
+
 ## How it works
 
 ```

@@ -44,6 +44,8 @@ const el = {
   progressFill: document.getElementById("progress-fill"),
   progressNotice: document.getElementById("progress-notice"),
   difficulty: document.getElementById("difficulty"),
+  completionTime: document.getElementById("completion-time"),
+  completionHours: document.getElementById("completion-hours"),
   difficultyScore: document.getElementById("difficulty-score"),
   difficultyTier: document.getElementById("difficulty-tier"),
   links: document.getElementById("game-links"),
@@ -231,6 +233,7 @@ function renderGame(game) {
   renderProgress(game);
   renderDifficulty(game);
   renderLinks(game);
+  renderCompletionTime(game.appId);
 
   // The filters only mean something once we know what the player already has.
   el.filters.hidden = game.unlockedCount === null;
@@ -287,6 +290,40 @@ function renderDifficulty(game) {
   // nobody reads. It matters: this is a rarity reading, and a bare score next
   // to a game title reads as a community verdict.
   el.difficulty.title = say("difficulty.basis");
+}
+
+/**
+ * Roughly how long the game takes to finish, when IGDB knows.
+ *
+ * Fetched separately from the achievements so a slow or unreachable IGDB
+ * cannot hold up the page: the list renders, and this fills in behind it or
+ * never appears. Failure is silent here on purpose - the Worker logs it, and
+ * a reader has nothing to do about IGDB being down.
+ */
+async function renderCompletionTime(appId) {
+  el.completionTime.hidden = true;
+  const requested = appId;
+
+  let data;
+  try {
+    data = await api(`/api/time/${appId}`);
+  } catch {
+    return;
+  }
+
+  // The reader may have moved on while this was in flight, and filling in a
+  // time for the previous game would be worse than showing none.
+  if (state.game?.appId !== requested) return;
+
+  const seconds = data?.completionTime?.completely ?? data?.completionTime?.normally;
+  if (!seconds) return;
+
+  // A short game rounds to zero, and "about 0 hours" reads as a bug rather
+  // than as a fast game.
+  const hours = Math.round(seconds / 3600);
+  el.completionHours.textContent = hours < 1 ? say("time.underAnHour") : say("time.hours", { hours });
+  el.completionTime.title = say("time.source");
+  el.completionTime.hidden = false;
 }
 
 function renderLinks(game) {
