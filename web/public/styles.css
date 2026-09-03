@@ -568,6 +568,72 @@ main {
   color: var(--rarity-uncommon);
 }
 
+/* -- upcoming releases --------------------------------------------------- */
+
+.upcoming {
+  margin-top: 2.5rem;
+}
+
+.upcoming h2 {
+  margin: 0 0 0.9rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+/*
+ * A grid rather than a scroller: six cards fit a desktop row, and on a phone
+ * they stack two across without the horizontal swipe that hides half of them.
+ */
+.upcoming-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
+  gap: 0.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.upcoming-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  overflow: hidden;
+  padding: 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+
+.upcoming-cover {
+  aspect-ratio: 3 / 4;
+  width: 100%;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  object-fit: cover;
+}
+
+.upcoming-name {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.3;
+  /* Two lines, then an ellipsis: a long title must not make one card taller
+     than the rest of the row. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.upcoming-when {
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
 /* -- language toggle ----------------------------------------------------- */
 
 .language {
