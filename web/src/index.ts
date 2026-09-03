@@ -23,6 +23,10 @@ import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
 import { languageFor, localise, pageCacheKey } from "./language.ts";
 import { parseProfile } from "./profile.ts";
+import { IgdbClient, accessToken, credentials, usable } from "./igdb.ts";
+
+/** How long a game takes to finish, when IGDB knows. */
+const COMPLETION_TIME_ROUTE = /^\/api\/time\/(\d{1,10})$/;
 
 const GAME_ROUTE = /^\/api\/game\/(\d{1,10})$/;
 // The page a person shares, as opposed to the endpoint behind it.
@@ -190,6 +194,28 @@ async function route(
     });
   }
 
+  const time = COMPLETION_TIME_ROUTE.exec(url.pathname);
+  if (time) {
+    // Absent, not broken, when IGDB is not configured or has nothing. The
+    // client hides the section either way, and answering 200 with "no data"
+    // keeps that from being indistinguishable from an outage in the logs.
+    return cached(key(url, `/api/time/${time[1]}`), false, env, ctx, async () => {
+      const creds = credentials(env);
+      if (!creds) return json({ completionTime: null });
+
+      try {
+        const token = await igdbToken(creds, ctx);
+        return json({ completionTime: await new IgdbClient(creds.clientId, token).completionTime(Number(time[1])) });
+      } catch (error) {
+        // IGDB unreachable, rate limited or unauthorised is the operator's
+        // problem and nobody else's: the page renders without the section
+        // regardless, so this is logged and answered as no data.
+        logFailure("igdb completion time failed", error);
+        return json({ completionTime: null });
+      }
+    });
+  }
+
   const game = GAME_ROUTE.exec(url.pathname);
   if (game) {
     const appId = Number(game[1]);
@@ -325,6 +351,42 @@ async function withinRate(request: Request, env: Env, which: "HOWTO" | "PROFILE"
  * undo the point of keeping them off Worker code in the first place, so the
  * content type decides.
  */
+/**
+ * An IGDB access token, kept at the edge.
+ *
+ * Twitch tokens last about sixty days, so asking for one per request would add
+ * a round trip to every page and spend a rate limit on work whose answer barely
+ * changes. Stored with a lifetime shorter than its own expiry, so the cache
+ * gives it up before Twitch does.
+ */
+async function igdbToken(
+  creds: { clientId: string; clientSecret: string },
+  ctx: ExecutionContext,
+): Promise<string> {
+  const cache = caches.default;
+  const cacheKey = "https://token.invalid/igdb/v1";
+
+  const hit = await cache.match(cacheKey);
+  if (hit) {
+    const stored = (await hit.json()) as { value: string; expiresAt: number };
+    if (usable(stored, Date.now())) return stored.value;
+  }
+
+  const token = await accessToken(creds, Date.now());
+  const lifetime = Math.max(60, Math.floor((token.expiresAt - Date.now()) / 1000));
+  ctx.waitUntil(
+    cache.put(
+      cacheKey,
+      // Never `public`: this is a credential, and a cache outside this Worker
+      // has no business holding one.
+      new Response(JSON.stringify(token), {
+        headers: { "Content-Type": "application/json", "Cache-Control": `private, max-age=${lifetime}` },
+      }),
+    ),
+  );
+  return token.value;
+}
+
 async function translated(response: Response, language: string): Promise<Response> {
   if (!(response.headers.get("Content-Type") ?? "").includes("text/html")) return response;
 
