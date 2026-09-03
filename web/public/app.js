@@ -678,6 +678,13 @@ el.steamIdSave.addEventListener("click", async () => {
     el.steamIdSave.disabled = false;
   }
 
+  // A 200 whose body is not what this expects would otherwise throw here,
+  // outside the catch above, leaving the status stuck on "Looking up…".
+  if (!resolved?.steamId) {
+    setProfileStatus(say("profile.default"), true);
+    return;
+  }
+
   state.steamId = resolved.steamId;
   store(STORAGE_KEY, resolved.steamId);
   // Confirm who was found, not just that something was. Echoing seventeen

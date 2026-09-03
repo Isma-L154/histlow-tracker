@@ -28,12 +28,20 @@ export function json(body: unknown, init: ResponseInit = {}): Response {
  * Messages are written to be safe in a public response: they never quote a
  * credential and never repeat an upstream body verbatim.
  */
-export function problem(status: number, message: string, reason?: string): Response {
+export function problem(
+  status: number,
+  message: string,
+  reason?: string,
+  headers?: Record<string, string>,
+): Response {
   // `error` is prose for any caller; `reason` is a code for this site's own
   // client, which has to say the same thing in two languages and cannot
   // translate a sentence. Callers that have nothing more specific than the
   // status omit it.
-  return json(reason ? { error: message, reason } : { error: message }, { status });
+  //
+  // `headers` exists for the one failure worth caching: a profile name Steam
+  // has never heard of is a stable answer, and re-asking spends the API key.
+  return json({ error: message, ...(reason ? { reason } : {}) }, { status, ...(headers ? { headers } : {}) });
 }
 
 /**

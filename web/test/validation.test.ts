@@ -125,3 +125,39 @@ describe("profile errors carry a code, not just prose", () => {
     expect(DICTIONARY.en[body.reason], `${body.reason} is not in the dictionary`).toBeDefined();
   });
 });
+
+describe("the profile route protects the Steam key", () => {
+  it("caches the answer for a name Steam does not know", async () => {
+    // The route spends the API key, and a name Steam has never heard of cannot
+    // be answered from cache the first time. Without a lifetime on the failure,
+    // the same wrong guess spends the key on every retry - so this is the one
+    // failure in the Worker that is deliberately cacheable.
+    //
+    // Steam answers 200 with `success: 42` for a name it does not know, so the
+    // status alone says nothing and the body has to be stubbed.
+    const real = globalThis.fetch;
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ response: { success: 42 } }), {
+          headers: { "Content-Type": "application/json" },
+        }),
+      )) as typeof fetch;
+
+    try {
+      const response = await get("/api/steamid?q=nobodyHasThisName");
+      expect(response.status).toBe(404);
+      expect(response.headers.get("Cache-Control"), "a stable failure with no lifetime").toMatch(/max-age=\d+/);
+      expect(((await response.json()) as { reason: string }).reason).toBe("profile.unknown");
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+
+  it.each([
+    ["a rate-limit reply carries a code", "profile.tooMany"],
+    ["an unknown profile carries a code", "profile.unknown"],
+  ])("%s the dictionary has", (_name, reason) => {
+    expect(DICTIONARY.en[reason], `${reason} is missing`).toBeDefined();
+    expect(DICTIONARY.es[reason], `${reason} is missing in Spanish`).toBeDefined();
+  });
+});

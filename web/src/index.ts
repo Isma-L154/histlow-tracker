@@ -145,14 +145,34 @@ async function route(
       return problem(400, PROFILE_PROBLEMS[reason]!, `profile.${reason}`);
     }
 
+    // This route spends the Steam key, and a name Steam does not know cannot be
+    // answered from cache the first time. Caching alone therefore protects the
+    // repeats and not the walk, so the walk is rate limited: setting up a
+    // profile is done once, and ten a minute is far above that and far below
+    // what enumeration needs.
+    if (!(await withinRate(request, env, "PROFILE"))) {
+      return problem(429, "Too many profile lookups. Wait a minute and try again.", "profile.tooMany");
+    }
+
     // A name maps to an id essentially forever, so this is worth caching hard.
     // Keyed on what was parsed rather than on what was typed, so the same
     // profile pasted five different ways is one entry.
     return cached(key(url, `/api/steamid/${parsed.kind}/${parsed.value}`), false, env, ctx, async () => {
-      if (parsed.kind === "id") {
-        return json({ steamId: parsed.value, profileName: await client(env).profileName(parsed.value) });
+      try {
+        if (parsed.kind === "id") {
+          return json({ steamId: parsed.value, profileName: await client(env).profileName(parsed.value) });
+        }
+        return json(await client(env).resolveVanity(parsed.value));
+      } catch (error) {
+        // "Steam has never heard of that name" is a stable answer, so it is
+        // cached like any other. Without this the same wrong guess spends the
+        // API key every time it is retried, and the rate limit above would be
+        // carrying weight it does not need to.
+        if (error instanceof SteamError && error.reason === "profile.unknown") {
+          return problem(404, error.message, error.reason, { "Cache-Control": "public, max-age=3600" });
+        }
+        throw error;
       }
-      return json(await client(env).resolveVanity(parsed.value));
     });
   }
 
@@ -275,8 +295,8 @@ function spentAllowance(caller: string, now: number): boolean {
   return seen.length > MAX_FRESH_ANSWERS;
 }
 
-async function withinRate(request: Request, env: Env): Promise<boolean> {
-  const limiter = env.HOWTO_LIMITER;
+async function withinRate(request: Request, env: Env, which: "HOWTO" | "PROFILE" = "HOWTO"): Promise<boolean> {
+  const limiter = which === "HOWTO" ? env.HOWTO_LIMITER : env.PROFILE_LIMITER;
   if (!limiter) return true;
 
   // `CF-Connecting-IP` is written by the edge and cannot be set by a client,
@@ -284,7 +304,9 @@ async function withinRate(request: Request, env: Env): Promise<boolean> {
   // - only outside Cloudflare - every caller shares one bucket, which is
   // stricter than intended rather than looser.
   const caller = request.headers.get("CF-Connecting-IP") ?? "unidentified";
-  if (spentAllowance(caller, Date.now())) return false;
+  // The in-isolate allowance is about the cost of a fresh model answer, which
+  // only the how-to route pays.
+  if (which === "HOWTO" && spentAllowance(caller, Date.now())) return false;
 
   try {
     const { success } = await limiter.limit({ key: caller });
@@ -582,10 +604,14 @@ async function cached(
   if (hit) return hit;
 
   const response = await produce();
-  if (response.ok) {
-    // A producer that set its own lifetime knows something this helper does
-    // not, so it wins.
-    if (!response.headers.has("Cache-Control")) {
+  // A producer that set its own lifetime knows something this helper does not,
+  // so it wins - including about a failure. Most failures are transient and
+  // must not be cached, which is why success is the default; but "Steam has
+  // never heard of that name" is a stable answer, and not caching it leaves a
+  // route that spends the API key on every repeat of the same wrong guess.
+  const producerDecided = response.headers.has("Cache-Control");
+  if (response.ok || producerDecided) {
+    if (!producerDecided) {
       response.headers.set("Cache-Control", `public, max-age=${env.CACHE_SECONDS}`);
     }
     ctx.waitUntil(cache.put(cacheKey, response.clone()));

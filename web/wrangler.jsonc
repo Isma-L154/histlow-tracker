@@ -69,6 +69,16 @@
       "name": "HOWTO_LIMITER",
       "namespace_id": "1001",
       "simple": { "limit": 20, "period": 60 }
+    },
+    // Resolving a profile calls Steam with the API key, and a name Steam does
+    // not know cannot be answered from cache the first time. Without a limit,
+    // walking made-up names is a way to spend the key's whole allocation from
+    // one machine. Ten a minute is far above what setting up a profile looks
+    // like - it is done once - and far below what enumeration needs.
+    {
+      "name": "PROFILE_LIMITER",
+      "namespace_id": "1002",
+      "simple": { "limit": 10, "period": 60 }
     }
   ],
 
