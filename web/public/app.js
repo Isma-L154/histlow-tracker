@@ -318,7 +318,10 @@ async function renderCompletionTime(appId) {
   const seconds = data?.completionTime?.completely ?? data?.completionTime?.normally;
   if (!seconds) return;
 
-  el.completionHours.textContent = say("time.hours", { hours: Math.round(seconds / 3600) });
+  // A short game rounds to zero, and "about 0 hours" reads as a bug rather
+  // than as a fast game.
+  const hours = Math.round(seconds / 3600);
+  el.completionHours.textContent = hours < 1 ? say("time.underAnHour") : say("time.hours", { hours });
   el.completionTime.title = say("time.source");
   el.completionTime.hidden = false;
 }

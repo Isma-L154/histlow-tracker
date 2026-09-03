@@ -16,7 +16,7 @@
  * sibling modules.
  */
 
-import { VERSION, json, problem, logFailure } from "./http.ts";
+import { VERSION, json, problem, logFailure, storable } from "./http.ts";
 import { SteamError, SteamClient, type GameAchievements } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
@@ -196,22 +196,34 @@ async function route(
 
   const time = COMPLETION_TIME_ROUTE.exec(url.pathname);
   if (time) {
-    // Absent, not broken, when IGDB is not configured or has nothing. The
-    // client hides the section either way, and answering 200 with "no data"
-    // keeps that from being indistinguishable from an outage in the logs.
+    // Enumerable, and every unseen id spends the IGDB credential. The same
+    // reasoning as the profile route: caching protects the repeats, not the
+    // walk, so the walk is limited.
+    if (!(await withinRate(request, env, "PROFILE"))) {
+      return problem(429, "Too many lookups. Wait a minute and try again.", "profile.tooMany");
+    }
+
     return cached(key(url, `/api/time/${time[1]}`), false, env, ctx, async () => {
       const creds = credentials(env);
+      // Not configured is a state, not a failure, and it will not change until
+      // someone deploys. Cacheable like any other answer.
       if (!creds) return json({ completionTime: null });
 
       try {
         const token = await igdbToken(creds, ctx);
-        return json({ completionTime: await new IgdbClient(creds.clientId, token).completionTime(Number(time[1])) });
+        const completionTime = await new IgdbClient(creds.clientId, token).completionTime(Number(time[1]));
+        // IGDB having nothing for a game is a stable fact. Re-asking on every
+        // visit would spend the budget on an answer that will not change.
+        return json({ completionTime });
       } catch (error) {
-        // IGDB unreachable, rate limited or unauthorised is the operator's
-        // problem and nobody else's: the page renders without the section
-        // regardless, so this is logged and answered as no data.
+        // An outage, a rate limit or a revoked credential is the operator's
+        // problem: the reader gets the page without the section either way.
+        // But it must not be cached as though IGDB had answered - one failure
+        // during the first request for a game would otherwise poison that game
+        // for a day, long after IGDB recovered. The same distinction the
+        // profile route makes, which this got wrong until review.
         logFailure("igdb completion time failed", error);
-        return json({ completionTime: null });
+        return json({ completionTime: null }, { headers: { "Cache-Control": "no-store" } });
       }
     });
   }
@@ -667,13 +679,19 @@ async function cached(
 
   const response = await produce();
   // A producer that set its own lifetime knows something this helper does not,
-  // so it wins - including about a failure. Most failures are transient and
-  // must not be cached, which is why success is the default; but "Steam has
-  // never heard of that name" is a stable answer, and not caching it leaves a
-  // route that spends the API key on every repeat of the same wrong guess.
-  const producerDecided = response.headers.has("Cache-Control");
-  if (response.ok || producerDecided) {
-    if (!producerDecided) {
+  // so it wins - in both directions.
+  //
+  // Upwards: most failures are transient and must not be cached, which is why
+  // success is the default; but "Steam has never heard of that name" is a
+  // stable answer, and not caching it leaves a route that spends the API key on
+  // every repeat of the same wrong guess.
+  //
+  // Downwards: `no-store` means what it says. Without this the rule above
+  // cached the very responses written to avoid being cached - an IGDB outage
+  // saying "no data" would have been stored for a day.
+  const control = response.headers.get("Cache-Control");
+  if (storable(control, response.ok)) {
+    if (control === null) {
       response.headers.set("Cache-Control", `public, max-age=${env.CACHE_SECONDS}`);
     }
     ctx.waitUntil(cache.put(cacheKey, response.clone()));

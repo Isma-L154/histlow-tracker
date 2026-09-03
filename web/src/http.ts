@@ -52,7 +52,45 @@ export function problem(
  * here reaches the browser - this is about not leaving the secret sitting in
  * an observability dashboard.
  */
+/**
+ * Parameter names whose values are safe to keep in a log.
+ *
+ * An allowlist of what to *redact* fails open: the day a new upstream takes a
+ * differently-named credential, it is logged in clear until somebody notices.
+ * That is what happened here - the filter covered `key`, `token` and `steamid`,
+ * and IGDB authenticates with `client_id` and `client_secret`.
+ *
+ * So everything is redacted except the handful of parameters that are worth
+ * having in a log and cannot be a secret.
+ */
+const LOGGABLE = new Set(["appid", "appids", "gameid", "steamids", "l", "filters", "format", "browsefilter"]);
+
+/** Strips the value from every query parameter that is not known to be safe. */
+function redactQuery(text: string): string {
+  return text.replace(/([?&])([\w.-]+)=[^&\s"']*/g, (whole, lead: string, name: string) =>
+    LOGGABLE.has(name.toLowerCase()) ? whole : `${lead}${name}=<redacted>`,
+  );
+}
+
+/**
+ * Whether a response should go in the edge cache.
+ *
+ * Extracted so it can be asserted. The test pool does not exercise
+ * `caches.default`, so a rule that quietly stopped honouring `no-store` would
+ * pass every test and cache the very responses written to avoid it - which is
+ * exactly what happened, and was only found by review.
+ *
+ * The producer wins in both directions. Most failures are transient and must
+ * not be cached, so success is the default; but a stable failure - "Steam has
+ * never heard of that name" - carries its own lifetime and is worth keeping,
+ * and a response marked `no-store` means it.
+ */
+export function storable(cacheControl: string | null, ok: boolean): boolean {
+  if (cacheControl?.includes("no-store")) return false;
+  return ok || cacheControl !== null;
+}
+
 export function logFailure(context: string, error: unknown): void {
   const rendered = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  console.error(context, rendered.replace(/([?&](?:key|token|steamid)=)[^&\s"']+/gi, "$1<redacted>"));
+  console.error(context, redactQuery(rendered));
 }
