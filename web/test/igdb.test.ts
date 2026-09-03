@@ -209,3 +209,98 @@ describe("completionTime", () => {
     expect((await new IgdbClient("id", "tok").completionTime(1)).time).toBeNull();
   });
 });
+
+describe("upcoming", () => {
+  const NOW = 1_800_000_000_000;
+  const EXACT = 3;
+
+  /** IGDB's answers, with the date-format lookup already resolved. */
+  function stubReleases(rows: unknown[]) {
+    return stub((url) =>
+      url.endsWith("/date_formats") ? json([{ id: EXACT }]) : json(rows),
+    );
+  }
+
+  it("asks only for PC dates still ahead, with an anticipation figure", async () => {
+    const calls = stubReleases([]);
+    await new IgdbClient("id", "tok").upcoming(6, NOW);
+    const body = String(calls[1]!.init!.body);
+
+    expect(body).toContain(`date > ${Math.floor(NOW / 1000)}`);
+    expect(body).toContain("platform = 6");
+    expect(body).toContain("game.hypes != null");
+  });
+
+  it("does not ask IGDB to sort by a nested field", async () => {
+    // `hypes` belongs to the game, not to the release date, and sorting by a
+    // nested field is not documented. The ordering happens here instead.
+    const calls = stubReleases([]);
+    await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(String(calls[1]!.init!.body)).not.toContain("sort game.hypes");
+  });
+
+  it("orders by anticipation, not by date", async () => {
+    stubReleases([
+      { date: 100, date_format: EXACT, game: { name: "Soon but ignored", hypes: 5 } },
+      { date: 900, date_format: EXACT, game: { name: "Later but wanted", hypes: 900 } },
+    ]);
+    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(releases.map((r) => r.name)).toEqual(["Later but wanted", "Soon but ignored"]);
+  });
+
+  it("drops a date IGDB did not mark as exact", async () => {
+    // IGDB pins "Q4 2026" to the start of the quarter, so the date looks real.
+    // Counting down to it would invent a precision nobody has.
+    stubReleases([
+      { date: 100, date_format: EXACT, game: { name: "Real date", hypes: 1 } },
+      { date: 200, date_format: 7, game: { name: "Some quarter", hypes: 999 } },
+    ]);
+    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(releases.map((r) => r.name)).toEqual(["Real date"]);
+  });
+
+  it("shows nothing at all if the exact format cannot be resolved", async () => {
+    // Nothing rather than everything: without the format, every placeholder
+    // would be presented as a real date.
+    stub((url) => (url.endsWith("/date_formats") ? json([]) : json([{ date: 1, game: { name: "x", hypes: 1 } }])));
+    expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toEqual([]);
+  });
+
+  it("keeps one entry per game", async () => {
+    // A game can carry several dates on one platform. The rows arrive in date
+    // order, so the earliest is the one kept.
+    stubReleases([
+      { date: 100, date_format: EXACT, game: { name: "Twice", hypes: 5 } },
+      { date: 500, date_format: EXACT, game: { name: "Twice", hypes: 5 } },
+    ]);
+    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(releases).toHaveLength(1);
+    expect(releases[0]!.releasedAt).toBe(100);
+  });
+
+  it("builds a cover url only when there is a cover", async () => {
+    stubReleases([
+      { date: 1, date_format: EXACT, game: { name: "With art", hypes: 2, cover: { image_id: "abc" } } },
+      { date: 2, date_format: EXACT, game: { name: "Without art", hypes: 1 } },
+    ]);
+    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(releases[0]!.coverUrl).toBe("https://images.igdb.com/igdb/image/upload/t_cover_big/abc.jpg");
+    expect(releases[1]!.coverUrl).toBeNull();
+  });
+
+  it.each([
+    ["a row with no name", { date: 1, date_format: 3, game: {} }],
+    ["a row with no date", { date_format: 3, game: { name: "Someday", hypes: 1 } }],
+    ["a row that is not an object", null],
+  ])("drops %s rather than rendering a blank card", async (_name, row) => {
+    stubReleases([row]);
+    expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toEqual([]);
+  });
+
+  it("honours the limit", async () => {
+    stubReleases(
+      Array.from({ length: 30 }, (_, i) => ({ date: i + 1, date_format: EXACT, game: { name: `G${i}`, hypes: i } })),
+    );
+    expect(await new IgdbClient("id", "tok").upcoming(4, NOW)).toHaveLength(4);
+  });
+});

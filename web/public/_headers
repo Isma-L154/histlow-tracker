@@ -13,7 +13,7 @@
 # statistics it exists for and wrote an error in every visitor's console.
 
 /*
-  Content-Security-Policy: default-src 'none'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data: https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://media.steampowered.com; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data: https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://media.steampowered.com https://images.igdb.com; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   # Two years, subdomains included, and preload-eligible. The site is HTTPS
   # only; without this a browser's first visit still tries plain HTTP, which
   # is the one request an attacker on the same network can rewrite.
