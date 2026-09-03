@@ -389,8 +389,10 @@ async function igdbToken(
   ctx.waitUntil(
     cache.put(
       cacheKey,
-      // Never `public`: this is a credential, and a cache outside this Worker
-      // has no business holding one.
+      // `private` is a signal, not a boundary: what actually keeps this out of
+      // reach is that `token.invalid` is not a routable path, so nothing but
+      // this Worker can address the entry. Worth revisiting if this zone ever
+      // gains a second Worker, which would share `caches.default`.
       new Response(JSON.stringify(token), {
         headers: { "Content-Type": "application/json", "Cache-Control": `private, max-age=${lifetime}` },
       }),
