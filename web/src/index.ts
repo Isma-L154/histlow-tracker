@@ -25,6 +25,14 @@ import { languageFor, localise, pageCacheKey } from "./language.ts";
 import { parseProfile } from "./profile.ts";
 import { IgdbClient, accessToken, credentials, usable } from "./igdb.ts";
 
+/**
+ * How many release cards the home page shows.
+ *
+ * Six fits one row on a desktop and scrolls tidily on a phone. More would push
+ * the search box - the point of the page - further down.
+ */
+const UPCOMING_COUNT = 6;
+
 /** How long a game takes to finish, when IGDB knows. */
 const COMPLETION_TIME_ROUTE = /^\/api\/time\/(\d{1,10})$/;
 
@@ -191,6 +199,29 @@ async function route(
     return cached(key(url, `/api/search?q=${encodeURIComponent(query.toLowerCase())}`), false, env, ctx, async () => {
       const results = await client(env).search(query);
       return json({ results });
+    });
+  }
+
+  if (url.pathname === "/api/upcoming") {
+    // One list for everybody, so no per-caller limit is needed: the second
+    // visitor of the day is served from cache, and the first cannot be told
+    // apart from a crawler anyway. Hours, not minutes - this changes daily at
+    // most, and it is the home page.
+    return cached(key(url, "/api/upcoming"), false, env, ctx, async () => {
+      const creds = credentials(env);
+      if (!creds) return json({ releases: [] });
+
+      try {
+        const token = await igdbToken(creds, ctx);
+        const releases = await new IgdbClient(creds.clientId, token).upcoming(UPCOMING_COUNT, Date.now());
+        if (releases.length === 0) console.log("igdb upcoming", "no releases matched");
+        return json({ releases }, { headers: { "Cache-Control": "public, max-age=21600" } });
+      } catch (error) {
+        // Same rule as the completion time: an outage must not be cached as
+        // though IGDB had answered.
+        logFailure("igdb upcoming failed", error);
+        return json({ releases: [] }, { headers: { "Cache-Control": "no-store" } });
+      }
     });
   }
 

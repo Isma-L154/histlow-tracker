@@ -34,6 +34,8 @@ const el = {
   steamIdClear: document.getElementById("steamid-clear"),
   profileStatus: document.getElementById("profile-status"),
   hero: document.getElementById("hero"),
+  upcoming: document.getElementById("upcoming"),
+  upcomingList: document.getElementById("upcoming-list"),
   status: document.getElementById("status"),
   game: document.getElementById("game"),
   cover: document.getElementById("game-cover"),
@@ -799,6 +801,7 @@ function setLanguage(language) {
   // Anything the client drew itself is not marked up with `data-i18n`, so it
   // has to be drawn again from the state that produced it.
   if (state.game) renderGame(state.game);
+  if (upcomingReleases.length > 0) renderUpcoming();
   if (state.steamId) setProfileStatus(say("profile.saved"));
 
   try {
@@ -864,6 +867,85 @@ function formatDate(iso) {
   return Number.isNaN(date.getTime())
     ? say("achievement.unlocked")
     : date.toLocaleDateString(state.language, { year: "numeric", month: "short", day: "numeric" });
+}
+
+// -- upcoming releases ------------------------------------------------------
+
+/** Redrawn on this interval so a countdown does not go stale on an open tab. */
+const COUNTDOWN_REFRESH_MS = 60_000;
+
+/** What the API last returned, so a language switch can redraw without refetching. */
+let upcomingReleases = [];
+
+/**
+ * How far off a date is, in words.
+ *
+ * Days rather than a ticking clock. A second-by-second counter on six cards is
+ * a lot of motion on a page whose job is a search box, and nobody plans around
+ * the minutes of a release two months away.
+ */
+function countdown(releasedAt, now) {
+  const days = Math.ceil((releasedAt * 1000 - now) / 86_400_000);
+  if (days <= 0) return say("upcoming.today");
+  if (days === 1) return say("upcoming.tomorrow");
+  return say("upcoming.days", { days });
+}
+
+/**
+ * The most anticipated releases, or nothing at all.
+ *
+ * Absent rather than empty when IGDB has nothing: a heading over no cards is
+ * worse than no heading. The home page is fully usable without this, which is
+ * the standard every IGDB-backed piece here is held to.
+ */
+async function loadUpcoming() {
+  try {
+    const data = await api("/api/upcoming");
+    upcomingReleases = Array.isArray(data?.releases) ? data.releases : [];
+  } catch {
+    // The Worker logged it. A reader can do nothing about IGDB being down.
+    upcomingReleases = [];
+  }
+  renderUpcoming();
+}
+
+function renderUpcoming() {
+  const now = Date.now();
+  // A release whose date has passed while the tab was open drops out, rather
+  // than counting down past zero.
+  const live = upcomingReleases.filter((release) => release.releasedAt * 1000 > now - 86_400_000);
+
+  el.upcoming.hidden = live.length === 0;
+  if (live.length === 0) return;
+
+  el.upcomingList.replaceChildren();
+  for (const release of live) {
+    const card = document.createElement("li");
+    card.className = "upcoming-card";
+
+    if (release.coverUrl) {
+      const cover = document.createElement("img");
+      cover.className = "upcoming-cover";
+      cover.src = release.coverUrl;
+      cover.alt = "";
+      cover.loading = "lazy";
+      // IGDB is a third party: deny it the referrer, as Steam is denied it.
+      cover.referrerPolicy = "no-referrer";
+      card.append(cover);
+    }
+
+    const name = document.createElement("p");
+    name.className = "upcoming-name";
+    // Titles come from IGDB and are untrusted, like everything else here.
+    name.textContent = release.name;
+
+    const when = document.createElement("p");
+    when.className = "upcoming-when";
+    when.textContent = countdown(release.releasedAt, now);
+
+    card.append(name, when);
+    el.upcomingList.append(card);
+  }
 }
 
 // -- routing ----------------------------------------------------------------
@@ -967,3 +1049,8 @@ if (state.steamId) {
   setProfileStatus(say("profile.saved"));
 }
 route();
+
+// The home page is the only place these appear, and it is where most visits
+// start. Fired after routing so a direct link to a game does not wait for it.
+loadUpcoming();
+setInterval(renderUpcoming, COUNTDOWN_REFRESH_MS);
