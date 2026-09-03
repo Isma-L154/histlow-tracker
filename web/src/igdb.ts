@@ -69,6 +69,18 @@ export interface CompletionTime {
   completely: number | null;
 }
 
+/**
+ * The releases found, and where the search stopped if none were.
+ *
+ * Three stages can each come up empty, and reporting the same nothing for all
+ * of them is what made the completion time undiagnosable in #69. The lesson was
+ * written down and this shipped next to it without it.
+ */
+export interface UpcomingLookup {
+  releases: UpcomingRelease[];
+  stoppedAt: string | null;
+}
+
 export interface UpcomingRelease {
   name: string;
   /** Unix seconds. Only ever a date IGDB marked as exact. */
@@ -171,11 +183,11 @@ export class IgdbClient {
    * than assumed. Over-fetches candidates because some of the most anticipated
    * games have no exact date yet, and those drop out.
    */
-  async upcoming(limit: number, now: number): Promise<UpcomingRelease[]> {
+  async upcoming(limit: number, now: number): Promise<UpcomingLookup> {
     const exact = await this.exactDateFormatId();
     // Without it, nothing rather than everything: a countdown to a guessed
     // date is worse than no countdown.
-    if (exact === null) return [];
+    if (exact === null) return { releases: [], stoppedAt: "no exact date format in date_formats" };
 
     const seconds = Math.floor(now / 1000);
     const candidates = await this.query<{
@@ -202,7 +214,9 @@ export class IgdbClient {
         coverUrl: imageId ? `${IMAGE_BASE}/t_cover_big/${imageId}.jpg` : null,
       });
     }
-    if (games.size === 0) return [];
+    if (games.size === 0) {
+      return { releases: [], stoppedAt: `no candidate games (${candidates.length} rows from games)` };
+    }
 
     const dates = await this.query<{ game?: number; date?: number; date_format?: number }>(
       "release_dates",
@@ -233,7 +247,14 @@ export class IgdbClient {
       releases.push({ ...game, releasedAt });
       if (releases.length === limit) break;
     }
-    return releases;
+
+    return {
+      releases,
+      stoppedAt:
+        releases.length > 0
+          ? null
+          : `${games.size} candidates, ${dates.length} date rows, none exact and ahead`,
+    };
   }
 
   /** The `date_formats` row meaning a full day-month-year date. */

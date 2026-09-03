@@ -251,7 +251,7 @@ describe("upcoming", () => {
         { game: 1, date: 900, date_format: EXACT },
       ],
     );
-    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    const { releases } = await new IgdbClient("id", "tok").upcoming(6, NOW);
     expect(releases.map((r) => r.name)).toEqual(["Most wanted", "Less wanted"]);
   });
 
@@ -261,7 +261,7 @@ describe("upcoming", () => {
     // feature returned an empty list for ever, in silence. The same mistake as
     // the difficulty score treating a 0% achievement as no data.
     stubUpcoming([{ id: 1, name: "Real" }], [{ game: 1, date: 100, date_format: 0 }], 0);
-    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).map((r) => r.name)).toEqual(["Real"]);
+    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).releases.map((r) => r.name)).toEqual(["Real"]);
   });
 
   it("asks IGDB for exact dates only", async () => {
@@ -276,7 +276,7 @@ describe("upcoming", () => {
     // Nothing rather than everything: without the format, every placeholder
     // would be presented as a real date.
     stubUpcoming([{ id: 1, name: "x" }], [{ game: 1, date: 1, date_format: 0 }], null);
-    expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toEqual([]);
+    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).releases).toEqual([]);
   });
 
   it("drops a wanted game that has no exact date yet", async () => {
@@ -288,7 +288,7 @@ describe("upcoming", () => {
       ],
       [{ game: 2, date: 100, date_format: EXACT }],
     );
-    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).map((r) => r.name)).toEqual(["Dated"]);
+    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).releases.map((r) => r.name)).toEqual(["Dated"]);
   });
 
   it("keeps a game's earliest date when it has several", async () => {
@@ -299,7 +299,7 @@ describe("upcoming", () => {
         { game: 1, date: 500, date_format: EXACT },
       ],
     );
-    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    const { releases } = await new IgdbClient("id", "tok").upcoming(6, NOW);
     expect(releases).toHaveLength(1);
     expect(releases[0]!.releasedAt).toBe(100);
   });
@@ -317,7 +317,7 @@ describe("upcoming", () => {
         { game: 2, date: 200, date_format: EXACT },
       ],
     );
-    expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toHaveLength(2);
+    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).releases).toHaveLength(2);
   });
 
   it("builds a cover url only when there is a cover", async () => {
@@ -331,7 +331,7 @@ describe("upcoming", () => {
         { game: 2, date: 2, date_format: EXACT },
       ],
     );
-    const releases = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    const { releases } = await new IgdbClient("id", "tok").upcoming(6, NOW);
     expect(releases[0]!.coverUrl).toBe("https://images.igdb.com/igdb/image/upload/t_cover_big/abc.jpg");
     expect(releases[1]!.coverUrl).toBeNull();
   });
@@ -342,19 +342,56 @@ describe("upcoming", () => {
     ["a row that is not an object", null],
   ])("drops %s rather than rendering a blank card", async (_name, row) => {
     stubUpcoming([row], [{ game: 1, date: 1, date_format: EXACT }]);
-    expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toEqual([]);
+    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).releases).toEqual([]);
   });
 
   it("honours the limit", async () => {
     const games = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, name: `G${i}` }));
     const dates = games.map((g) => ({ game: g.id, date: 100 + g.id, date_format: EXACT }));
     stubUpcoming(games, dates);
-    expect(await new IgdbClient("id", "tok").upcoming(4, NOW)).toHaveLength(4);
+    expect((await new IgdbClient("id", "tok").upcoming(4, NOW)).releases).toHaveLength(4);
   });
 
   it("does not ask IGDB for dates when no game qualified", async () => {
     const calls = stubUpcoming([], []);
-    expect(await new IgdbClient("id", "tok").upcoming(6, NOW)).toEqual([]);
+    expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).releases).toEqual([]);
     expect(calls, "asked for dates for nothing").toHaveLength(2);
+  });
+});
+
+describe("upcoming says where it stopped", () => {
+  const NOW = 1_800_000_000_000;
+
+  it.each([
+    ["no date format", [], [], null, /date_formats/],
+    ["no candidate games", [], [], 0, /no candidate games/],
+    ["candidates but no exact dates ahead", [{ id: 1, name: "x" }], [], 0, /none exact and ahead/],
+  ])("reports %s", async (_name, games, dates, formatId, pattern) => {
+    // Three stages come up empty and used to report the same nothing. That is
+    // what made the completion time undiagnosable in #69, and this shipped
+    // beside it with the same gap.
+    stub((url) =>
+      url.endsWith("/date_formats")
+        ? json(formatId === null ? [] : [{ id: formatId }])
+        : url.endsWith("/games")
+          ? json(games)
+          : json(dates),
+    );
+    const lookup = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(lookup.releases).toEqual([]);
+    expect(lookup.stoppedAt).toMatch(pattern);
+  });
+
+  it("says nothing when it found something", () => {
+    return stub((url) =>
+      url.endsWith("/date_formats")
+        ? json([{ id: 0 }])
+        : url.endsWith("/games")
+          ? json([{ id: 1, name: "Real" }])
+          : json([{ game: 1, date: 100, date_format: 0 }]),
+    ) && new IgdbClient("id", "tok").upcoming(6, NOW).then((lookup) => {
+      expect(lookup.stoppedAt).toBeNull();
+      expect(lookup.releases).toHaveLength(1);
+    });
   });
 });
