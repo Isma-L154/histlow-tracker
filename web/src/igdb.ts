@@ -43,6 +43,19 @@ const EXPIRY_MARGIN_SECONDS = 300;
  */
 const EXTERNAL_CATEGORY_STEAM = 1;
 
+/**
+ * What a lookup produced, and where it stopped if it produced nothing.
+ *
+ * The reason travels because the three ways of finding no time are three
+ * different operational facts, and the logs could not tell them apart - which
+ * is how a query that had stopped matching went unnoticed until someone
+ * checked production by hand.
+ */
+export interface Lookup {
+  time: CompletionTime | null;
+  stoppedAt: string | null;
+}
+
 export interface CompletionTime {
   /** Seconds to finish the story, as IGDB reports it. */
   normally: number | null;
@@ -98,9 +111,12 @@ export class IgdbClient {
    * has a remaster and a demo - and a wrong completion time is worse than none,
    * because nothing about it looks wrong.
    */
-  async completionTime(steamAppId: number): Promise<CompletionTime | null> {
+  async completionTime(steamAppId: number): Promise<Lookup> {
     const gameId = await this.gameIdForSteamApp(steamAppId);
-    if (gameId === null) return null;
+    // Reported rather than swallowed. Three different things produce no time,
+    // and until the caller can tell them apart, a query that has silently
+    // stopped matching looks exactly like a game nobody has timed.
+    if (gameId === null) return { time: null, stoppedAt: "no game for that Steam id" };
 
     const rows = await this.query<{ normally?: number; completely?: number }>(
       "game_time_to_beats",
@@ -108,24 +124,54 @@ export class IgdbClient {
     );
 
     const row = rows[0];
-    if (!row) return null;
+    if (!row) return { time: null, stoppedAt: "no times for that game" };
 
     const time = {
       normally: positive(row.normally),
       completely: positive(row.completely),
     };
-    // A row of nulls is the same as no row, and saying so here keeps the
-    // caller from having to know that.
-    return time.normally === null && time.completely === null ? null : time;
+    if (time.normally === null && time.completely === null) {
+      return { time: null, stoppedAt: "times present but empty" };
+    }
+    return { time, stoppedAt: null };
   }
 
-  /** IGDB's own id for a game, found through its Steam listing. */
+  /**
+   * IGDB's own id for a game, found through its Steam listing.
+   *
+   * Filtered on `external_game_source` resolved by name, with the deprecated
+   * `category` as a fallback. The replacement field is a reference id whose
+   * value for Steam is documented nowhere, so it is looked up rather than
+   * guessed - guessing risks matching a different store silently, which is the
+   * one failure this module exists to avoid.
+   */
   private async gameIdForSteamApp(steamAppId: number): Promise<number | null> {
+    const source = await this.steamSourceId();
+    const filter =
+      source === null
+        ? `category = ${EXTERNAL_CATEGORY_STEAM}`
+        : `external_game_source = ${source}`;
+
     const rows = await this.query<{ game?: number }>(
       "external_games",
-      `fields game; where uid = "${steamAppId}" & category = ${EXTERNAL_CATEGORY_STEAM}; limit 1;`,
+      `fields game; where uid = "${steamAppId}" & ${filter}; limit 1;`,
     );
     return positive(rows[0]?.game);
+  }
+
+  /** Steam's row in `external_game_sources`, found by its name. */
+  private async steamSourceId(): Promise<number | null> {
+    try {
+      const rows = await this.query<{ id?: number }>(
+        "external_game_sources",
+        `fields id; where name = "Steam"; limit 1;`,
+      );
+      return positive(rows[0]?.id);
+    } catch {
+      // The endpoint is newer than the field it replaces. Falling back to the
+      // deprecated filter is better than failing outright.
+      return null;
+    }
   }
 
   /**

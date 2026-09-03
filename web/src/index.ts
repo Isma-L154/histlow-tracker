@@ -211,10 +211,15 @@ async function route(
 
       try {
         const token = await igdbToken(creds, ctx);
-        const completionTime = await new IgdbClient(creds.clientId, token).completionTime(Number(time[1]));
+        const lookup = await new IgdbClient(creds.clientId, token).completionTime(Number(time[1]));
+        // Said out loud, because three different things produce no time and
+        // the difference is the operator's only way of noticing that a query
+        // has stopped matching. Not an error: a game nobody has timed is
+        // ordinary, and this is one line on a route that is cached for a day.
+        if (lookup.stoppedAt) console.log("igdb completion time", time[1], lookup.stoppedAt);
         // IGDB having nothing for a game is a stable fact. Re-asking on every
         // visit would spend the budget on an answer that will not change.
-        return json({ completionTime });
+        return json({ completionTime: lookup.time });
       } catch (error) {
         // An outage, a rate limit or a revoked credential is the operator's
         // problem: the reader gets the page without the section either way.

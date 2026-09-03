@@ -97,19 +97,73 @@ describe("usable", () => {
 });
 
 describe("completionTime", () => {
+  it("says where it stopped when there is no time", async () => {
+    // Three different things produce no time. Until they were told apart, a
+    // query that had silently stopped matching looked exactly like a game
+    // nobody had timed - which is how this shipped broken.
+    const cases: Array<[name: string, external: unknown[], times: unknown[], stoppedAt: string]> = [
+      ["IGDB does not know the game", [], [], "no game for that Steam id"],
+      ["there are no times", [{ game: 1 }], [], "no times for that game"],
+      ["the times row is empty", [{ game: 1 }], [{ normally: 0 }], "times present but empty"],
+    ];
+    for (const [name, external, times, stoppedAt] of cases) {
+      stub((url) =>
+        url.endsWith("/external_game_sources")
+          ? json([{ id: 1 }])
+          : url.endsWith("/external_games")
+            ? json(external)
+            : json(times),
+      );
+      const lookup = await new IgdbClient("id", "tok").completionTime(1);
+      expect(lookup.time, name).toBeNull();
+      expect(lookup.stoppedAt, name).toBe(stoppedAt);
+    }
+  });
+
+  it("resolves Steam's source by name rather than assuming a number", async () => {
+    // `external_games.category` is deprecated and its replacement's value for
+    // Steam is documented nowhere. Assuming it kept the old number would risk
+    // matching a different store silently.
+    const calls = stub((url) =>
+      url.endsWith("/external_game_sources")
+        ? json([{ id: 55 }])
+        : url.endsWith("/external_games")
+          ? json([{ game: 1234 }])
+          : json([{ completely: 216000 }]),
+    );
+    await new IgdbClient("id", "tok").completionTime(367520);
+    expect(String(calls[0]!.init!.body)).toContain('name = "Steam"');
+    expect(String(calls[1]!.init!.body)).toContain("external_game_source = 55");
+  });
+
+  it("falls back to the deprecated filter if the source cannot be resolved", async () => {
+    const calls = stub((url) =>
+      url.endsWith("/external_game_sources")
+        ? new Response("nope", { status: 404 })
+        : url.endsWith("/external_games")
+          ? json([{ game: 1 }])
+          : json([{ completely: 1 }]),
+    );
+    await new IgdbClient("id", "tok").completionTime(1);
+    expect(String(calls[1]!.init!.body)).toContain("category = 1");
+  });
+
   it("matches the game by Steam app id, not by name", async () => {
     // A wrong completion time looks exactly like a right one, so the match has
     // to be on an identifier rather than on a title that every franchise
     // reuses for remasters and demos.
     const calls = stub((url) =>
-      url.endsWith("/external_games") ? json([{ game: 1234 }]) : json([{ normally: 97200, completely: 216000 }]),
+      url.endsWith("/external_game_sources")
+        ? json([{ id: 1 }])
+        : url.endsWith("/external_games")
+          ? json([{ game: 1234 }])
+          : json([{ normally: 97200, completely: 216000 }]),
     );
-    const time = await new IgdbClient("id", "tok").completionTime(367520);
+    const { time } = await new IgdbClient("id", "tok").completionTime(367520);
 
     expect(time).toEqual({ normally: 97200, completely: 216000 });
-    expect(String(calls[0]!.init!.body)).toContain('uid = "367520"');
-    expect(String(calls[0]!.init!.body)).not.toMatch(/name/);
-    expect(String(calls[1]!.init!.body)).toContain("game_id = 1234");
+    expect(String(calls[1]!.init!.body)).toContain('uid = "367520"');
+    expect(String(calls[2]!.init!.body)).toContain("game_id = 1234");
   });
 
   it("sends the credentials in headers, never in the query", async () => {
@@ -126,18 +180,18 @@ describe("completionTime", () => {
     ["IGDB does not know the game", [] as unknown[], null],
     ["there is no time row", [{ game: 1 }], []],
   ])("returns null when %s", async (_name, first, second) => {
-    stub((url) => (url.endsWith("/external_games") ? json(first) : json(second ?? [])));
-    expect(await new IgdbClient("id", "tok").completionTime(1)).toBeNull();
+    stub((url) => (url.endsWith("/external_game_sources") ? json([{ id: 1 }]) : url.endsWith("/external_games") ? json(first) : json(second ?? [])));
+    expect((await new IgdbClient("id", "tok").completionTime(1)).time).toBeNull();
   });
 
   it("returns null rather than a row of nothing", async () => {
-    stub((url) => (url.endsWith("/external_games") ? json([{ game: 1 }]) : json([{ normally: 0 }])));
-    expect(await new IgdbClient("id", "tok").completionTime(1)).toBeNull();
+    stub((url) => (url.endsWith("/external_game_sources") ? json([{ id: 1 }]) : url.endsWith("/external_games") ? json([{ game: 1 }]) : json([{ normally: 0 }])));
+    expect((await new IgdbClient("id", "tok").completionTime(1)).time).toBeNull();
   });
 
   it("keeps a partial answer", async () => {
-    stub((url) => (url.endsWith("/external_games") ? json([{ game: 1 }]) : json([{ completely: 216000 }])));
-    expect(await new IgdbClient("id", "tok").completionTime(1)).toEqual({
+    stub((url) => (url.endsWith("/external_game_sources") ? json([{ id: 1 }]) : url.endsWith("/external_games") ? json([{ game: 1 }]) : json([{ completely: 216000 }])));
+    expect((await new IgdbClient("id", "tok").completionTime(1)).time).toEqual({
       normally: null,
       completely: 216000,
     });
@@ -152,6 +206,6 @@ describe("completionTime", () => {
 
   it("does not treat an unexpected body as data", async () => {
     stub(() => json({ error: "nope" }));
-    expect(await new IgdbClient("id", "tok").completionTime(1)).toBeNull();
+    expect((await new IgdbClient("id", "tok").completionTime(1)).time).toBeNull();
   });
 });
