@@ -53,6 +53,14 @@ export class SteamError extends Error {
     readonly status: number,
     /** Status Steam gave us, kept so callers can tell a bad request from an outage. */
     readonly upstreamStatus: number = 0,
+    /**
+     * A code for the client, where the status alone is ambiguous.
+     *
+     * A 404 from the game route means "no achievements"; a 404 from the profile
+     * route means "no such profile". The client shows these in two languages
+     * and so cannot use the prose.
+     */
+    readonly reason?: string,
   ) {
     super(message);
     this.name = "SteamError";
@@ -62,6 +70,9 @@ export class SteamError extends Error {
 const SEARCH_URL = "https://steamcommunity.com/actions/SearchApps/";
 const STORE_URL = "https://store.steampowered.com/api/appdetails";
 const API_BASE = "https://api.steampowered.com/ISteamUserStats";
+
+/** Resolving a custom URL and reading a profile name live under a different service. */
+const USER_API_BASE = "https://api.steampowered.com/ISteamUser";
 
 /** Steam is slow often enough that an unbounded wait would burn the request. */
 const TIMEOUT_MS = 8000;
@@ -130,6 +141,54 @@ export class SteamClient {
       total: achievements.length,
       unlockedCount: player ? achievements.filter((a) => a.unlocked).length : null,
     };
+  }
+
+  /**
+   * The SteamID64 behind a custom profile name, and who it belongs to.
+   *
+   * The name is fetched alongside deliberately. Handing someone back a
+   * seventeen-digit number tells them nothing they can check; handing back
+   * "that is Some Player" lets them see at a glance whether it found the right
+   * person, which is the whole reason this exists.
+   *
+   * Uses the same Steam key the rest of the client holds - no new credential.
+   */
+  async resolveVanity(name: string): Promise<{ steamId: string; profileName: string | null }> {
+    const url = new URL(`${USER_API_BASE}/ResolveVanityURL/v1/`);
+    url.searchParams.set("key", this.apiKey);
+    url.searchParams.set("vanityurl", name);
+
+    const body = await this.getJson<unknown>(url, "the profile name");
+    const response = asRecord(asRecord(body)?.["response"]);
+
+    // Steam answers 200 with `success: 42` for a name it does not know, so the
+    // status alone says nothing.
+    if (response?.["success"] !== 1 || typeof response["steamid"] !== "string") {
+      throw new SteamError("Steam does not know that profile name.", 404, 0, "profile.unknown");
+    }
+
+    return { steamId: response["steamid"], profileName: await this.profileName(response["steamid"]) };
+  }
+
+  /**
+   * The display name on a profile, or null.
+   *
+   * Best-effort: a private profile withholds it, and that is not a reason to
+   * refuse an id Steam has already confirmed.
+   */
+  async profileName(steamId: string): Promise<string | null> {
+    const url = new URL(`${USER_API_BASE}/GetPlayerSummaries/v2/`);
+    url.searchParams.set("key", this.apiKey);
+    url.searchParams.set("steamids", steamId);
+
+    try {
+      const body = await this.getJson<unknown>(url, "the profile name");
+      const players = asRecord(asRecord(body)?.["response"])?.["players"];
+      const first = Array.isArray(players) ? asRecord(players[0]) : null;
+      return typeof first?.["personaname"] === "string" ? first["personaname"] : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
