@@ -43,6 +43,12 @@ const EXPIRY_MARGIN_SECONDS = 300;
  */
 const EXTERNAL_CATEGORY_STEAM = 1;
 
+/** IGDB's platform id for PC (Microsoft Windows). */
+const PC_PLATFORM = 6;
+
+/** Where IGDB serves cover art. Also needs an entry in the page's CSP. */
+const IMAGE_BASE = "https://images.igdb.com/igdb/image/upload";
+
 /**
  * What a lookup produced, and where it stopped if it produced nothing.
  *
@@ -61,6 +67,13 @@ export interface CompletionTime {
   normally: number | null;
   /** Seconds to finish everything, which is what this site is about. */
   completely: number | null;
+}
+
+export interface UpcomingRelease {
+  name: string;
+  /** Unix seconds. Only ever a date IGDB marked as exact. */
+  releasedAt: number;
+  coverUrl: string | null;
 }
 
 /** Everything the client needs, so the caller owns the lifetime of the token. */
@@ -134,6 +147,83 @@ export class IgdbClient {
       return { time: null, stoppedAt: "times present but empty" };
     }
     return { time, stoppedAt: null };
+  }
+
+  /**
+   * The most anticipated games with a real release date ahead of them.
+   *
+   * Queried through `release_dates` rather than `games`, because `games` only
+   * carries `first_release_date` — which IGDB sets even for a placeholder,
+   * pinning a "Q4 2026" title to the start of its quarter. Counting down to
+   * that would invent a precision nobody has.
+   *
+   * Precision comes from `date_format`, whose id for a full date is resolved by
+   * name rather than assumed. Same reasoning as Steam's external-game source: a
+   * guessed constant that is wrong does not fail, it silently selects the wrong
+   * thing.
+   *
+   * Sorted here rather than by IGDB. `hypes` belongs to the game, not to the
+   * release date, and sorting by a nested field is not something the API
+   * documents — so rows are fetched by date and ordered by anticipation in
+   * memory, which for a few dozen rows costs nothing.
+   */
+  async upcoming(limit: number, now: number): Promise<UpcomingRelease[]> {
+    const exact = await this.exactDateFormatId();
+    // Without it, nothing rather than everything: a countdown to a guessed
+    // date is worse than no countdown.
+    if (exact === null) return [];
+
+    const seconds = Math.floor(now / 1000);
+    const rows = await this.query<{
+      date?: number;
+      date_format?: number;
+      game?: { name?: string; hypes?: number; cover?: { image_id?: string } };
+    }>(
+      "release_dates",
+      `fields date, date_format, game.name, game.hypes, game.cover.image_id;` +
+        ` where date > ${seconds} & platform = ${PC_PLATFORM} & game.hypes != null;` +
+        ` sort date asc; limit ${Math.min(200, limit * 20)};`,
+    );
+
+    const ranked: Array<UpcomingRelease & { hypes: number }> = [];
+    const seen = new Set<string>();
+
+    for (const row of rows) {
+      if (row === null || typeof row !== "object" || row.date_format !== exact) continue;
+
+      const name = row.game?.name;
+      const date = positive(row.date);
+      // A game can carry several dates on one platform; the earliest wins,
+      // and the rows arrive in date order.
+      if (!name || date === null || seen.has(name)) continue;
+      seen.add(name);
+
+      const imageId = row.game?.cover?.image_id;
+      ranked.push({
+        name,
+        releasedAt: date,
+        coverUrl: imageId ? `${IMAGE_BASE}/t_cover_big/${imageId}.jpg` : null,
+        hypes: positive(row.game?.hypes) ?? 0,
+      });
+    }
+
+    return ranked
+      .sort((a, b) => b.hypes - a.hypes)
+      .slice(0, limit)
+      .map(({ hypes: _hypes, ...release }) => release);
+  }
+
+  /** The `date_formats` row meaning a full day-month-year date. */
+  private async exactDateFormatId(): Promise<number | null> {
+    try {
+      const rows = await this.query<{ id?: number }>(
+        "date_formats",
+        `fields id; where format = "YYYYMMMMDD"; limit 1;`,
+      );
+      return positive(rows[0]?.id);
+    } catch {
+      return null;
+    }
   }
 
   /**

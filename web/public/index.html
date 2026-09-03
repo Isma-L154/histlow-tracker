@@ -123,6 +123,15 @@
           <button type="button" class="example" data-appid="782330">DOOM Eternal</button>
           <button type="button" class="example" data-appid="1145360">Hades</button>
         </div>
+        <!--
+          Below the examples, so the search box - the point of the page - is
+          still the first thing on screen at any size. Absent entirely when
+          IGDB has nothing, rather than an empty heading.
+        -->
+        <section class="upcoming" id="upcoming" hidden>
+          <h2 data-i18n="upcoming.title">Most anticipated</h2>
+          <ul class="upcoming-list" id="upcoming-list"></ul>
+        </section>
       </section>
 
       <p class="status" id="status" role="status" aria-live="polite" hidden></p>
