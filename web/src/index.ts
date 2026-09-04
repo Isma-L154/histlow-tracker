@@ -24,6 +24,7 @@ import { describeGame } from "./preview.ts";
 import { languageFor, localise, pageCacheKey } from "./language.ts";
 import { parseProfile } from "./profile.ts";
 import { IgdbClient, accessToken, credentials, usable } from "./igdb.ts";
+import { secured } from "./headers.ts";
 
 /**
  * How many release cards the home page shows.
@@ -95,47 +96,60 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    // Before anything else, including route matching: a reader arriving on an
-    // old link should land on the page they wanted, not on this Worker's
-    // opinion of whether their path is valid. 301 rather than 302 because the
-    // move is permanent, and a temporary redirect leaves the old address
-    // indexed indefinitely.
-    if (url.hostname === FORMER_HOST) {
-      url.hostname = CANONICAL_HOST;
-      return Response.redirect(url.toString(), 301);
-    }
-
-    const page = GAME_PAGE_ROUTE.exec(url.pathname);
-    if (page && request.method === "GET") {
-      return gamePage(Number(page[1]), url, env, languageFor(request), ctx);
-    }
-
-    if (!url.pathname.startsWith("/api/")) {
-      // Everything else is a static file, or the SPA fallback for a path that
-      // does not match one. Documents are translated before they leave, so the
-      // first paint is already in the reader's language; anything that is not
-      // HTML passes straight through.
-      const asset = await env.ASSETS.fetch(request);
-      return translated(asset, languageFor(request));
-    }
-
-    if (request.method !== "GET") {
-      return problem(405, "Only GET is supported.");
-    }
-
-    try {
-      return await route(request, url, env, ctx);
-    } catch (error) {
-      if (error instanceof SteamError) {
-        return problem(error.status, error.message, error.reason);
-      }
-      // Nothing from an unexpected failure is echoed: it could quote a URL,
-      // and one of those carries the API key.
-      logFailure("unhandled failure", error);
-      return problem(500, "Something went wrong handling that request.");
-    }
+    // One funnel, so nothing can be built without the site's policy on it. Put
+    // at the boundary rather than in each route because the failure it guards
+    // against is a route that forgets - and a new route forgetting is exactly
+    // how the gap this closes was opened in the first place.
+    return secured(await answer(request, url, env, ctx), env, url.origin);
   },
 } satisfies ExportedHandler<Env>;
+
+async function answer(
+  request: Request,
+  url: URL,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  // Before anything else, including route matching: a reader arriving on an
+  // old link should land on the page they wanted, not on this Worker's
+  // opinion of whether their path is valid. 301 rather than 302 because the
+  // move is permanent, and a temporary redirect leaves the old address
+  // indexed indefinitely.
+  if (url.hostname === FORMER_HOST) {
+    url.hostname = CANONICAL_HOST;
+    return Response.redirect(url.toString(), 301);
+  }
+
+  const page = GAME_PAGE_ROUTE.exec(url.pathname);
+  if (page && request.method === "GET") {
+    return gamePage(Number(page[1]), url, env, languageFor(request), ctx);
+  }
+
+  if (!url.pathname.startsWith("/api/")) {
+    // Everything else is a static file, or the SPA fallback for a path that
+    // does not match one. Documents are translated before they leave, so the
+    // first paint is already in the reader's language; anything that is not
+    // HTML passes straight through.
+    const asset = await env.ASSETS.fetch(request);
+    return translated(asset, languageFor(request));
+  }
+
+  if (request.method !== "GET") {
+    return problem(405, "Only GET is supported.");
+  }
+
+  try {
+    return await route(request, url, env, ctx);
+  } catch (error) {
+    if (error instanceof SteamError) {
+      return problem(error.status, error.message, error.reason);
+    }
+    // Nothing from an unexpected failure is echoed: it could quote a URL,
+    // and one of those carries the API key.
+    logFailure("unhandled failure", error);
+    return problem(500, "Something went wrong handling that request.");
+  }
+}
 
 async function route(
   request: Request,

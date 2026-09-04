@@ -100,6 +100,43 @@ jobs:
           echo "::error::Production did not report healthy after the deploy."
           exit 1
 
+      # Every page carries the site's policy, including the ones the Worker
+      # builds itself. Checked here rather than only in the test suite because
+      # `_headers` is applied by Cloudflare, not by this repository: the suite
+      # can prove the Worker copies whatever the asset binding hands it, and
+      # only production can prove Cloudflare is still handing it anything.
+      #
+      # GET, not HEAD. `/game/<id>` answers a HEAD from the asset runtime
+      # rather than from Worker code, so a HEAD here would read the policy off
+      # the very path that was never missing it and report success either way.
+      - name: Verify Worker-built pages carry the site's policy
+        run: |
+          set -euo pipefail
+          site="https://howtoachieve.cloudils.com"
+
+          names() {
+            curl -fsS -D- -o /dev/null --max-time 20 "$1"               | tr -d '' | tr 'A-Z' 'a-z'               | awk -F: '/^(content-security-policy|strict-transport-security|x-content-type-options|referrer-policy|cross-origin-opener-policy|permissions-policy):/ { print $1 }'               | sort
+          }
+
+          # The static side is the reference. Read rather than written out, so
+          # adding a header to _headers extends this check by itself.
+          expected="$(names "$site/styles.css")"
+          if [ -z "$expected" ]; then
+            echo "::error::No policy headers on the static side - _headers is not being applied at all."
+            exit 1
+          fi
+
+          for path in /game/367520 /api/health; do
+            missing="$(comm -23 <(printf '%s
+' "$expected") <(names "$site$path"))"
+            if [ -n "$missing" ]; then
+              echo "::error::$path is missing: $(printf '%s' "$missing" | tr '
+' ' ')"
+              exit 1
+            fi
+            echo "$path carries the full policy"
+          done
+
       # The former address must keep answering, and answering with a redirect
       # rather than with the site. It is the part of the rename most likely to
       # break quietly: every link shared before the move points at it, and
