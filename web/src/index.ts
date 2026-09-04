@@ -544,7 +544,11 @@ async function gamePage(
     // the header art, and only Steam knows that.
     const [shell, art] = await Promise.all([
       env.ASSETS.fetch(new URL("/index.html", url.origin)),
-      cardArt(game?.headerImage),
+      // Caught here rather than trusted not to throw. It sits inside the
+      // shell's `try`, so a rejection would be logged as "shell unavailable"
+      // and answered with a 500 - a hard error page because a picture could
+      // not be chosen, under a diagnosis naming the wrong thing.
+      cardArt(game?.headerImage).catch(() => null),
     ]);
     const rewrite = describeGame(localise(await shell.text(), language), game, page, art);
 

@@ -56,34 +56,82 @@ describe("capsuleUrl", () => {
     expect(capsuleUrl(PLAIN)).not.toContain("?t=");
   });
 
-  it("refuses anything that is not a Steam header URL", () => {
+  it("refuses a host that is not Steam's", () => {
+    // `header_image` relays what a developer put in the store listing.
+    // Publishing it was already the behaviour; deriving a URL and *asking* for
+    // it from the edge is new, and a URL that reads as Steam is not the same
+    // as one that resolves to it.
+    //
+    // The first of these was the only hostile case here to begin with, and it
+    // was refused by the `/apps/<id>/` path shape rather than by anything
+    // about the host - so the test was named for a property the code did not
+    // have. The second defeats that shape by adding a segment. The fourth is
+    // the sharp one: it reads as Steam and resolves to the attacker.
     for (const hostile of [
       "https://evil.example/apps/1/header.jpg",
+      "https://evil.example/x/apps/1/header.jpg",
+      "https://shared.akamai.steamstatic.com.evil.tld/x/apps/1/header.jpg",
+      "https://steamstatic.com@evil.example/x/apps/1/header.jpg",
+      "https://127.0.0.1:8080/x/apps/1/header.jpg",
+    ]) {
+      expect(capsuleUrl(hostile), hostile).toBeNull();
+    }
+  });
+
+  it("refuses a fragment, which the probe would not see", () => {
+    // `fetch` strips the fragment, so a pattern whose `.*` crossed one would
+    // verify the *header* and then advertise it at the capsule's dimensions -
+    // the probe proving the wrong resource, which is the one failure it
+    // exists to prevent.
+    expect(capsuleUrl(`${PLAIN.split("?")[0]}#/apps/1/header.jpg`)).toBeNull();
+  });
+
+  it("refuses anything that is not a header URL at all", () => {
+    for (const wrong of [
       "http://shared.akamai.steamstatic.com/store_item_assets/steam/apps/1/header.jpg",
       "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/413150/capsule_231x87.jpg",
       "not a url",
       "",
     ]) {
-      // `evil.example` is refused by the `/apps/<id>/` shape rather than by a
-      // host check, and that is worth being explicit about: this only ever
-      // rewrites a URL Steam gave us, and only into a sibling of it.
-      expect(capsuleUrl(hostile), hostile).toBeNull();
+      expect(capsuleUrl(wrong), wrong).toBeNull();
     }
   });
 });
 
 describe("cardArt", () => {
-  /** Answers a HEAD however the test wants, and records that one was made. */
-  function head(reply: () => Response | Promise<Response>) {
-    return vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
-      expect(init?.method, "the probe must not download the image").toBe("HEAD");
-      return reply();
+  /**
+   * Answers a probe however the test wants, and records what was asked for.
+   *
+   * Recorded rather than asserted inside the mock. A failing `expect` in there
+   * rejects the fetch, `cardArt` catches it and returns the header, and a test
+   * whose expected answer *is* the header passes anyway - so the assertion
+   * could never fail on the cases that needed it most.
+   */
+  function head(reply: (signal: AbortSignal | null | undefined) => Response | Promise<Response>) {
+    const asked: {
+      url: string;
+      method: string | undefined;
+      redirect: string | undefined;
+      signal: AbortSignal | null | undefined;
+    }[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      asked.push({ url: String(input), method: init?.method, redirect: init?.redirect, signal: init?.signal });
+      return reply(init?.signal);
     });
+    return asked;
+  }
+
+  /** What the recorded calls looked like, without the signal. */
+  function calls(asked: ReturnType<typeof head>) {
+    return asked.map(({ url, method }) => ({ url, method }));
   }
 
   it("prefers the capsule when the game has one", async () => {
-    head(() => new Response(null, { status: 200 }));
+    const asked = head(() => new Response(null, { status: 200 }));
     const art = await cardArt(PLAIN);
+
+    // Out here, where a failure cannot be swallowed by `cardArt`'s own catch.
+    expect(calls(asked)).toEqual([{ url: art!.url, method: "HEAD" }]);
 
     expect(art).toEqual({
       url: "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/413150/capsule_616x353.jpg",
@@ -97,8 +145,42 @@ describe("cardArt", () => {
   it("falls back to the header when the capsule is not there", async () => {
     // The failure that matters. Sending a 404 as `og:image` would leave the
     // game with no card at all, which is worse than the small one it has.
-    head(() => new Response(null, { status: 404 }));
+    const asked = head(() => new Response(null, { status: 404 }));
     expect(await cardArt(PLAIN)).toEqual({ url: PLAIN, ...HEADER });
+    expect(calls(asked)).toEqual([{ url: capsuleUrl(PLAIN), method: "HEAD" }]);
+  });
+
+  it("does not follow a redirect to somewhere it never checked", async () => {
+    // What gets published has to be what was verified. Followed, a redirect
+    // would make `response.ok` true for a resource at another address - and
+    // the card would then advertise the capsule's dimensions for whatever was
+    // actually there.
+    const asked = head(() => new Response(null, { status: 301, headers: { Location: "/elsewhere.jpg" } }));
+
+    expect(await cardArt(PLAIN)).toEqual({ url: PLAIN, ...HEADER });
+    expect(asked[0]?.redirect, "the probe was allowed to follow a redirect").toBe("manual");
+  });
+
+  it("gives up rather than holding the page open", async () => {
+    // The probe is awaited before the page exists, beside the shell fetch, so
+    // a CDN that accepts the connection and then stalls would hold every
+    // uncached game page until the runtime killed it. Every other outbound
+    // call in this Worker carries a deadline; this one did not.
+    //
+    // The stub honours the signal rather than ignoring it, which is what the
+    // real `fetch` does and what a stub that simply never resolves cannot
+    // show: without that, this test hangs for its own timeout and reports the
+    // deadline missing whether or not it is there.
+    const asked = head(
+      (signal) =>
+        new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener("abort", () => reject(signal.reason));
+        }),
+    );
+
+    expect(await cardArt(PLAIN)).toEqual({ url: PLAIN, ...HEADER });
+    expect(asked[0]?.signal, "the probe went out with no deadline").toBeInstanceOf(AbortSignal);
+    expect(asked[0]?.signal?.aborted, "the deadline never fired").toBe(true);
   });
 
   it("falls back when the probe cannot be made at all", async () => {
@@ -109,20 +191,20 @@ describe("cardArt", () => {
   });
 
   it("does not probe a URL it could not derive", async () => {
-    const fetched = head(() => new Response(null, { status: 200 }));
+    const asked = head(() => new Response(null, { status: 200 }));
     const odd = "https://shared.akamai.steamstatic.com/something/else.jpg";
 
     expect(await cardArt(odd)).toEqual({ url: odd, ...HEADER });
-    expect(fetched).not.toHaveBeenCalled();
+    expect(calls(asked)).toEqual([]);
   });
 
   it("has nothing to say about a game with no artwork", async () => {
-    const fetched = head(() => new Response(null, { status: 200 }));
+    const asked = head(() => new Response(null, { status: 200 }));
 
     expect(await cardArt(null)).toBeNull();
     expect(await cardArt(undefined)).toBeNull();
     expect(await cardArt("")).toBeNull();
-    expect(fetched).not.toHaveBeenCalled();
+    expect(calls(asked)).toEqual([]);
   });
 
   it("never reports a size that does not match the picture", async () => {

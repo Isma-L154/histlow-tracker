@@ -12,6 +12,27 @@
  * rather than a missing image, and the reason is the whole difficulty here.
  */
 
+/**
+ * How long to wait for the probe.
+ *
+ * Shorter than anything else that leaves this Worker - Steam gets 8s, IGDB 5s
+ * - because this one is optional. Every other call is the answer; this one
+ * only decides which of two pictures to name, and the fallback is the picture
+ * the site sent before it existed. A slow CDN must cost the page nothing.
+ */
+const TIMEOUT_MS = 3000;
+
+/**
+ * The hosts Steam actually serves art from.
+ *
+ * `header_image` comes from `appdetails`, which relays what a developer put in
+ * the store listing. Publishing that URL was already the behaviour; *fetching*
+ * a URL derived from it is new here, and that is a different thing to allow.
+ * Without this, `https://steamstatic.com@evil.example/x/apps/1/header.jpg`
+ * reads as Steam and resolves to the attacker - and the Worker would ask.
+ */
+const STEAM_HOSTS = /(?:^|\.)steam(?:static\.com|powered\.com)$|^steamcdn-a\.akamaihd\.net$/;
+
 /** What Steam serves, and what each size means for a card. */
 export const CAPSULE = { width: 616, height: 353 } as const;
 export const HEADER = { width: 460, height: 215 } as const;
@@ -46,8 +67,27 @@ export interface Art {
  * asking for the header's revision is at best meaningless.
  */
 export function capsuleUrl(headerImage: string): string | null {
-  const match = /^(https:\/\/[^/]+\/.*\/apps\/\d+\/)(?:[0-9a-f]{8,}\/)?header\.jpg(?:\?|$)/.exec(headerImage);
-  return match ? `${match[1]}capsule_616x353.jpg` : null;
+  let url: URL;
+  try {
+    url = new URL(headerImage);
+  } catch {
+    return null;
+  }
+
+  // Parsed rather than matched, because a regex over the whole string cannot
+  // see where a URL really points. `https://steamstatic.com@evil.example/...`
+  // has hostname `evil.example`, and `.*` in a pattern crosses a `#` while
+  // `fetch` does not - so a fragment would let the probe verify one resource
+  // while the card advertised another, which is the one thing the probe exists
+  // to prevent.
+  if (url.protocol !== "https:") return null;
+  if (url.username || url.password || url.hash) return null;
+  if (!STEAM_HOSTS.test(url.hostname)) return null;
+
+  const match = /^(.*\/apps\/\d+\/)(?:[0-9a-f]{8,}\/)?header\.jpg$/.exec(url.pathname);
+  // `url.origin` rather than the text that was handed in, so nothing survives
+  // parsing that the parse did not agree with.
+  return match ? `${url.origin}${match[1]}capsule_616x353.jpg` : null;
 }
 
 /**
@@ -71,12 +111,19 @@ export async function cardArt(headerImage: string | null | undefined): Promise<A
   if (!capsule) return header;
 
   try {
-    const response = await fetch(capsule, { method: "HEAD" });
+    // `manual`, so a redirect is a fallback rather than a verification of
+    // wherever it led: what gets published has to be what was checked.
+    const response = await fetch(capsule, {
+      method: "HEAD",
+      redirect: "manual",
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
     return response.ok ? { url: capsule, ...CAPSULE } : header;
   } catch {
-    // Not logged. An unreachable CDN is already reported by the request for
-    // the page's own data, and this one degrades to the picture the site used
-    // to send - which is absence of an improvement, not absence of a card.
+    // Not logged, and this catches the deadline too. An unreachable CDN is
+    // already reported by the request for the page's own data, and this one
+    // degrades to the picture the site used to send - which is absence of an
+    // improvement, not absence of a card.
     return header;
   }
 }

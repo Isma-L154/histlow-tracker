@@ -25,12 +25,15 @@ const CAPSULE = `https://shared.akamai.steamstatic.com/store_item_assets/steam/a
  * `capsulePresent` is the one thing under test; everything else is scenery,
  * kept to the fields the client reads.
  */
+const probed: string[] = [];
+
 function steam(capsulePresent: boolean) {
+  probed.length = 0;
   return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
 
     if (init?.method === "HEAD") {
-      expect(url, "the probe asked for something other than the capsule").toBe(CAPSULE);
+      probed.push(url);
       return new Response(null, { status: capsulePresent ? 200 : 404 });
     }
     if (url.includes("GetSchemaForGame")) {
@@ -84,6 +87,12 @@ describe("the card a shared game link produces", () => {
     expect(tags["og:image"]).toBe(HEADER);
     expect(tags["og:image:width"]).toBe("460");
     expect(tags["og:image:height"]).toBe("215");
+
+    // Asserted here rather than inside the stub. An `expect` in there rejects
+    // the probe, `cardArt` catches it and returns the header - which is what
+    // this test expects anyway, so a probe aimed at entirely the wrong URL
+    // would have left it green.
+    expect(probed).toEqual([CAPSULE]);
   });
 
   it("sends one image, never two", async () => {
