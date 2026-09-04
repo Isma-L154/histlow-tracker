@@ -178,10 +178,17 @@ async function route(
     // cannot tell a deployment that never had them from a query that stopped
     // matching, and neither could the logs.
     //
-    // Named for what is missing rather than for the credential behind it, and
-    // safe to serve publicly for the same reason: the absence is already on
-    // the page. This says nothing a visitor could not see, to somebody who
-    // would otherwise have to guess.
+    // This does disclose something. An earlier version of this comment claimed
+    // it revealed nothing a visitor could not already see, and that was wrong
+    // in exactly the way that matters: `/api/upcoming` answers `{"releases":
+    // []}` when unconfigured, when IGDB is down, and when the query found
+    // nothing, and the page looks identical in all three. Telling them apart
+    // is the whole value here, so it cannot also be the reason it is harmless.
+    //
+    // It is harmless because of what it is: two booleans about optional
+    // features, named for what a reader would miss rather than for the
+    // credential behind them. Nothing about whether a secret exists, is
+    // wrong, or how long it is.
     const igdb = credentials(env) !== null;
     return json({ ok: true, version: VERSION, features: { completionTime: igdb, upcoming: igdb } });
   }
@@ -283,6 +290,14 @@ async function route(
       // Not configured is a state, not a failure, and it will not change until
       // someone deploys. Cacheable like any other answer - but no longer a
       // silent one: it is the only no-data case that is somebody's to fix.
+      //
+      // Inside the producer, so a cache hit skips it. What keeps that from
+      // burying the line for ever is that `key` scopes every entry to the
+      // deployment id: a deploy starts cold, so the first uncached lookup in
+      // each colo runs this. That guarantee is `CF_VERSION` and nothing else -
+      // lose the binding and `deployment` falls back to a constant, keys stop
+      // rotating, and this response would suppress the line for a full day
+      // after the secrets went missing.
       if (!creds) {
         announceUnconfigured();
         return json({ completionTime: null });

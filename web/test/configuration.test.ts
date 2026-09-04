@@ -30,7 +30,7 @@ const BASE = "https://howtoachieve.cloudils.com";
 const WITHOUT = env;
 
 /** The same deployment with them set, to prove the report is not a constant. */
-const WITH = { ...env, TWITCH_CLIENT_ID: "id", TWITCH_CLIENT_SECRET: "secret" } as Env;
+const WITH = { ...env, TWITCH_CLIENT_ID: "id", TWITCH_CLIENT_SECRET: "secret" };
 
 async function get(path: string, using: Env): Promise<Response> {
   const ctx = createExecutionContext();
@@ -76,6 +76,12 @@ describe("/api/health", () => {
 
 describe("a completion time that nobody configured", () => {
   it("says so, on the first request that wanted one", async () => {
+    // Depends on being the first test in this file to reach an IGDB route:
+    // `announced` is module state, and what makes that safe is the pool giving
+    // each test file its own copy. Turning on `singleWorker`, or the pool
+    // reusing isolates across files, would break this with a failure that says
+    // nothing about the cause. `/api/upcoming` needs its own file for the same
+    // reason, and has one.
     const said = vi.spyOn(console, "log").mockImplementation(() => {});
 
     await get("/api/time/413150", WITHOUT);
