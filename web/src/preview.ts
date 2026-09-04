@@ -9,15 +9,8 @@
  */
 
 import type { GameAchievements } from "./steam.ts";
+import type { Art } from "./art.ts";
 
-/**
- * The size Steam serves cover art at, the same for every game.
- *
- * Declared so a scraper can reserve the space before the image arrives. The
- * wide shape is also why the card is a `summary_large_image` one.
- */
-const HEADER_WIDTH = 460;
-const HEADER_HEIGHT = 215;
 
 /**
  * Escapes text for use inside a double-quoted HTML attribute.
@@ -104,6 +97,7 @@ export function describeGame(
   html: string,
   game: GameAchievements | null,
   url: string,
+  art: Art | null,
 ): Rewrite {
   const out: Rewrite = { html, missed: [] };
 
@@ -145,13 +139,18 @@ export function describeGame(
   //
   // A game with no artwork keeps the site's card, which is a worse preview
   // than the cover and a better one than none.
-  if (game.headerImage) {
+  //
+  // Which picture, and how big, is decided in `art.ts` and handed in: this
+  // function stays pure, and the size travels with the URL rather than being
+  // a constant here. Two sizes are possible now, and a constant that described
+  // only one of them would be wrong exactly when the card got better.
+  if (art) {
     put(out, 'meta property="og:image"', /<meta property="og:image" content="[^"]*" \/>/,
-      `<meta property="og:image" content="${attribute(game.headerImage)}" />`);
+      `<meta property="og:image" content="${attribute(art.url)}" />`);
     put(out, 'meta property="og:image:width"', /<meta property="og:image:width" content="[^"]*" \/>/,
-      `<meta property="og:image:width" content="${HEADER_WIDTH}" />`);
+      `<meta property="og:image:width" content="${art.width}" />`);
     put(out, 'meta property="og:image:height"', /<meta property="og:image:height" content="[^"]*" \/>/,
-      `<meta property="og:image:height" content="${HEADER_HEIGHT}" />`);
+      `<meta property="og:image:height" content="${art.height}" />`);
     put(out, 'meta property="og:image:alt"', /<meta property="og:image:alt" content="[^"]*" \/>/,
       `<meta property="og:image:alt" content="${attribute(`${game.name} cover art`)}" />`);
   }

@@ -13,6 +13,7 @@ import worker from "../src/index.ts";
 import shell from "../public/index.html?raw";
 import { localise, pageCacheKey } from "../src/language.ts";
 import { describeGame } from "../src/preview.ts";
+import { HEADER } from "../src/art.ts";
 import { DICTIONARY } from "../public/i18n.js";
 
 /** Every `data-i18n` key the shipped shell asks for. */
@@ -188,9 +189,10 @@ describe("localise then describeGame", () => {
     unlockedCount: null,
   };
   const PAGE = "https://howtoachieve.cloudils.com/game/367520";
+  const ART = { url: GAME.headerImage!, ...HEADER };
 
   it.each(["en", "es"])("still rewrites every preview tag after translating to %s", (language) => {
-    const { html, missed } = describeGame(localise(shell, language), GAME, PAGE);
+    const { html, missed } = describeGame(localise(shell, language), GAME, PAGE, ART);
 
     // `missed` is the whole point: it names any tag the second pass could not
     // find, which is exactly what a first pass would break.
@@ -201,7 +203,7 @@ describe("localise then describeGame", () => {
   });
 
   it("keeps the translation after the second pass", () => {
-    const { html } = describeGame(localise(shell, "es"), GAME, PAGE);
+    const { html } = describeGame(localise(shell, "es"), GAME, PAGE, ART);
     expect(html).toContain(DICTIONARY.es["hero.title"]!);
     expect(html).toMatch(/<html[^>]*\slang="es"/);
   });
@@ -210,7 +212,7 @@ describe("localise then describeGame", () => {
     // Deliberate, and worth pinning: the card describes the game, is written by
     // `describeGame` from Steam data, and is not part of the interface.
     for (const language of ["en", "es"]) {
-      const { html } = describeGame(localise(shell, language), GAME, PAGE);
+      const { html } = describeGame(localise(shell, language), GAME, PAGE, ART);
       expect(html).toContain("All 63 achievements in Hollow Knight");
     }
   });
