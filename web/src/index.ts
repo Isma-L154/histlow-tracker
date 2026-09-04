@@ -343,18 +343,20 @@ async function route(
     // point is to cost a flooder as little of our time as possible.
     const allowed = await withinRate(request, env);
     if (!allowed) {
-      return new Response(
-        JSON.stringify({ error: "Demasiadas consultas seguidas. Espera un momento." }),
-        {
-          status: 429,
-          headers: {
-            "Content-Type": "application/json; charset=utf-8",
-            // The window is a minute, so a minute is the honest answer.
-            "Retry-After": "60",
-            "Cache-Control": "no-store",
-          },
-        },
-      );
+      // Through `problem` like every other message, which is what attaches the
+      // key the client translates. Built by hand, this was the one user-facing
+      // string on the site that could not be translated - and it was in
+      // Spanish, so an English reader was shown a sentence in a language the
+      // site does not claim to write in. It survived the translation pass
+      // because that pass read the strings `problem` was called with.
+      //
+      // The window is a minute, so a minute is the honest answer, and a
+      // throttle is about the caller rather than the resource - nothing should
+      // keep it.
+      return problem(429, "Too many how-to lookups. Wait a minute and try again.", "howto.tooMany", {
+        "Retry-After": "60",
+        "Cache-Control": "no-store",
+      });
     }
 
     const appId = Number(howto[1]);
