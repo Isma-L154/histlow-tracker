@@ -28,7 +28,7 @@ import { logFailure } from "./http.ts";
  * definition - a rule in `_headers` is written per path, never per response -
  * so an exclusion list keeps this from needing to know what those rules say.
  */
-const ENTITY = new Set([
+export const ENTITY = new Set([
   "content-type",
   "content-length",
   "content-encoding",
@@ -47,7 +47,42 @@ const ENTITY = new Set([
   "location",
   "set-cookie",
   "cf-cache-status",
+  // Added after review. A reference response that is not `ok` but does carry
+  // headers would otherwise promote them to site-wide: a 503 from the asset
+  // runtime carries `Retry-After`, and every 200 in that isolate would have
+  // been stamped with it. The `asset.ok` check below is the real guard; these
+  // are here because a deny-list has to be argued for header by header, and
+  // these are the ones that came to mind once the question was asked.
+  "retry-after",
+  "allow",
+  "content-disposition",
+  "content-location",
+  "link",
+  "server-timing",
 ]);
+
+/**
+ * The floor. Below this, whatever came back is not the site's policy.
+ *
+ * This is not the second list the module exists to avoid, and the difference
+ * matters: the list of headers to apply is still read from `_headers` in full,
+ * and adding one there still needs no change here. This says only that a
+ * result missing these two is not worth believing.
+ *
+ * Without it the failure is perfectly silent. A 404 from the binding, a
+ * `_headers` that stopped being applied, a reference file that was renamed -
+ * each of those produces an empty set of headers, and an empty set is
+ * indistinguishable from "this response already has everything" at the point
+ * where the decision is made. Every page would ship unprotected and every
+ * check would stay green, which is the exact failure this module was written
+ * against, one layer down.
+ *
+ * Two names rather than six: the CSP because it is what this module exists
+ * for, and `nosniff` because it is the one that carries weight on the JSON
+ * routes. A floor that listed all six would go stale the day one is
+ * deliberately dropped.
+ */
+const REQUIRED = ["content-security-policy", "x-content-type-options"];
 
 /**
  * The file asked for when reading the site's policy.
@@ -61,24 +96,56 @@ const ENTITY = new Set([
 const REFERENCE = "/index.html";
 
 /**
+ * The site-wide headers in a response, or null if it does not carry a policy.
+ *
+ * Pure, and exported, so the judgement above can be tested directly. The
+ * failure it guards against cannot be reached through the asset binding in a
+ * test - the binding always answers - so testing it through `secured` would
+ * mean never testing it at all.
+ */
+export function policyFrom(headers: Headers): Map<string, string> | null {
+  const policy = new Map<string, string>();
+  for (const [name, value] of headers) {
+    const lower = name.toLowerCase();
+    if (!ENTITY.has(lower)) policy.set(lower, value);
+  }
+
+  const absent = REQUIRED.filter((name) => !policy.get(name));
+  return absent.length === 0 ? policy : null;
+}
+
+/**
  * Remembered for the life of the isolate. The answer changes only when
  * `_headers` changes, and that means a deploy, and a deploy means new
  * isolates - so there is nothing to invalidate.
  *
- * Only a success is remembered. Caching the promise itself would let one
- * failed fetch, at the moment an isolate started, leave every later response
- * in it unprotected.
+ * Only a usable policy is remembered. Caching whatever came back would let one
+ * bad answer, at the moment an isolate started, leave every later response in
+ * it unprotected until the next deploy - and caching the promise would do the
+ * same for one failed fetch.
+ *
+ * Not keyed by origin, though `sitePolicy` takes one: the first origin into an
+ * isolate wins. The Worker answers on two hostnames and the former one only
+ * ever redirects, so there is one policy to hold - but the signature reads as
+ * though there could be more than one, and there could not.
  */
 let remembered: Map<string, string> | null = null;
+
+/** Whether this isolate has already said the policy is unreadable. */
+let reported = false;
 
 async function sitePolicy(env: Env, origin: string): Promise<Map<string, string>> {
   if (remembered) return remembered;
 
   const asset = await env.ASSETS.fetch(new Request(new URL(REFERENCE, origin)));
-  const policy = new Map<string, string>();
-  for (const [name, value] of asset.headers) {
-    const lower = name.toLowerCase();
-    if (!ENTITY.has(lower)) policy.set(lower, value);
+  if (!asset.ok) throw new Error(`${REFERENCE} answered ${asset.status}`);
+
+  const policy = policyFrom(asset.headers);
+  if (!policy) {
+    // Named, because the two causes need different fixes: `_headers` no longer
+    // being applied is Cloudflare's side, and a policy that genuinely lost its
+    // CSP is this repository's.
+    throw new Error(`${REFERENCE} carries no policy (${[...asset.headers.keys()].join(", ") || "no headers"})`);
   }
 
   remembered = policy;
@@ -95,27 +162,36 @@ async function sitePolicy(env: Env, origin: string): Promise<Map<string, string>
  * for everything the asset runtime served: those are the majority of requests,
  * and rewrapping a response that is being streamed, to change nothing, is a
  * cost paid on all of them.
+ *
+ * Cannot throw. It runs on every response the Worker produces, so a failure
+ * here would not cost a policy - it would cost the page, on a path that had no
+ * way to fail before this module existed.
  */
 export async function secured(response: Response, env: Env, origin: string): Promise<Response> {
-  let policy: Map<string, string>;
   try {
-    policy = await sitePolicy(env, origin);
+    const policy = await sitePolicy(env, origin);
+
+    const missing = [...policy].filter(([name]) => !response.headers.has(name));
+    if (missing.length === 0) return response;
+
+    // Headers on a response that came back from a fetch, or from
+    // `Response.redirect`, are immutable; writing to them throws. Copying is
+    // the only way to add to either.
+    const out = new Response(response.body, response);
+    for (const [name, value] of missing) out.headers.set(name, value);
+    return out;
   } catch (error) {
-    // An internal binding, so this is close to impossible - but if it does
-    // happen, a page without a policy beats no page at all, and the operator
-    // needs to know the site is serving unprotected. Silence here would be the
-    // same failure this module exists to prevent, one layer down.
-    logFailure("security headers unavailable", error);
+    // A page without a policy beats no page at all. But silence here would be
+    // the same failure this module exists to prevent, so it is said - once per
+    // isolate rather than once per request, because a fault that persists is
+    // one fact repeated, and repeating it at request rate buries it.
+    //
+    // The fetch is still retried every request. Only the log is rationed, so
+    // an isolate that started during a blip recovers on its own.
+    if (!reported) {
+      reported = true;
+      logFailure("serving without the site's security policy", error);
+    }
     return response;
   }
-
-  const missing = [...policy].filter(([name]) => !response.headers.has(name));
-  if (missing.length === 0) return response;
-
-  // Headers on a response that came back from a fetch, or from
-  // `Response.redirect`, are immutable; writing to them throws. Copying is the
-  // only way to add to either.
-  const out = new Response(response.body, response);
-  for (const [name, value] of missing) out.headers.set(name, value);
-  return out;
 }

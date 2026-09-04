@@ -21,7 +21,7 @@
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import worker from "../src/index.ts";
-import { secured } from "../src/headers.ts";
+import { ENTITY, secured } from "../src/headers.ts";
 
 const BASE = "https://howtoachieve.cloudils.com";
 
@@ -34,22 +34,6 @@ async function siteWide(): Promise<Map<string, string>> {
   }
   return policy;
 }
-
-/** Headers that describe one response rather than the site, so cannot be copied. */
-const ENTITY = new Set([
-  "content-type",
-  "content-length",
-  "content-encoding",
-  "cache-control",
-  "etag",
-  "last-modified",
-  "expires",
-  "age",
-  "date",
-  "vary",
-  "accept-ranges",
-  "cf-cache-status",
-]);
 
 async function get(path: string): Promise<Response> {
   const ctx = createExecutionContext();
@@ -108,6 +92,31 @@ describe("security headers", () => {
     const complete = new Response("body", { headers: Object.fromEntries(policy) });
 
     expect(await secured(complete, env, BASE)).toBe(complete);
+  });
+
+  it("protects the page it was written for", async () => {
+    // `/game/<id>` is the reason this module exists, and until review nothing
+    // reached it: the redirect test below looks like it does, but that request
+    // is answered by the former-host branch before route matching ever runs.
+    //
+    // Steam is stubbed rather than called. The route treats an unreachable
+    // Steam as an ordinary outcome - the shell still renders and the client
+    // reports the problem - so this exercises the whole of `gamePage` without
+    // the suite depending on a network.
+    const real = globalThis.fetch;
+    globalThis.fetch = (async () => new Response("nope", { status: 503 })) as typeof fetch;
+    try {
+      const policy = await siteWide();
+      const response = await get("/game/367520");
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Content-Type")).toContain("text/html");
+      for (const [name, value] of policy) {
+        expect(response.headers.get(name), `the game page is missing ${name}`).toBe(value);
+      }
+    } finally {
+      globalThis.fetch = real;
+    }
   });
 
   it("protects a redirect too", async () => {

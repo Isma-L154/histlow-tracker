@@ -100,7 +100,21 @@ export default {
     // at the boundary rather than in each route because the failure it guards
     // against is a route that forgets - and a new route forgetting is exactly
     // how the gap this closes was opened in the first place.
-    return secured(await answer(request, url, env, ctx), env, url.origin);
+    //
+    // The catch is what makes that claim true of the paths that throw. Only
+    // `route` was guarded, and two awaits sit outside it: `gamePage`, whose
+    // own catch covers the shell fetch and not the cache lookup, and the asset
+    // path, where `translated` reads a body that can break mid-stream. Either
+    // one left the runtime to answer with a 1101 - no policy, no log, and on
+    // the very page the policy is here for.
+    let response: Response;
+    try {
+      response = await answer(request, url, env, ctx);
+    } catch (error) {
+      logFailure("unhandled failure", error);
+      response = problem(500, "Something went wrong handling that request.");
+    }
+    return secured(response, env, url.origin);
   },
 } satisfies ExportedHandler<Env>;
 

@@ -114,28 +114,59 @@ jobs:
           set -euo pipefail
           site="https://howtoachieve.cloudils.com"
 
-          names() {
-            curl -fsS -D- -o /dev/null --max-time 20 "$1"               | tr -d '' | tr 'A-Z' 'a-z'               | awk -F: '/^(content-security-policy|strict-transport-security|x-content-type-options|referrer-policy|cross-origin-opener-policy|permissions-policy):/ { print $1 }'               | sort
+          # Headers that legitimately differ between two responses: what the response
+          # is, how it is cached, and what Cloudflare stamps on every reply. Everything
+          # not listed is site-wide and has to match.
+          #
+          # This list does have to be maintained, unlike the policy itself - but getting
+          # it wrong shows up as a red check, never as a green one, which is the right
+          # direction for a list that can rot.
+          skip='^(date|content-type|content-length|content-encoding|content-language|content-range|cache-control|etag|last-modified|expires|age|vary|accept-ranges|transfer-encoding|connection|location|set-cookie|cf-cache-status|cf-ray|report-to|nel|server|alt-svc|x-robots-tag):'
+
+          # Name *and* value. Comparing names alone passes a header that is present but
+          # empty, or one carrying a weaker policy than the static side. Not `curl -f`:
+          # a non-2xx would abort the job under `set -e` before any of the messages
+          # below could be printed.
+          policy() {
+            curl -sS -D- -o /dev/null --max-time 20 "$1" |
+              tr -d '\r' |
+              tr 'A-Z' 'a-z' |
+              grep -E '^[a-z0-9-]+:' |
+              grep -Ev "$skip" |
+              sed 's/: */: /' |
+              sort
           }
 
-          # The static side is the reference. Read rather than written out, so
-          # adding a header to _headers extends this check by itself.
-          expected="$(names "$site/styles.css")"
-          if [ -z "$expected" ]; then
-            echo "::error::No policy headers on the static side - _headers is not being applied at all."
-            exit 1
-          fi
+          # The static side is the reference, read in full rather than filtered to a
+          # list of names - so a header added to `_headers` is compared here without
+          # this file being touched. An earlier version of this step did filter by name,
+          # which made it a third copy of the list, and blind to exactly the header it
+          # would have been added to catch.
+          expected="$(policy "$site/styles.css")"
 
-          for path in /game/367520 /api/health; do
-            missing="$(comm -23 <(printf '%s
-' "$expected") <(names "$site$path"))"
-            if [ -n "$missing" ]; then
-              echo "::error::$path is missing: $(printf '%s' "$missing" | tr '
-' ' ')"
+          # A floor, because a comparison alone is satisfied by two responses that are
+          # equally unprotected. Dropping the CSP line from `_headers` takes it off the
+          # static side and the Worker side together, and every relative check stays
+          # green while the whole site serves no policy at all.
+          for required in content-security-policy x-content-type-options; do
+            if ! printf '%s\n' "$expected" | grep -q "^$required:"; then
+              echo "::error::The static side is missing $required - _headers is not being applied."
               exit 1
             fi
-            echo "$path carries the full policy"
           done
+
+          status=0
+          for path in /game/367520 /api/health; do
+            missing="$(comm -23 <(printf '%s\n' "$expected") <(policy "$site$path") || true)"
+            if [ -n "$missing" ]; then
+              echo "::error::$path does not match the static side:"
+              printf '%s\n' "$missing" | sed 's/^/    /'
+              status=1
+            else
+              echo "$path carries the site's policy in full"
+            fi
+          done
+          exit $status
 
       # The former address must keep answering, and answering with a redirect
       # rather than with the site. It is the part of the rename most likely to
