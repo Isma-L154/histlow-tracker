@@ -23,7 +23,7 @@ import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
 import { languageFor, localise, pageCacheKey } from "./language.ts";
 import { parseProfile } from "./profile.ts";
-import { IgdbClient, accessToken, credentials, usable } from "./igdb.ts";
+import { IgdbClient, accessToken, announceUnconfigured, credentials, usable } from "./igdb.ts";
 import { secured } from "./headers.ts";
 
 /**
@@ -172,7 +172,18 @@ async function route(
   ctx: ExecutionContext,
 ): Promise<Response> {
   if (url.pathname === "/api/health") {
-    return json({ ok: true, version: VERSION });
+    // `features` answers the question an operator actually arrives with: why
+    // is the completion time missing. Both depend on the same optional pair of
+    // secrets, and without them the sections are simply absent - so a reader
+    // cannot tell a deployment that never had them from a query that stopped
+    // matching, and neither could the logs.
+    //
+    // Named for what is missing rather than for the credential behind it, and
+    // safe to serve publicly for the same reason: the absence is already on
+    // the page. This says nothing a visitor could not see, to somebody who
+    // would otherwise have to guess.
+    const igdb = credentials(env) !== null;
+    return json({ ok: true, version: VERSION, features: { completionTime: igdb, upcoming: igdb } });
   }
 
   if (url.pathname === "/api/steamid") {
@@ -237,7 +248,10 @@ async function route(
     // most, and it is the home page.
     return cached(key(url, "/api/upcoming", env), false, env, ctx, async () => {
       const creds = credentials(env);
-      if (!creds) return json({ releases: [] });
+      if (!creds) {
+        announceUnconfigured();
+        return json({ releases: [] });
+      }
 
       try {
         const token = await igdbToken(creds, ctx);
@@ -267,8 +281,12 @@ async function route(
     return cached(key(url, `/api/time/${time[1]}`, env), false, env, ctx, async () => {
       const creds = credentials(env);
       // Not configured is a state, not a failure, and it will not change until
-      // someone deploys. Cacheable like any other answer.
-      if (!creds) return json({ completionTime: null });
+      // someone deploys. Cacheable like any other answer - but no longer a
+      // silent one: it is the only no-data case that is somebody's to fix.
+      if (!creds) {
+        announceUnconfigured();
+        return json({ completionTime: null });
+      }
 
       try {
         const token = await igdbToken(creds, ctx);

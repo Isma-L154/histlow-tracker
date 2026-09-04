@@ -115,6 +115,34 @@ export function credentials(env: {
   return clientId && clientSecret ? { clientId, clientSecret } : null;
 }
 
+/** Whether this isolate has already said the credentials are absent. */
+let announced = false;
+
+/**
+ * Says once, per isolate, that there are no credentials to use.
+ *
+ * Every other way of producing no time names the stage it stopped at. This one
+ * did not, and it is the one that matters most operationally: the others are
+ * ordinary facts about a game, while this is a configuration fault somebody
+ * has to fix. It is also what cost the most time in #69 - six milliseconds, no
+ * exception and no log, so "the credentials are not reaching the Worker" was
+ * the first hypothesis, and it was wrong.
+ *
+ * Not on every request, which is why it was left silent to begin with and
+ * still a good reason: a deployment that has simply never set the secrets
+ * would write a line for every visitor for as long as it lives. Once per
+ * isolate is enough to find, and rare enough to ignore.
+ *
+ * Says only what `credentials` already decided. Whether a secret is set to
+ * something wrong is a different fact, and this cannot tell it apart from
+ * absence - which is the right amount to know from a log line.
+ */
+export function announceUnconfigured(): void {
+  if (announced) return;
+  announced = true;
+  console.log("igdb not configured: no Twitch credentials, so completion times and upcoming releases are absent");
+}
+
 /**
  * A client for one request cycle.
  *
