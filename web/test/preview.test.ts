@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import shell from "../public/index.html?raw";
 import { describeGame } from "../src/preview.ts";
+import { HEADER, type Art } from "../src/art.ts";
 import type { GameAchievements } from "../src/steam.ts";
 
 const ORIGIN = "https://howtoachieve.cloudils.com";
@@ -27,9 +28,18 @@ function game(overrides: Partial<GameAchievements> = {}): GameAchievements {
   };
 }
 
+/**
+ * The header art as a card, which is what these cases described before the
+ * capsule existed. Which picture is chosen is `art.ts`'s decision and is
+ * tested there; here it only has to be a picture.
+ */
+function art(g: GameAchievements): Art | null {
+  return g.headerImage ? { url: g.headerImage, ...HEADER } : null;
+}
+
 /** The shipped shell, described as one game, as a plain string. */
 function described(g: GameAchievements, html: string = shell): string {
-  return describeGame(html, g, PAGE).html;
+  return describeGame(html, g, PAGE, art(g)).html;
 }
 
 /** Every value of a repeated meta tag, in document order. */
@@ -136,12 +146,12 @@ describe("describeGame", () => {
       content="${value}"
     />`,
     );
-    const result = describeGame(wrapped, game(), PAGE);
+    const result = describeGame(wrapped, game(), PAGE, art(game()));
     expect(result.missed).toContain('meta name="description"');
   });
 
   it("reports nothing missed against the shipped shell", () => {
-    expect(describeGame(shell, game(), PAGE).missed).toEqual([]);
+    expect(describeGame(shell, game(), PAGE, art(game())).missed).toEqual([]);
   });
 
   describe("when Steam could not describe the game", () => {
@@ -149,13 +159,13 @@ describe("describeGame", () => {
       // Serving the shell untouched left `canonical` and `og:url` claiming to
       // be the home page - on a crawlable path, cached for a day. That tells
       // a search engine every game page is a duplicate of the front page.
-      const out = describeGame(shell, null, PAGE).html;
+      const out = describeGame(shell, null, PAGE, null).html;
       expect(metas(out, "og:url")).toEqual([PAGE]);
       expect(out).toContain(`<link rel="canonical" href="${PAGE}" />`);
     });
 
     it("keeps the site's own card and wording", () => {
-      const out = describeGame(shell, null, PAGE).html;
+      const out = describeGame(shell, null, PAGE, null).html;
       expect(metas(out, "og:image")).toEqual([`${ORIGIN}/og.png`]);
       expect(metas(out, "og:title")[0]).toBe("HowToAchieve — every Steam achievement, explained");
     });

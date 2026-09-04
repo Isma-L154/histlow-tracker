@@ -21,6 +21,7 @@ import { SteamError, SteamClient, type GameAchievements } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
+import { cardArt } from "./art.ts";
 import { languageFor, localise, pageCacheKey } from "./language.ts";
 import { parseProfile } from "./profile.ts";
 import { IgdbClient, accessToken, credentials, usable } from "./igdb.ts";
@@ -537,8 +538,15 @@ async function gamePage(
 
   let described: string;
   try {
-    const shell = await env.ASSETS.fetch(new URL("/index.html", url.origin));
-    const rewrite = describeGame(localise(await shell.text(), language), game, page);
+    // The shell and the capsule probe are independent, so they go out
+    // together: the picture costs no wall time that the page was not already
+    // spending. It cannot start earlier than this - the URL is derived from
+    // the header art, and only Steam knows that.
+    const [shell, art] = await Promise.all([
+      env.ASSETS.fetch(new URL("/index.html", url.origin)),
+      cardArt(game?.headerImage),
+    ]);
+    const rewrite = describeGame(localise(await shell.text(), language), game, page, art);
 
     // A pattern that matches nothing returns the shell untouched and says
     // nothing. Since the fallback is now a polished card rather than a visibly
