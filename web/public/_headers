@@ -1,4 +1,10 @@
-# Response headers for the static side of the site.
+# Response headers for the whole site.
+#
+# Read by the asset runtime, which applies these to every file it serves. It is
+# also the only place they are written: responses the Worker builds - the game
+# pages and everything under /api/ - get them by asking the asset binding for
+# this policy and copying it, in `src/headers.ts`. So adding a header here adds
+# it everywhere, and there is no second list in TypeScript to keep in step.
 #
 # The page loads nothing but its own two files plus images from Steam's CDNs,
 # so the policy can be an allowlist rather than a set of exceptions: anything
