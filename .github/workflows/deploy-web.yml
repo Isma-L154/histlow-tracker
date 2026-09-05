@@ -106,9 +106,11 @@ jobs:
       # can prove the Worker copies whatever the asset binding hands it, and
       # only production can prove Cloudflare is still handing it anything.
       #
-      # GET, not HEAD. `/game/<id>` answers a HEAD from the asset runtime
-      # rather than from Worker code, so a HEAD here would read the policy off
-      # the very path that was never missing it and report success either way.
+      # GET, not HEAD - and it mattered. Until #81, `/game/<id>` answered a
+      # HEAD from the asset runtime rather than from Worker code, so a HEAD
+      # here would have read the policy off the very path that was never
+      # missing it, and reported success against the unfixed site. The two
+      # agree now, and the step below is what keeps them agreeing.
       - name: Verify Worker-built pages carry the site's policy
         run: |
           set -euo pipefail
@@ -164,6 +166,38 @@ jobs:
               status=1
             else
               echo "$path carries the site's policy in full"
+            fi
+          done
+          exit $status
+
+      # HEAD and GET must answer alike. They disagreed for months and nothing
+      # noticed, because every check used one or the other and never both -
+      # a HEAD for a game page fell through to the asset runtime and described
+      # the generic shell instead.
+      - name: Verify HEAD answers like GET
+        run: |
+          set -euo pipefail
+          site="https://howtoachieve.cloudils.com"
+
+          # Status, plus the headers that say what the resource is. Status alone is not
+          # enough: while HEAD was answered by the asset runtime rather than by Worker
+          # code, a game page returned 200 to both and described a different document in
+          # each.
+          describe() {
+            curl -sS -D- -o /dev/null --max-time 20 "$@" |
+              tr -d '\r' | tr 'A-Z' 'a-z' |
+              grep -E '^(http/[0-9.]+ [0-9]{3}|(content-type|cache-control|vary|content-security-policy):)' |
+              sort
+          }
+
+          status=0
+          for path in /game/367520 /api/health /privacy; do
+            if difference="$(diff <(describe "$site$path") <(describe -I "$site$path"))"; then
+              echo "$path agrees"
+            else
+              echo "::error::$path answers HEAD differently from GET:"
+              printf '%s\n' "$difference" | sed 's/^/    /'
+              status=1
             fi
           done
           exit $status
