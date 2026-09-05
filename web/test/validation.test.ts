@@ -12,6 +12,8 @@ import worker from "../src/index.ts";
 import { DICTIONARY } from "../public/i18n.js";
 import { credentials } from "../src/igdb.ts";
 import { storable } from "../src/http.ts";
+import { resolveSteamId } from "../src/profile.ts";
+import { SteamError, unknownGame } from "../src/steam.ts";
 
 const BASE = "https://example.com";
 
@@ -240,5 +242,57 @@ describe("storable", () => {
     // Without this, a rule that stopped honouring `no-store` would pass every
     // other test in the suite and cache the responses written to avoid it.
     expect(storable(control, ok)).toBe(expected);
+  });
+});
+
+describe("resolveSteamId", () => {
+  // The line between the path the cache defends and the path that cannot be
+  // cached at all, so it decides which requests have to be limited instead.
+  it.each([
+    ["a request that names an id", "76561190000000000", undefined, "76561190000000000"],
+    ["the deployment's own id when none is asked for", null, "76561190000000001", "76561190000000001"],
+    ["a request overriding the deployment's id", "76561190000000000", "76561190000000001", "76561190000000000"],
+    ["nothing asked for and none configured", null, undefined, null],
+    ["sixteen digits", "7656119000000000", undefined, null],
+    ["eighteen digits", "765611900000000000", undefined, null],
+    ["digits with a space", "76561190000000000 ", undefined, null],
+    ["something that is not a number", "notanid", undefined, null],
+    ["an empty parameter", "", undefined, null],
+  ])("%s", (_name, requested, fallback, expected) => {
+    expect(resolveSteamId(requested, fallback)).toBe(expected);
+  });
+
+  it("refuses an injection dressed as an id", () => {
+    // This value is forwarded into an upstream query, so its shape is the only
+    // thing standing between a caller and Steam's parameters.
+    expect(resolveSteamId("76561190000000000&key=x", undefined)).toBeNull();
+  });
+});
+
+describe("unknownGame", () => {
+  // Asserted here because reaching it through the route means calling Steam,
+  // and the suite is offline. What it decides is whether a 404 is stored: get
+  // it wrong upward and an outage silences a real game for a day; wrong
+  // downward and every repeat of a wrong id spends the key again.
+  it("recognises a game Steam has nothing for", () => {
+    expect(unknownGame(new SteamError("no achievements", 404))).toBe(true);
+  });
+
+  it("recognises Steam's own 404", () => {
+    expect(unknownGame(new SteamError("no achievements", 404, 404))).toBe(true);
+  });
+
+  it("refuses an outage wearing a 404", () => {
+    // The case that must never be cached: Steam broke, the game is fine.
+    expect(unknownGame(new SteamError("upstream failed", 404, 503))).toBe(false);
+  });
+
+  it("refuses a status that is not a 404", () => {
+    expect(unknownGame(new SteamError("bad gateway", 502, 502))).toBe(false);
+  });
+
+  it("refuses an error that is not Steam's", () => {
+    expect(unknownGame(new TypeError("network"))).toBe(false);
+    expect(unknownGame(null)).toBe(false);
   });
 });

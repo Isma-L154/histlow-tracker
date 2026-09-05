@@ -74,3 +74,63 @@ describe("the how-to route is limited", () => {
     expect((await get("/api/health", caller)).status).toBe(200);
   });
 });
+
+/**
+ * The game route's only defence was the cache, and the caller chose whether it
+ * applied.
+ *
+ * `?steamid=` makes the answer somebody's own, so it cannot be shared - and
+ * `cached` honours that by neither reading nor writing. That is correct for a
+ * personal answer and it left the route with nothing: four Steam calls, no
+ * limit, and a parameter that turns the cache off, on games that are already
+ * known. Measured against production before this existed: three requests with
+ * the parameter were flat at 0.40s, 0.33s, 0.35s and answered
+ * `cache-control: private, no-store`, while the same id without it stepped
+ * down 0.68s, 0.25s, 0.24s.
+ *
+ * So the uncacheable path is the limited one, and the reader browsing games is
+ * not touched.
+ */
+describe("the personalised game route is limited", () => {
+  /** Seventeen digits: enough to be taken for a SteamID64 and turn caching off. */
+  const PERSONAL = "/api/game/440?steamid=76561190000000000";
+
+  /**
+   * Spends one caller's profile allowance without reaching the network.
+   *
+   * The completion-time route takes the same allowance and, with no IGDB
+   * credentials, answers without calling anybody - which is what keeps this
+   * suite offline while still exercising the real limiter.
+   */
+  async function exhaust(ip: string): Promise<void> {
+    for (let i = 0; i < 40; i++) {
+      const response = await get("/api/time/918274656", { "CF-Connecting-IP": ip });
+      if (response.status === 429) return;
+    }
+    throw new Error("the profile allowance never ran out");
+  }
+
+  it("refuses a personalised request once the allowance is spent", async () => {
+    const caller = { "CF-Connecting-IP": "203.0.113.40" };
+    await exhaust("203.0.113.40");
+
+    // 429 before Steam is called: the point is to cost a flooder as little of
+    // our time - and as little of the key's quota - as possible.
+    expect((await get(PERSONAL, caller)).status).toBe(429);
+  });
+
+  it("tells the caller how long to wait", async () => {
+    const caller = { "CF-Connecting-IP": "203.0.113.41" };
+    await exhaust("203.0.113.41");
+
+    expect((await get(PERSONAL, caller)).headers.get("Retry-After")).toBeTruthy();
+  });
+
+  it("limits one caller without touching another", async () => {
+    await exhaust("203.0.113.42");
+
+    // A shared address must not be silenced by one noisy neighbour's walk.
+    const bystander = { "CF-Connecting-IP": "203.0.113.43" };
+    expect((await get("/api/time/918274656", bystander)).status).not.toBe(429);
+  });
+});
