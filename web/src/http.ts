@@ -9,6 +9,8 @@
  * does.
  */
 
+import { DEFAULT_LANGUAGE, DICTIONARY } from "../public/i18n.js";
+
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
 } as const;
@@ -28,20 +30,47 @@ export function json(body: unknown, init: ResponseInit = {}): Response {
  * Messages are written to be safe in a public response: they never quote a
  * credential and never repeat an upstream body verbatim.
  */
-export function problem(
-  status: number,
-  message: string,
-  reason?: string,
-  headers?: Record<string, string>,
-): Response {
-  // `error` is prose for any caller; `reason` is a code for this site's own
-  // client, which has to say the same thing in two languages and cannot
-  // translate a sentence. Callers that have nothing more specific than the
-  // status omit it.
+export function problem(status: number, message: string, headers?: Record<string, string>): Response {
+  // Prose for any caller, and nothing the site's own client can translate.
+  //
+  // An earlier version of this comment said the client falls back to a table
+  // keyed on the status, so these were the ones with no better answer than
+  // their status - and named a 405, an unmatched route and a 500 as examples.
+  // That table has no entry for 405 or 500, so all three reached the reader in
+  // English whatever language the page was in, and the unmatched route
+  // borrowed the 404 entry, which says the game has no achievements. All three
+  // have keys now, and what is left here is for callers outside the browser.
   //
   // `headers` exists for the one failure worth caching: a profile name Steam
   // has never heard of is a stable answer, and re-asking spends the API key.
-  return json({ error: message, ...(reason ? { reason } : {}) }, { status, ...(headers ? { headers } : {}) });
+  return json({ error: message }, { status, ...(headers ? { headers } : {}) });
+}
+
+/**
+ * An error the client can say in the reader's own language.
+ *
+ * The prose is not written here. It is looked up from the same dictionary the
+ * browser uses, because writing it at the call site meant writing it twice -
+ * and all three places that did had already drifted:
+ *
+ *   index.ts   "Too many lookups. …"              profile.tooMany  "Too many profile lookups. …"
+ *   steam.ts   "Steam does not know that name."   profile.unknown  "… Check it, or paste your link."
+ *   index.ts   PROFILE_PROBLEMS, seven entries, a second copy of profile.* in TypeScript
+ *
+ * Both copies ship: a caller that is not this browser reads the prose. So the
+ * two could disagree about what happened and nothing would say so.
+ *
+ * There is no `message` parameter, which is the point - the duplication is
+ * gone rather than guarded. A key with no entry falls back to the key itself
+ * and is caught by a test rather than shipped, because a caller reading
+ * `profile.tooMany` as a sentence is worse than a clumsy one.
+ */
+export function known(status: number, reason: string, headers?: Record<string, string>): Response {
+  const message = DICTIONARY[DEFAULT_LANGUAGE][reason];
+  return json(
+    { error: message ?? reason, reason },
+    { status, ...(headers ? { headers } : {}) },
+  );
 }
 
 /**

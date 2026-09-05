@@ -16,13 +16,14 @@
  * sibling modules.
  */
 
-import { VERSION, json, problem, logFailure, storable } from "./http.ts";
+import { VERSION, json, known, problem, logFailure, storable } from "./http.ts";
 import { SteamError, SteamClient, type GameAchievements } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
 import { cardArt } from "./art.ts";
 import { languageFor, localise, pageCacheKey } from "./language.ts";
+import { DEFAULT_LANGUAGE, DICTIONARY } from "../public/i18n.js";
 import { parseProfile } from "./profile.ts";
 import { IgdbClient, accessToken, announceUnconfigured, credentials, usable } from "./igdb.ts";
 import { secured } from "./headers.ts";
@@ -62,16 +63,6 @@ const MAX_QUERY_LENGTH = 100;
  * cover an empty box, a mistyped id and a link from the wrong site alike, and
  * the reader would have to guess which of the three they had done.
  */
-const PROFILE_PROBLEMS: Record<string, string> = {
-  empty: "Paste your Steam profile link, or your SteamID64.",
-  "too long": "That is longer than any Steam profile link.",
-  "wrong length for an id": "A SteamID64 is exactly 17 digits.",
-  "unrecognised link": "That link is not a Steam profile. It should start with steamcommunity.com.",
-  "not an id": "A /profiles/ link should end in a 17-digit SteamID64.",
-  unreadable: "That link could not be read. Try copying it again from your browser.",
-  default: "That is not a Steam profile link, a SteamID64, or a custom profile name.",
-};
-
 /**
  * Bumped whenever retrieval or prompting changes.
  *
@@ -125,7 +116,7 @@ export default {
       response = await answer(request, url, env, ctx);
     } catch (error) {
       logFailure("unhandled failure", error);
-      response = problem(500, "Something went wrong handling that request.");
+      response = known(500, "error.500");
     }
     const answered = await secured(response, env, url.origin);
 
@@ -168,19 +159,21 @@ async function answer(
   }
 
   if (!READS.has(request.method)) {
-    return problem(405, "Only GET is supported.");
+    return known(405, "error.405");
   }
 
   try {
     return await route(request, url, env, ctx);
   } catch (error) {
     if (error instanceof SteamError) {
-      return problem(error.status, error.message, error.reason);
+      // A reason means the client can say it better than we can, in the
+      // reader's language. Without one, the message is all there is.
+      return error.reason ? known(error.status, error.reason) : problem(error.status, error.message);
     }
     // Nothing from an unexpected failure is echoed: it could quote a URL,
     // and one of those carries the API key.
     logFailure("unhandled failure", error);
-    return problem(500, "Something went wrong handling that request.");
+    return known(500, "error.500");
   }
 }
 
@@ -218,8 +211,12 @@ async function route(
       // The reason travels, because the panel shows it. "That is not a profile"
       // for an empty box and for a name Steam has never heard of would be two
       // different problems wearing one message.
-      const reason = parsed.reason in PROFILE_PROBLEMS ? parsed.reason : "default";
-      return problem(400, PROFILE_PROBLEMS[reason]!, `profile.${reason}`);
+      // The prose lives in the dictionary, once. This was a second copy of the
+      // same seven strings in TypeScript, and the client only ever displayed
+      // the dictionary's - so the two could disagree about what was wrong with
+      // someone's paste and nothing would have said so.
+      const key = `profile.${parsed.reason}`;
+      return known(400, key in DICTIONARY[DEFAULT_LANGUAGE] ? key : "profile.default");
     }
 
     // This route spends the Steam key, and a name Steam does not know cannot be
@@ -228,7 +225,7 @@ async function route(
     // profile is done once, and ten a minute is far above that and far below
     // what enumeration needs.
     if (!(await withinRate(request, env, "PROFILE"))) {
-      return problem(429, "Too many profile lookups. Wait a minute and try again.", "profile.tooMany");
+      return known(429, "profile.tooMany");
     }
 
     // A name maps to an id essentially forever, so this is worth caching hard.
@@ -246,7 +243,7 @@ async function route(
         // API key every time it is retried, and the rate limit above would be
         // carrying weight it does not need to.
         if (error instanceof SteamError && error.reason === "profile.unknown") {
-          return problem(404, error.message, error.reason, { "Cache-Control": "public, max-age=3600" });
+          return known(404, error.reason, { "Cache-Control": "public, max-age=3600" });
         }
         throw error;
       }
@@ -301,7 +298,7 @@ async function route(
     // reasoning as the profile route: caching protects the repeats, not the
     // walk, so the walk is limited.
     if (!(await withinRate(request, env, "PROFILE"))) {
-      return problem(429, "Too many lookups. Wait a minute and try again.", "profile.tooMany");
+      return known(429, "time.tooMany");
     }
 
     return cached(key(url, `/api/time/${time[1]}`, env), false, env, ctx, async () => {
@@ -372,7 +369,7 @@ async function route(
       // The window is a minute, so a minute is the honest answer, and a
       // throttle is about the caller rather than the resource - nothing should
       // keep it.
-      return problem(429, "Too many how-to lookups. Wait a minute and try again.", "howto.tooMany", {
+      return known(429, "howto.tooMany", {
         "Retry-After": "60",
         "Cache-Control": "no-store",
       });
@@ -398,7 +395,9 @@ async function route(
     );
   }
 
-  return problem(404, `No API route matches ${url.pathname}.`);
+  // Not `error.404`, which says the game has no achievements - a Spanish
+  // reader who mistyped an API path was told something about their game.
+  return known(404, "error.noRoute");
 }
 
 /**
@@ -613,7 +612,7 @@ async function gamePage(
     // this runs before the handler's own catch, so it would otherwise leave
     // the runtime to answer with an unlogged 1101.
     logFailure("game page shell unavailable", error);
-    return problem(500, "Something went wrong handling that request.");
+    return known(500, "error.500");
   }
 
   const response = new Response(described, {
