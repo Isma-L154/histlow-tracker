@@ -104,7 +104,7 @@ export default {
       response = await answer(request, url, env, ctx);
     } catch (error) {
       logFailure("unhandled failure", error);
-      response = problem(500, "Something went wrong handling that request.");
+      response = known(500, "error.500");
     }
     return secured(response, env, url.origin);
   },
@@ -141,21 +141,21 @@ async function answer(
   }
 
   if (request.method !== "GET") {
-    return problem(405, "Only GET is supported.");
+    return known(405, "error.405");
   }
 
   try {
     return await route(request, url, env, ctx);
   } catch (error) {
-      if (error instanceof SteamError) {
-        // A reason means the client can say it better than we can, in the
-        // reader's language. Without one, the message is all there is.
-        return error.reason ? known(error.status, error.reason) : problem(error.status, error.message);
-      }
+    if (error instanceof SteamError) {
+      // A reason means the client can say it better than we can, in the
+      // reader's language. Without one, the message is all there is.
+      return error.reason ? known(error.status, error.reason) : problem(error.status, error.message);
+    }
     // Nothing from an unexpected failure is echoed: it could quote a URL,
     // and one of those carries the API key.
     logFailure("unhandled failure", error);
-    return problem(500, "Something went wrong handling that request.");
+    return known(500, "error.500");
   }
 }
 
@@ -280,7 +280,7 @@ async function route(
     // reasoning as the profile route: caching protects the repeats, not the
     // walk, so the walk is limited.
     if (!(await withinRate(request, env, "PROFILE"))) {
-      return known(429, "profile.tooMany");
+      return known(429, "time.tooMany");
     }
 
     return cached(key(url, `/api/time/${time[1]}`, env), false, env, ctx, async () => {
@@ -377,7 +377,9 @@ async function route(
     );
   }
 
-  return problem(404, `No API route matches ${url.pathname}.`);
+  // Not `error.404`, which says the game has no achievements - a Spanish
+  // reader who mistyped an API path was told something about their game.
+  return known(404, "error.noRoute");
 }
 
 /**
@@ -592,7 +594,7 @@ async function gamePage(
     // this runs before the handler's own catch, so it would otherwise leave
     // the runtime to answer with an unlogged 1101.
     logFailure("game page shell unavailable", error);
-    return problem(500, "Something went wrong handling that request.");
+    return known(500, "error.500");
   }
 
   const response = new Response(described, {

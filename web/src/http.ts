@@ -31,10 +31,15 @@ export function json(body: unknown, init: ResponseInit = {}): Response {
  * credential and never repeat an upstream body verbatim.
  */
 export function problem(status: number, message: string, headers?: Record<string, string>): Response {
-  // Prose for any caller, and nothing the site's own client can translate. The
-  // client falls back to a table keyed on the status for these, which is why
-  // they are the ones with no better answer than their status: a 405, a route
-  // that matches nothing, a failure nobody can name.
+  // Prose for any caller, and nothing the site's own client can translate.
+  //
+  // An earlier version of this comment said the client falls back to a table
+  // keyed on the status, so these were the ones with no better answer than
+  // their status - and named a 405, an unmatched route and a 500 as examples.
+  // That table has no entry for 405 or 500, so all three reached the reader in
+  // English whatever language the page was in, and the unmatched route
+  // borrowed the 404 entry, which says the game has no achievements. All three
+  // have keys now, and what is left here is for callers outside the browser.
   //
   // `headers` exists for the one failure worth caching: a profile name Steam
   // has never heard of is a stable answer, and re-asking spends the API key.

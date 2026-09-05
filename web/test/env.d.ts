@@ -57,3 +57,8 @@ interface ImportMeta {
     options: { query: "?raw"; import: "default"; eager: true },
   ): Record<string, string>;
 }
+
+declare module "*.js?raw" {
+  const contents: string;
+  export default contents;
+}
