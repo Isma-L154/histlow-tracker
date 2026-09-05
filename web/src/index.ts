@@ -93,6 +93,18 @@ const FORMER_HOST = "cazalogros.cloudils.com";
 /** Where they go now. */
 const CANONICAL_HOST = "howtoachieve.cloudils.com";
 
+/**
+ * The methods that only read.
+ *
+ * HEAD belongs with GET everywhere, not because the specification says so but
+ * because the two disagreeing is a trap. `/game/<id>` matched GET alone, so a
+ * HEAD fell through to the asset runtime and described the generic shell -
+ * same URL, different title, different cover. It cost real time in #58, where
+ * `curl -I` reported the page as carrying the site's security policy while a
+ * GET showed it carrying none.
+ */
+const READS = new Set(["GET", "HEAD"]);
+
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -115,7 +127,13 @@ export default {
       logFailure("unhandled failure", error);
       response = problem(500, "Something went wrong handling that request.");
     }
-    return secured(response, env, url.origin);
+    const answered = await secured(response, env, url.origin);
+
+    // HTTP asks that a HEAD return the headers a GET would, and no body. The
+    // body is dropped here rather than left to the runtime: Cloudflare strips
+    // it and the test pool does not, and a difference between the two is how
+    // something passes locally and is wrong in production.
+    return request.method === "HEAD" ? new Response(null, answered) : answered;
   },
 } satisfies ExportedHandler<Env>;
 
@@ -136,7 +154,7 @@ async function answer(
   }
 
   const page = GAME_PAGE_ROUTE.exec(url.pathname);
-  if (page && request.method === "GET") {
+  if (page && READS.has(request.method)) {
     return gamePage(Number(page[1]), url, env, languageFor(request), ctx);
   }
 
@@ -149,7 +167,7 @@ async function answer(
     return translated(asset, languageFor(request));
   }
 
-  if (request.method !== "GET") {
+  if (!READS.has(request.method)) {
     return problem(405, "Only GET is supported.");
   }
 
