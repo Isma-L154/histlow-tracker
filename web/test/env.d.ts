@@ -39,3 +39,21 @@ declare module "*.html?raw" {
   const contents: string;
   export default contents;
 }
+
+/**
+ * `import.meta.glob`, which Vite provides and TypeScript does not know about.
+ *
+ * Declared rather than silenced at the call site, for the same reason as the
+ * `?raw` modules above: `tsc --noEmit` is a CI gate, and a `@ts-ignore` there
+ * would hide a real mistake in the same expression.
+ *
+ * Only the eager, raw form is declared, because that is the only one used -
+ * `prose.test.ts` enumerates the Worker's own modules so that adding one
+ * brings it under the checks without anybody remembering to.
+ */
+interface ImportMeta {
+  glob(
+    pattern: string,
+    options: { query: "?raw"; import: "default"; eager: true },
+  ): Record<string, string>;
+}
