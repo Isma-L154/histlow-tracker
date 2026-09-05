@@ -67,6 +67,25 @@ export class SteamError extends Error {
   }
 }
 
+/**
+ * Whether an error means Steam has nothing under that app id.
+ *
+ * The distinction this draws is what makes the answer cacheable. "That id has
+ * no achievements" is stable and will be just as true tomorrow, so re-asking
+ * spends the key for nothing; an outage is transient, and storing it would
+ * leave a real game answering "no achievements" for a day after Steam
+ * recovered. `upstreamStatus` is the only thing that separates them, and it
+ * stays 0 when the 404 is this code's own judgement rather than Steam's.
+ *
+ * A function rather than an inline check because two routes ask it and they
+ * were drifting: the page had the full test and the API route had none, which
+ * is exactly how the API route ended up paying for the same unknown id for
+ * ever.
+ */
+export function unknownGame(error: unknown): error is SteamError {
+  return error instanceof SteamError && error.status === 404 && error.upstreamStatus < 500;
+}
+
 const SEARCH_URL = "https://steamcommunity.com/actions/SearchApps/";
 const STORE_URL = "https://store.steampowered.com/api/appdetails";
 const API_BASE = "https://api.steampowered.com/ISteamUserStats";

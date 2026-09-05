@@ -80,6 +80,25 @@ export function parseProfile(input: string): Parsed {
   return { kind: "invalid", reason: "neither an id nor a name" };
 }
 
+/**
+ * The SteamID64 a request asks to be answered as, if any.
+ *
+ * Pure, and separate from the route, because it decides something the route
+ * cannot test: whether an answer can be shared. A request that names an id
+ * carries somebody's own unlocks, so it is answered outside the cache - which
+ * makes this the line between the path the cache defends and the path that has
+ * to be defended some other way.
+ *
+ * Takes the two values rather than the request and the environment so it stays
+ * a function of its inputs. The id is not looked up or trusted here beyond its
+ * shape: an id Steam does not know simply produces an answer with nothing
+ * unlocked, which is the same thing it produces for a real id with no progress.
+ */
+export function resolveSteamId(requested: string | null, fallback: string | undefined): string | null {
+  const candidate = requested ?? fallback ?? "";
+  return STEAM_ID64.test(candidate) ? candidate : null;
+}
+
 /** `decodeURIComponent` throws on a malformed escape; a bad paste is not a 500. */
 function decodeURIComponentSafely(value: string): string | null {
   try {

@@ -17,14 +17,14 @@
  */
 
 import { VERSION, json, known, problem, logFailure, storable } from "./http.ts";
-import { SteamError, SteamClient, type GameAchievements } from "./steam.ts";
+import { SteamError, SteamClient, unknownGame, type GameAchievements } from "./steam.ts";
 import { fetchGuideIds, fetchGuideIdsFor, fetchGuide, findPassages, type Guide } from "./guides.ts";
 import { explainAchievement } from "./howto.ts";
 import { describeGame } from "./preview.ts";
 import { cardArt } from "./art.ts";
 import { languageFor, localise, pageCacheKey } from "./language.ts";
 import { DEFAULT_LANGUAGE, DICTIONARY } from "../public/i18n.js";
-import { parseProfile } from "./profile.ts";
+import { parseProfile, resolveSteamId } from "./profile.ts";
 import { IgdbClient, accessToken, announceUnconfigured, credentials, usable } from "./igdb.ts";
 import { secured } from "./headers.ts";
 
@@ -400,10 +400,53 @@ async function route(
   const game = GAME_ROUTE.exec(url.pathname);
   if (game) {
     const appId = Number(game[1]);
-    const steamId = resolveSteamId(url, env);
+    const steamId = resolveSteamId(url.searchParams.get("steamid"), env.DEFAULT_STEAM_ID);
+
+    // The cache was this route's only defence, and the caller chose whether it
+    // applied. A personalised answer carries somebody's unlocks, so `cached`
+    // neither reads nor writes it - correct, and it leaves nothing behind:
+    // `?steamid=` is a parameter that switches the cache off, on games that are
+    // already known, for four Steam calls a time and no limit. Measured before
+    // this existed: with the parameter, three requests for the same known id
+    // were flat at 0.40s, 0.33s, 0.35s under `private, no-store`; without it
+    // they stepped down 0.68s, 0.25s, 0.24s.
+    //
+    // So the limit sits on the uncacheable path only. A reader browsing games
+    // never sends the parameter, and one who configured a profile sends it a
+    // few times a minute at most - far below ten, and far below what walking
+    // the catalogue needs. Checked before Steam, so a flooder costs the key
+    // nothing.
+    if (steamId !== null && !(await withinRate(request, env, "PROFILE"))) {
+      // Says when to come back, like the how-to route and unlike the two older
+      // profile-limited routes, which answer a bare 429. A throttle is about
+      // the caller and not the resource, so nothing may keep it: cached, it
+      // would go on refusing somebody long after their minute was up.
+      return known(429, "profile.tooMany", {
+        "Retry-After": "60",
+        "Cache-Control": "no-store",
+      });
+    }
+
     return cached(key(url, `/api/game/${appId}`, env), steamId !== null, env, ctx, async () => {
-      const payload = await client(env).gameAchievements(appId, steamId);
-      return json(payload);
+      try {
+        return json(await client(env).gameAchievements(appId, steamId));
+      } catch (error) {
+        // "Steam has nothing under that id" is a stable answer, and throwing it
+        // left it uncached: the throw escapes `cached` before it can store
+        // anything, so every repeat of the same wrong id paid the three calls
+        // again. The page route has cached this all along, which is why the
+        // hole was invisible - the same id was cheap through `/game/` and free
+        // to walk through `/api/game/`.
+        //
+        // The message is unchanged, so the client reads exactly what it read
+        // before; only its lifetime is new.
+        if (unknownGame(error)) {
+          return problem(404, error.message, {
+            "Cache-Control": `public, max-age=${env.CACHE_SECONDS}`,
+          });
+        }
+        throw error;
+      }
     });
   }
 
@@ -625,6 +668,20 @@ async function gamePage(
   //
   // This also removes a per-request Steam call that the old header-only caching
   // only avoided when a shared cache happened to cooperate.
+  //
+  // Deliberately not rate limited, unlike `/api/game/`. The two differ in the
+  // one way that matters: every answer here is cacheable, including the one for
+  // an id Steam has never heard of, because the `cache.put` below is
+  // unconditional and runs just as happily when `game` is null. So an
+  // enumerator pays for each id once per colo per day and a repeat costs
+  // nothing, which is the whole payoff of walking the range removed without a
+  // limit. Measured: three requests for an unknown id stepped down 0.85s,
+  // 0.36s, 0.40s.
+  //
+  // A per-IP limit here would also be the wrong instrument. This is a page, not
+  // an action somebody performs once, and readers arrive behind shared
+  // addresses - a page that sometimes refuses to load is a worse failure than a
+  // quota that recovers tomorrow.
   const cache = caches.default;
   const hit = await cache.match(pageCacheKey(appId, language));
   if (hit) return hit;
@@ -638,8 +695,7 @@ async function gamePage(
     // key is the operator's problem, and this is the only place that would
     // ever say so: the reader gets an error in their own language from the
     // client, and a preview scraper reports nothing to anybody.
-    const unknownGame = error instanceof SteamError && error.upstreamStatus < 500 && error.status === 404;
-    if (!unknownGame) logFailure("game page lookup failed", error);
+    if (!unknownGame(error)) logFailure("game page lookup failed", error);
   }
 
   let described: string;
@@ -806,19 +862,6 @@ function client(env: Env): SteamClient {
     );
   }
   return new SteamClient(key);
-}
-
-/**
- * A 17-digit id, or nothing.
- *
- * The caller may supply one; otherwise the deployment's own is used if it has
- * been configured. Validating the shape here keeps an arbitrary string from
- * being forwarded into an upstream query.
- */
-function resolveSteamId(url: URL, env: Env): string | null {
-  const requested = url.searchParams.get("steamid");
-  const candidate = requested ?? env.DEFAULT_STEAM_ID ?? "";
-  return /^\d{17}$/.test(candidate) ? candidate : null;
 }
 
 /**
