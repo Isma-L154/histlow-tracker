@@ -49,8 +49,8 @@ originals.
 ```
 Browser
    |
-   |  /styles.css, /app.js, images  -> served by Cloudflare's asset runtime.
-   |                                   Worker code does not execute at all.
+   |  /styles.css, /app.js, images,  -> served by Cloudflare's asset runtime.
+   |  robots.txt, sitemap.xml           Worker code does not execute at all.
    |  everything else               -> the Worker
    v
 Cloudflare Worker
@@ -119,8 +119,12 @@ and a working site are not the same thing.
 ```
 web/
   src/                 The Worker
-    index.ts           Routes. The only module the runtime loads, and so the
-                       only one that may export anything - just its handler.
+    index.ts           Routes, and the Worker's entrypoint. The runtime reads
+                       every named export here as a handler or a binding, so
+                       this file exports only its default handler and helpers
+                       go in the siblings. A named export breaks the Worker at
+                       startup, and `wrangler deploy --dry-run` does not catch
+                       it.
     steam.ts           Steam Web API and the store, with timeouts and redaction
     guides.ts          Finding and reading community guides
     howto.ts           Turning guide passages into steps
@@ -180,26 +184,50 @@ Layering is one-directional: `domain` depends on nothing, adapters depend on `do
 ### Running it locally
 
 ```bash
-python -m pytest                          # unit tests, no network
+python -m venv .venv && . .venv/bin/activate   # .venv\Scriptsctivate on Windows
+python -m pip install -e ".[dev]"              # the package, plus pytest and ruff
+
+python -m pytest                               # unit tests, no network
 python -m ruff check .
-cp .env.example .env                      # then fill it in
-python -m histlow --dry-run --force       # a full run that publishes nothing
 ```
 
-On Windows, set `PYTHONUTF8=1` first.
+The editable install is not optional: `histlow` is a `src/` layout package, so
+it is not importable without it, and `pytest` and `ruff` are extras rather than
+dependencies.
+
+To do a real run:
+
+```bash
+cp .env.example .env                      # then fill it in
+python -m histlow --dry-run --force       # the full pipeline, publishing nothing
+```
+
+On Windows, set `PYTHONUTF8=1` first. [`docs/SETUP.md`](docs/SETUP.md) walks
+through the whole thing end to end, including the iOS Shortcut and
+[`scripts/bootstrap_gist.py`](scripts/bootstrap_gist.py), which creates the
+secret gist that `GIST_ID` refers to.
 
 ### Configuration
 
-Secrets go in `.env` locally and in GitHub Actions secrets in CI — never in the
-repository. [`.env.example`](.env.example) documents each one, and
-[`config.json`](config.json) holds everything non-secret: how often to run, what counts
-as an alert, and the wording shown on the phone.
+Three places, and which is which matters.
+
+**[`.env`](.env.example)** locally, GitHub Actions secrets in CI — never the
+repository. Not all of it is secret; it is simply per-installation.
 
 | | |
 |---|---|
-| `STEAM_ID64` | Your 17-digit id. The wishlist must be public, or Steam returns an empty payload with HTTP 200 and the run finds nothing. |
-| `ITAD_API_KEY` | [isthereanydeal.com/apps/my](https://isthereanydeal.com/apps/my/) |
-| `GIST_ID`, `GIST_TOKEN` | A secret gist as the payload drop. The token carries the `gist` scope and nothing else, so the only credential the workflow can leak is scoped to one gist by construction. |
+| `STEAM_ID64` | Your 17-digit id. Not a secret, but yours. The wishlist must be public, or Steam returns an empty payload with HTTP 200 and the run finds nothing. |
+| `ITAD_API_KEY` | Secret. [isthereanydeal.com/apps/my](https://isthereanydeal.com/apps/my/) |
+| `GIST_ID`, `GIST_TOKEN` | Secret. A gist as the payload drop; the token carries the `gist` scope and nothing else, so the only credential the workflow can leak is scoped to one gist by construction. |
+| `STORE_COUNTRY` | **Change this.** The storefront you buy from, so prices are in the currency you will really pay. |
+| `COMPARISON_COUNTRY` | **Probably change this.** ITAD has no price history for every currency Steam sells in — it reports Costa Rica and Mexico in USD — and comparing a colón price against a dollar low is meaningless. So the decision is made here and displayed in `STORE_COUNTRY`. `.env.example` explains when the two can be the same. |
+
+**[`config.json`](config.json)** — behaviour, non-secret and safe to diff: what
+counts as an alert, how long one is repeated, and the wording shown on the phone.
+
+**[`.github/workflows/tracker.yml`](.github/workflows/tracker.yml)** — when it
+runs. The cron lives there; `config.json`'s `min_interval_hours` only stops the
+same work being done twice when a firing is duplicated or delayed.
 
 ### Structure
 
@@ -207,16 +235,22 @@ as an alert, and the wording shown on the phone.
 src/histlow/
   domain.py        Frozen dataclasses. No I/O.
   config.py        Environment and config.json, loaded and validated
+  dotenv.py        Reading .env, byte order mark and all
   net.py           HTTP: timeouts, retries, backoff, redaction
   steam.py         Wishlist and batched store prices
   itad.py          App-id resolution cache and per-store historical lows
+  cache.py         The app-id resolutions, kept between runs
+  storage.py       Reading and writing the files under var/
   state.py         Alert de-duplication across runs
   selector.py      Pure decision logic: which deals qualify
+  payload.py       The shape the phone reads
   publisher.py     Payload rendering and gist upload
   scheduling.py    Guard against doing the same work twice
+  logging_setup.py Logging that never prints a secret at any level
   pipeline.py      Orchestration
 tests/             Unit tests; no network access required
-docs/              iOS Shortcut setup and an operations runbook
+docs/SETUP.md      End-to-end setup, including the iOS Shortcut
+scripts/           bootstrap_gist.py, which creates the payload gist
 ```
 
 ---
