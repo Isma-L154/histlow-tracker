@@ -90,7 +90,10 @@ describe("HEAD", () => {
     // against no header at all, measured in production. RFC 9110 asks for the
     // length the GET would send, and this is the same complaint the route was
     // fixed for - `curl -I` reporting something the GET does not.
-    for (const path of ["/api/health", "/privacy"]) {
+    // `/game/<id>` included deliberately: it is the biggest body and the
+    // route this whole feature exists for, and adding `content-length` to
+    // VOLATILE removed it from every other comparison.
+    for (const path of ["/api/health", "/privacy", "/game/367520"]) {
       const get = await ask("GET", path);
       const head = await ask("HEAD", path);
 
@@ -163,8 +166,33 @@ describe("HEAD", () => {
   });
 
   it("still refuses a method that changes things", async () => {
+    // Every path, not only `/api/`. The guard used to sit below the asset
+    // branch, so a write to a static path was refused by the asset runtime
+    // rather than by this Worker - and rebuilding the request for it took
+    // that job away. `POST /privacy` went from 405 to 200 carrying the whole
+    // page, and this loop could not see it because it only tried one path.
     for (const method of ["POST", "PUT", "DELETE", "PATCH"]) {
-      expect((await ask(method, "/api/health")).status, method).toBe(405);
+      for (const path of ["/api/health", "/privacy", "/game/367520", "/nothing-here"]) {
+        const response = await ask(method, path);
+        expect(response.status, `${method} ${path}`).toBe(405);
+        expect((await response.text()).length, `${method} ${path} answered with a body`).toBeLessThan(200);
+      }
+    }
+  });
+
+  it("does not swallow the asset runtime's canonical redirects", async () => {
+    // A fresh Request defaults to following redirects, where the incoming one
+    // says `manual`. The asset runtime answers these with a 307 to the
+    // canonical form; followed, all three became a 200 serving identical
+    // bytes - three-way duplicate content on a site that keeps a second
+    // hostname alive purely to avoid unredirected duplicates.
+    for (const [path, canonical] of [
+      ["/privacy.html", "/privacy"],
+      ["/index.html", "/"],
+    ] as const) {
+      const response = await ask("GET", path);
+      expect(response.status, `${path} should redirect`).toBe(307);
+      expect(response.headers.get("Location"), path).toBe(canonical);
     }
   });
 });

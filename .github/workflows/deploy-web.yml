@@ -209,6 +209,16 @@ jobs:
               exit 1
             fi
 
+            # And a 2xx, because agreement is not health. A site answering 502 or a
+            # Worker throwing 1101 on every request returns a status line and a
+            # content-type to both methods, so the comparison succeeds and this would
+            # have reported the whole site agreeing while none of it worked.
+            case "$got" in
+              *' 200'*) ;;
+              *) echo "::error::$path is not answering 200:"; printf '%s
+          ' "$got" | sed 's/^/    /'; exit 1 ;;
+            esac
+
             if difference="$(diff <(printf '%s\n' "$got") <(printf '%s\n' "$head"))"; then
               echo "$path agrees"
             else
