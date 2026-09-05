@@ -43,8 +43,24 @@ const EXPIRY_MARGIN_SECONDS = 300;
  */
 const EXTERNAL_CATEGORY_STEAM = 1;
 
-/** IGDB's platform id for PC (Microsoft Windows). */
-const PC_PLATFORM = 6;
+/**
+ * The platforms this section covers, matched by name rather than by id.
+ *
+ * The ids are not written down here on purpose. `PC_PLATFORM = 6` was, and it
+ * was the smaller half of why the section listed games nobody was waiting for:
+ * both queries asked for PC and nothing else, so a PlayStation or Xbox title
+ * could not appear however wanted it was. Adding two more numbers would have
+ * fixed the symptom and kept the habit - and an id that silently starts
+ * meaning another platform is the one failure this module already goes out of
+ * its way to avoid, which is why the Steam source id and the date format are
+ * both looked up by name.
+ *
+ * Patterns rather than exact strings, for the same reason `exactDateFormat`
+ * matches a shape instead of the literal "YYYYMMMMDD": a console gains a
+ * revision and its name grows a suffix.
+ */
+const PLATFORM_IS_PC = /microsoft windows/i;
+const PLATFORM_IS_CONSOLE = /^(playstation 5|xbox series)/i;
 
 /** Where IGDB serves cover art. Also needs an entry in the page's CSP. */
 const IMAGE_BASE = "https://images.igdb.com/igdb/image/upload";
@@ -224,25 +240,52 @@ export class IgdbClient {
       };
     }
 
+    const platforms = await this.majorPlatforms();
+    // Nothing rather than everything, again. Without the console ids there is
+    // no way to tell a PC-only indie from a game people are waiting for, and
+    // serving the old ranking while believing it was filtered is worse than
+    // serving nothing.
+    if (platforms.consoles.length === 0) {
+      return {
+        releases: [],
+        stoppedAt:
+          `no console platform among ${platforms.total}` +
+          ` (matched [${platforms.saw.join(", ") || "nothing"}])`,
+      };
+    }
+    const wanted = platforms.all.join(",");
+
     const seconds = Math.floor(now / 1000);
     const candidates = await this.query<{
       id?: number;
       name?: string;
       cover?: { image_id?: string };
+      platforms?: unknown;
     }>(
       "games",
-      `fields id, name, cover.image_id;` +
-        ` where first_release_date > ${seconds} & platforms = ${PC_PLATFORM} & hypes != null;` +
-        ` sort hypes desc; limit ${Math.min(100, limit * 5)};`,
+      `fields id, name, cover.image_id, platforms;` +
+        ` where first_release_date > ${seconds} & platforms = (${wanted}) & hypes != null;` +
+        // Over-fetches far harder than it used to. Two things thin the list
+        // now rather than one: a candidate can lack an exact date, as before,
+        // and it can also turn out to reach only PC. Asking for five times the
+        // limit left the section short.
+        ` sort hypes desc; limit ${Math.min(500, Math.max(50, limit * 25))};`,
     );
 
     // Keyed by id rather than by name: two IGDB entries can share a title - a
     // demo and its game, a remaster - and collapsing those loses the wrong one.
     const games = new Map<number, { name: string; coverUrl: string | null }>();
+    const consoles = new Set(platforms.consoles);
     for (const row of candidates) {
       if (row === null || typeof row !== "object") continue;
       const id = identifier(row.id);
       if (id === null || !row.name) continue;
+      // The filter that changes what this section is. Applied here rather than
+      // in the query because Apicalypse can ask whether a game touches any of
+      // a set of platforms, and cannot ask whether it touches a console while
+      // PC is in the same set - which it has to be, or a multiplatform release
+      // loses its PC date.
+      if (!reachesConsole(row.platforms, consoles)) continue;
       const imageId = row.cover?.image_id;
       games.set(id, {
         name: row.name,
@@ -256,7 +299,7 @@ export class IgdbClient {
     const dates = await this.query<{ game?: number; date?: number; date_format?: number }>(
       "release_dates",
       `fields game, date, date_format;` +
-        ` where game = (${[...games.keys()].join(",")}) & platform = ${PC_PLATFORM}` +
+        ` where game = (${[...games.keys()].join(",")}) & platform = (${wanted})` +
         ` & date > ${seconds} & date_format = ${exact};` +
         ` sort date asc; limit 200;`,
     );
@@ -307,6 +350,58 @@ export class IgdbClient {
    * When nothing matches, the formats that were offered are reported, so the
    * next person reads the answer instead of guessing at it as I did.
    */
+  /**
+   * The ids behind the platform names, looked up rather than assumed.
+   *
+   * The whole table is fetched and matched in memory, like `exactDateFormat`,
+   * and for the same reason: filtering by name in the query means trusting a
+   * string comparison that has already been wrong here once. What matched
+   * travels back so a rename upstream is readable in the logs instead of
+   * arriving as an empty section nobody can explain.
+   */
+  private async majorPlatforms(): Promise<{
+    all: number[];
+    consoles: number[];
+    saw: string[];
+    total: number;
+  }> {
+    try {
+      const rows = await this.query<{ id?: number; name?: string }>(
+        "platforms",
+        `fields id, name; limit 500;`,
+      );
+
+      const saw: string[] = [];
+      const consoles: number[] = [];
+      let pc: number | null = null;
+      for (const row of rows) {
+        if (row === null || typeof row !== "object" || typeof row.name !== "string") continue;
+        const id = identifier(row.id);
+        if (id === null) continue;
+        const name = row.name.trim();
+        if (pc === null && PLATFORM_IS_PC.test(name)) {
+          pc = id;
+          saw.push(name);
+        } else if (PLATFORM_IS_CONSOLE.test(name)) {
+          consoles.push(id);
+          saw.push(name);
+        }
+      }
+
+      // PC still belongs in the queries - a multiplatform game has to be
+      // findable and datable there too. It just no longer qualifies a game on
+      // its own, which is what `consoles` decides.
+      return {
+        all: pc === null ? consoles : [pc, ...consoles],
+        consoles,
+        saw,
+        total: rows.length,
+      };
+    } catch {
+      return { all: [], consoles: [], saw: [], total: 0 };
+    }
+  }
+
   private async exactDateFormat(): Promise<{ id: number | null; saw: string[] }> {
     try {
       const rows = await this.query<{ id?: number; format?: string }>(
@@ -432,6 +527,29 @@ export async function accessToken(creds: IgdbCredentials, now: number): Promise<
 /** Whether a cached token is still worth sending. */
 export function usable(token: Token, now: number): boolean {
   return token.value.length > 0 && token.expiresAt > now;
+}
+
+/**
+ * Whether a game's platform list reaches at least one console.
+ *
+ * The rule the "most anticipated" section now runs on, and the reason it is
+ * this rule: requiring two platforms of three reads like a stricter filter and
+ * throws away exactly the games the section is for, because a first-party
+ * exclusive is as anticipated as anything and ships on one. Requiring a
+ * console removes the PC-only indies that made the list wrong and keeps the
+ * exclusives.
+ *
+ * An absent or empty list is not a console. IGDB expands `platforms` to ids or
+ * to objects depending on the query, so both are read - a shape that changed
+ * under this once already, in `external_game_sources`.
+ */
+export function reachesConsole(platforms: unknown, consoles: Set<number>): boolean {
+  if (!Array.isArray(platforms)) return false;
+  return platforms.some((entry) => {
+    const raw = entry !== null && typeof entry === "object" ? (entry as { id?: unknown }).id : entry;
+    const id = identifier(raw);
+    return id !== null && consoles.has(id);
+  });
 }
 
 /** A finite number above zero, or null. IGDB uses both 0 and absence for "no". */

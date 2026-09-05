@@ -214,15 +214,56 @@ describe("upcoming", () => {
   const NOW = 1_800_000_000_000;
   const EXACT = 0;
 
-  /** IGDB's three answers: the format id, the ranked games, then their dates. */
-  function stubUpcoming(games: unknown[], dates: unknown[], formatId: unknown = EXACT) {
-    return stub((url) =>
-      url.endsWith("/date_formats")
-        ? json(formatId === null ? [] : [{ id: formatId, format: "YYYYMMMMDD" }])
-        : url.endsWith("/games")
-          ? json(games)
-          : json(dates),
+  /**
+   * Deliberately not the real ids. Nothing may hardcode 6, 167 or 169: the
+   * ids are resolved by name, and a test that used the real numbers would pass
+   * just as well against code that had them baked in.
+   */
+  const PC = 901;
+  const PS5 = 902;
+  const XBOX = 903;
+
+  const PLATFORM_ROWS = [
+    { id: PC, name: "PC (Microsoft Windows)" },
+    { id: PS5, name: "PlayStation 5" },
+    { id: XBOX, name: "Xbox Series X|S" },
+    { id: 904, name: "Nintendo Switch 2" },
+  ];
+
+  /** IGDB's four answers: platforms, the format id, the ranked games, their dates. */
+  function stubUpcoming(
+    games: unknown[],
+    dates: unknown[],
+    formatId: unknown = EXACT,
+    platformRows: unknown[] = PLATFORM_ROWS,
+  ) {
+    // A game with no `platforms` of its own reaches a console, so the tests
+    // about ranking and dates stay about ranking and dates. One that says
+    // which platforms it has keeps them, which is what the filter tests need.
+    const withPlatforms = games.map((game) =>
+      game !== null && typeof game === "object" && !("platforms" in game)
+        ? { ...game, platforms: [PS5] }
+        : game,
     );
+    return stub((url) =>
+      url.endsWith("/platforms")
+        ? json(platformRows)
+        : url.endsWith("/platforms")
+          ? json([{ id: 902, name: "PlayStation 5" }])
+          : url.endsWith("/date_formats")
+          ? json(formatId === null ? [] : [{ id: formatId, format: "YYYYMMMMDD" }])
+          : url.endsWith("/games")
+            ? json(withPlatforms)
+            : json(dates),
+    );
+  }
+
+  /** The request body sent to one endpoint, so a test does not count calls. */
+  function bodyFor(calls: Array<{ url: string }>, endpoint: string): string {
+    const call = calls.find((c) => c.url.endsWith(endpoint)) as
+      | { init?: RequestInit }
+      | undefined;
+    return String(call?.init?.body ?? "");
   }
 
   it("ranks across all of IGDB, not within a window of dates", async () => {
@@ -233,10 +274,9 @@ describe("upcoming", () => {
     const calls = stubUpcoming([{ id: 1, name: "Wanted" }], [{ game: 1, date: 999, date_format: EXACT }]);
     await new IgdbClient("id", "tok").upcoming(6, NOW);
 
-    const games = String(calls[1]!.init!.body);
+    const games = bodyFor(calls, "/games");
     expect(games).toContain("sort hypes desc");
     expect(games).toContain(`first_release_date > ${Math.floor(NOW / 1000)}`);
-    expect(games).toContain("platforms = 6");
   });
 
   it("keeps the order IGDB ranked them in", async () => {
@@ -269,7 +309,7 @@ describe("upcoming", () => {
     // like a real date. The filter is in the query rather than applied after.
     const calls = stubUpcoming([{ id: 1, name: "x" }], []);
     await new IgdbClient("id", "tok").upcoming(6, NOW);
-    expect(String(calls[2]!.init!.body)).toContain(`date_format = ${EXACT}`);
+    expect(bodyFor(calls, "/release_dates")).toContain(`date_format = ${EXACT}`);
   });
 
   it("shows nothing at all if the exact format cannot be resolved", async () => {
@@ -355,7 +395,127 @@ describe("upcoming", () => {
   it("does not ask IGDB for dates when no game qualified", async () => {
     const calls = stubUpcoming([], []);
     expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).releases).toEqual([]);
-    expect(calls, "asked for dates for nothing").toHaveLength(2);
+    // Named rather than counted. This asserted a total of two calls, which
+    // said "no dates were asked for" only as long as nothing else was ever
+    // looked up - and resolving the platform ids by name made it three.
+    expect(
+      calls.filter((call) => call.url.endsWith("/release_dates")),
+      "asked for dates for nothing",
+    ).toEqual([]);
+  });
+});
+
+describe("upcoming reaches consoles, and drops PC-only games", () => {
+  const NOW = 1_800_000_000_000;
+  const EXACT = 0;
+  const PC = 901;
+  const PS5 = 902;
+  const XBOX = 903;
+
+  const PLATFORM_ROWS = [
+    { id: PC, name: "PC (Microsoft Windows)" },
+    { id: PS5, name: "PlayStation 5" },
+    { id: XBOX, name: "Xbox Series X|S" },
+  ];
+
+  function stubWith(games: unknown[], platformRows: unknown[] = PLATFORM_ROWS) {
+    const dates = (games as Array<{ id: number }>).map((game) => ({
+      game: game.id,
+      date: 100,
+      date_format: EXACT,
+    }));
+    return stub((url) =>
+      url.endsWith("/platforms")
+        ? json(platformRows)
+        : url.endsWith("/platforms")
+          ? json([{ id: 902, name: "PlayStation 5" }])
+          : url.endsWith("/date_formats")
+          ? json([{ id: EXACT, format: "YYYYMMMMDD" }])
+          : url.endsWith("/games")
+            ? json(games)
+            : json(dates),
+    );
+  }
+
+  async function names(): Promise<string[]> {
+    const lookup = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    return lookup.releases.map((release) => release.name);
+  }
+
+  it("drops a game that only reaches PC", async () => {
+    // The complaint this fixes: five of the six shown were PC-first indies,
+    // because both queries asked for PC and nothing else.
+    stubWith([{ id: 1, name: "PC-only indie", platforms: [PC] }]);
+    expect(await names()).toEqual([]);
+  });
+
+  it("keeps a PlayStation exclusive", async () => {
+    // Why the rule is "reaches a console" and not "reaches two platforms":
+    // a first-party exclusive is as anticipated as anything and ships on one.
+    stubWith([{ id: 1, name: "Sony exclusive", platforms: [PS5] }]);
+    expect(await names()).toEqual(["Sony exclusive"]);
+  });
+
+  it("keeps an Xbox exclusive", async () => {
+    stubWith([{ id: 1, name: "Xbox exclusive", platforms: [XBOX] }]);
+    expect(await names()).toEqual(["Xbox exclusive"]);
+  });
+
+  it("keeps a game that reaches PC and a console", async () => {
+    stubWith([{ id: 1, name: "Multiplatform AAA", platforms: [PC, PS5, XBOX] }]);
+    expect(await names()).toEqual(["Multiplatform AAA"]);
+  });
+
+  it("drops a game that names no platform at all", async () => {
+    // Absence is not proof it reaches a console, and offering it would put the
+    // guess back in by another door.
+    stubWith([{ id: 1, name: "Unknown platforms", platforms: [] }]);
+    expect(await names()).toEqual([]);
+  });
+
+  it("keeps the ranked order across the ones that survive", async () => {
+    stubWith([
+      { id: 1, name: "Most wanted", platforms: [PS5] },
+      { id: 2, name: "PC only", platforms: [PC] },
+      { id: 3, name: "Less wanted", platforms: [XBOX] },
+    ]);
+    expect(await names()).toEqual(["Most wanted", "Less wanted"]);
+  });
+
+  it("asks IGDB for the consoles as well as PC", async () => {
+    const calls = stubWith([{ id: 1, name: "x", platforms: [PS5] }]);
+    await new IgdbClient("id", "tok").upcoming(6, NOW);
+    for (const endpoint of ["/games", "/release_dates"]) {
+      const body = String(
+        (calls.find((c) => c.url.endsWith(endpoint)) as { init?: RequestInit })?.init?.body ?? "",
+      );
+      expect(body).toContain(String(PS5));
+      expect(body).toContain(String(XBOX));
+    }
+  });
+
+  it("resolves the platform ids by name rather than hardcoding them", async () => {
+    // The ids here are invented. If anything in the client carries IGDB's real
+    // 6, 167 or 169, this fails - which is the only way to prove a constant is
+    // not hiding somewhere, the same reason the Steam source id is looked up.
+    const calls = stubWith([{ id: 1, name: "x", platforms: [PS5] }]);
+    await new IgdbClient("id", "tok").upcoming(6, NOW);
+    const games = String(
+      (calls.find((c) => c.url.endsWith("/games")) as { init?: RequestInit })?.init?.body ?? "",
+    );
+    // Guarded, because the assertion below passes against an empty string and
+    // this test did exactly that until the client was actually called.
+    expect(games).not.toEqual("");
+    expect(games).not.toMatch(/\b(6|167|169)\b/);
+  });
+
+  it("offers nothing, and says so, when no console platform resolves", async () => {
+    // A rename upstream must hide the section rather than quietly serve a list
+    // ranked by the wrong thing.
+    stubWith([{ id: 1, name: "x", platforms: [PS5] }], [{ id: PC, name: "PC (Microsoft Windows)" }]);
+    const lookup = await new IgdbClient("id", "tok").upcoming(6, NOW);
+    expect(lookup.releases).toEqual([]);
+    expect(lookup.stoppedAt).toMatch(/console/i);
   });
 });
 
@@ -365,13 +525,15 @@ describe("upcoming says where it stopped", () => {
   it.each([
     ["no date format", [], [], null, /no full-date format/],
     ["no candidate games", [], [], 0, /no candidate games/],
-    ["candidates but no exact dates ahead", [{ id: 1, name: "x" }], [], 0, /none exact and ahead/],
+    ["candidates but no exact dates ahead", [{ id: 1, name: "x", platforms: [902] }], [], 0, /none exact and ahead/],
   ])("reports %s", async (_name, games, dates, formatId, pattern) => {
     // Three stages come up empty and used to report the same nothing. That is
     // what made the completion time undiagnosable in #69, and this shipped
     // beside it with the same gap.
     stub((url) =>
-      url.endsWith("/date_formats")
+      url.endsWith("/platforms")
+        ? json([{ id: 902, name: "PlayStation 5" }])
+        : url.endsWith("/date_formats")
         ? json(formatId === null ? [] : [{ id: formatId, format: "YYYYMMMMDD" }])
         : url.endsWith("/games")
           ? json(games)
@@ -384,10 +546,12 @@ describe("upcoming says where it stopped", () => {
 
   it("says nothing when it found something", () => {
     return stub((url) =>
-      url.endsWith("/date_formats")
+      url.endsWith("/platforms")
+        ? json([{ id: 902, name: "PlayStation 5" }])
+        : url.endsWith("/date_formats")
         ? json([{ id: 0, format: "YYYYMMMMDD" }])
         : url.endsWith("/games")
-          ? json([{ id: 1, name: "Real" }])
+          ? json([{ id: 1, name: "Real", platforms: [902] }])
           : json([{ game: 1, date: 100, date_format: 0 }]),
     ) && new IgdbClient("id", "tok").upcoming(6, NOW).then((lookup) => {
       expect(lookup.stoppedAt).toBeNull();
@@ -405,7 +569,9 @@ describe("resolving the exact date format", () => {
     // comparison was wrong. Reading the table and matching in memory cannot be
     // wrong about a string.
     stub((url) =>
-      url.endsWith("/date_formats")
+      url.endsWith("/platforms")
+        ? json([{ id: 902, name: "PlayStation 5" }])
+        : url.endsWith("/date_formats")
         ? json([
             { id: 2, format: "YYYY" },
             { id: 5, format: "YYYYQ4" },
@@ -413,7 +579,7 @@ describe("resolving the exact date format", () => {
             { id: 7, format: "TBD" },
           ])
         : url.endsWith("/games")
-          ? json([{ id: 1, name: "Real" }])
+          ? json([{ id: 1, name: "Real", platforms: [902] }])
           : json([{ game: 1, date: 100, date_format: 9 }]),
     );
     const lookup = await new IgdbClient("id", "tok").upcoming(6, NOW);
@@ -423,7 +589,9 @@ describe("resolving the exact date format", () => {
   it("reports the formats it was offered when none is a full date", async () => {
     // So the next attempt reads the answer rather than guessing at a string.
     stub((url) =>
-      url.endsWith("/date_formats")
+      url.endsWith("/platforms")
+        ? json([{ id: 902, name: "PlayStation 5" }])
+        : url.endsWith("/date_formats")
         ? json([{ id: 2, format: "YYYY" }, { id: 5, format: "YYYYQ4" }])
         : json([]),
     );
@@ -433,7 +601,13 @@ describe("resolving the exact date format", () => {
   });
 
   it("does not mistake a quarter for a full date", async () => {
-    stub((url) => (url.endsWith("/date_formats") ? json([{ id: 5, format: "YYYYQ4" }]) : json([])));
+    stub((url) =>
+      url.endsWith("/platforms")
+        ? json([{ id: 902, name: "PlayStation 5" }])
+        : url.endsWith("/date_formats")
+          ? json([{ id: 5, format: "YYYYQ4" }])
+          : json([]),
+    );
     expect((await new IgdbClient("id", "tok").upcoming(6, NOW)).releases).toEqual([]);
   });
 });
