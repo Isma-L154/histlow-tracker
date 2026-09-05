@@ -27,7 +27,28 @@ async function ask(method: string, path: string): Promise<Response> {
 }
 
 /** Headers that may legitimately differ between two responses to one URL. */
-const VOLATILE = new Set(["date", "age", "cf-cache-status"]);
+const VOLATILE = new Set([
+  "date",
+  "age",
+  "cf-cache-status",
+  // Only in this pool. A `Response` object carries no `content-length` entry -
+  // the runtime synthesises one when it serialises - so the GET side has none
+  // to compare while the HEAD side sets it deliberately. The size is asserted
+  // on its own below instead.
+  "content-length",
+]);
+
+/**
+ * What a GET of this response would report as its size.
+ *
+ * A `Response` object built in the Worker carries no `content-length` entry -
+ * the runtime synthesises one when it serialises. So the header comparison
+ * below cannot see the one thing that actually differed after the first
+ * attempt at this, and the size has to be measured on the GET side instead.
+ */
+async function size(response: Response): Promise<number> {
+  return (await response.clone().arrayBuffer()).byteLength;
+}
 
 function comparable(response: Response): Record<string, string> {
   const out: Record<string, string> = {};
@@ -64,6 +85,41 @@ describe("HEAD", () => {
     expect(await head.text()).toBe("");
   });
 
+  it("still says how big the body would have been", async () => {
+    // Dropping the body dropped the size with it: 80 bytes on `/api/health`
+    // against no header at all, measured in production. RFC 9110 asks for the
+    // length the GET would send, and this is the same complaint the route was
+    // fixed for - `curl -I` reporting something the GET does not.
+    for (const path of ["/api/health", "/privacy"]) {
+      const get = await ask("GET", path);
+      const head = await ask("HEAD", path);
+
+      expect(head.headers.get("Content-Length"), `${path} reports no size`).toBe(String(await size(get)));
+    }
+  });
+
+  it("claims no size for a response that has no body", async () => {
+    // The first version of this asserted `new Response(null, {status: 304}).body`
+    // is null, which is a fact about the platform and says nothing about this
+    // code - removing the guard it was written for left it green.
+    //
+    // The redirect from the former address is the reachable bodyless case:
+    // `Response.redirect` produces a null body, and `arrayBuffer()` on one
+    // returns zero bytes quite happily, so an unguarded measurement would
+    // stamp `Content-Length: 0` on a 301.
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(
+      new Request("https://cazalogros.cloudils.com/game/413150", { method: "HEAD", redirect: "manual" }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get("Location")).toBe(`${BASE}/game/413150`);
+    expect(response.headers.get("Content-Length"), "a redirect was given a size").toBeNull();
+  });
+
   it("reports on the game, not on the shell", async () => {
     // The fault this exists for. A HEAD fell through to the asset runtime, so
     // it described the generic page while GET described Hollow Knight.
@@ -92,12 +148,18 @@ describe("HEAD", () => {
     const body = await get.text();
     vi.restoreAllMocks();
 
-    steam();
+    const asked = steam();
     const head = await ask("HEAD", "/game/367520");
 
     expect(body, "the GET itself stopped describing the game").toContain("Hollow Knight");
     expect(head.status).toBe(get.status);
     expect(comparable(head)).toEqual(comparable(get));
+
+    // The GET above warms `caches.default` for this id and language, so
+    // without this the HEAD may be answered from that entry and never build
+    // the page at all - leaving the stub's "unexpected request" net unarmed
+    // and the test narrower than it reads.
+    expect(asked.mock.calls.length, "the HEAD was served from cache, so it built nothing").toBeGreaterThan(0);
   });
 
   it("still refuses a method that changes things", async () => {

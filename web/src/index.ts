@@ -124,9 +124,33 @@ export default {
     // body is dropped here rather than left to the runtime: Cloudflare strips
     // it and the test pool does not, and a difference between the two is how
     // something passes locally and is wrong in production.
-    return request.method === "HEAD" ? new Response(null, answered) : answered;
+    return request.method === "HEAD" ? await headed(answered) : answered;
   },
 } satisfies ExportedHandler<Env>;
+
+/**
+ * The same response with its body removed, and its size still reported.
+ *
+ * Measured rather than dropped. A HEAD is supposed to say what a GET would
+ * send, and simply discarding the body left `Content-Length` off entirely -
+ * 10,113 bytes on a game page against nothing at all. That is the very
+ * complaint this route was fixed for, in a smaller form: `curl -I` reporting
+ * something the GET does not.
+ *
+ * Reading the body to measure it is work thrown away, and it is bounded work:
+ * the only things the Worker builds are HTML pages and JSON, both a few
+ * kilobytes, and images never reach Worker code at all.
+ */
+async function headed(response: Response): Promise<Response> {
+  // A 204, a 205 and a 304 have no body to measure, and a `Content-Length: 0`
+  // on a 304 would be a claim about a representation this is not sending.
+  if (!response.body) return new Response(null, response);
+
+  const body = await response.arrayBuffer();
+  const out = new Response(null, response);
+  out.headers.set("Content-Length", String(body.byteLength));
+  return out;
+}
 
 async function answer(
   request: Request,
@@ -154,7 +178,12 @@ async function answer(
     // does not match one. Documents are translated before they leave, so the
     // first paint is already in the reader's language; anything that is not
     // HTML passes straight through.
-    const asset = await env.ASSETS.fetch(request);
+    // Asked for as a GET even when the caller sent a HEAD. The asset runtime
+    // honours HEAD itself and answers with no body, which would leave nothing
+    // to translate and nothing to measure - a HEAD would report a page of
+    // zero bytes. The body is dropped at the boundary instead, once, where
+    // every other response is dropped.
+    const asset = await env.ASSETS.fetch(new Request(request.url, { headers: request.headers }));
     return translated(asset, languageFor(request));
   }
 

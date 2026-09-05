@@ -179,20 +179,37 @@ jobs:
           set -euo pipefail
           site="https://howtoachieve.cloudils.com"
 
-          # Status, plus the headers that say what the resource is. Status alone is not
-          # enough: while HEAD was answered by the asset runtime rather than by Worker
-          # code, a game page returned 200 to both and described a different document in
-          # each.
+          # Status, plus the headers that say what the resource is and how big it is.
+          # Status alone is not enough: while HEAD was answered by the asset runtime, a
+          # game page returned 200 to both and described a different document in each.
+          # `content-length` is here because dropping the body dropped the size with it,
+          # and neither this check nor the suite could see that.
           describe() {
             curl -sS -D- -o /dev/null --max-time 20 "$@" |
               tr -d '\r' | tr 'A-Z' 'a-z' |
-              grep -E '^(http/[0-9.]+ [0-9]{3}|(content-type|cache-control|vary|content-security-policy):)' |
+              grep -E '^(http/[0-9.]+ [0-9]{3}|(content-type|content-length|cache-control|vary|content-security-policy):)' |
               sort
           }
 
           status=0
           for path in /game/367520 /api/health /privacy; do
-            if difference="$(diff <(describe "$site$path") <(describe -I "$site$path"))"; then
+            # Captured into variables rather than compared inside process substitutions.
+            # A process substitution's exit status is invisible to `set -e`, so when curl
+            # failed - DNS, TLS, a timeout, a 5xx with no headers - both sides came back
+            # empty, `diff` called them identical, and this printed "agrees" and exited
+            # 0. A deploy check that goes green against an unreachable site is worse than
+            # no check, because it is the one you would trust.
+            # `|| true` so a failed curl reaches the check below instead of killing
+            # the script silently: the exit code would be right and the log would not
+            # say which path could not be read, or that reachability was the problem.
+            got="$(describe "$site$path" || true)"
+            head="$(describe -I "$site$path" || true)"
+            if [ -z "$got" ] || [ -z "$head" ]; then
+              echo "::error::$path returned no headers at all - production is unreachable."
+              exit 1
+            fi
+
+            if difference="$(diff <(printf '%s\n' "$got") <(printf '%s\n' "$head"))"; then
               echo "$path agrees"
             else
               echo "::error::$path answers HEAD differently from GET:"
