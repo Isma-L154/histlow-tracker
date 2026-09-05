@@ -118,15 +118,51 @@ export default {
       logFailure("unhandled failure", error);
       response = known(500, "error.500");
     }
-    const answered = await secured(response, env, url.origin);
-
     // HTTP asks that a HEAD return the headers a GET would, and no body. The
     // body is dropped here rather than left to the runtime: Cloudflare strips
     // it and the test pool does not, and a difference between the two is how
     // something passes locally and is wrong in production.
-    return request.method === "HEAD" ? new Response(null, answered) : answered;
+    //
+    // Guarded, because measuring the body means reading it, and for anything
+    // that is not HTML that is a live stream from the asset runtime being
+    // pulled for the first time. The old version read nothing and could not
+    // fail; this one can, and it sits outside the catch above.
+    if (request.method === "HEAD") {
+      try {
+        response = await headed(response);
+      } catch (error) {
+        logFailure("could not measure the body of a HEAD", error);
+        response = new Response(null, response);
+      }
+    }
+
+    return secured(response, env, url.origin);
   },
 } satisfies ExportedHandler<Env>;
+
+/**
+ * The same response with its body removed, and its size still reported.
+ *
+ * Measured rather than dropped. A HEAD is supposed to say what a GET would
+ * send, and simply discarding the body left `Content-Length` off entirely -
+ * 10,113 bytes on a game page against nothing at all. That is the very
+ * complaint this route was fixed for, in a smaller form: `curl -I` reporting
+ * something the GET does not.
+ *
+ * Reading the body to measure it is work thrown away, and it is bounded work:
+ * the only things the Worker builds are HTML pages and JSON, both a few
+ * kilobytes, and images never reach Worker code at all.
+ */
+async function headed(response: Response): Promise<Response> {
+  // A 204, a 205 and a 304 have no body to measure, and a `Content-Length: 0`
+  // on a 304 would be a claim about a representation this is not sending.
+  if (!response.body) return new Response(null, response);
+
+  const body = await response.arrayBuffer();
+  const out = new Response(null, response);
+  out.headers.set("Content-Length", String(body.byteLength));
+  return out;
+}
 
 async function answer(
   request: Request,
@@ -144,8 +180,16 @@ async function answer(
     return Response.redirect(url.toString(), 301);
   }
 
+  // Above every route, not only above /api/. It used to sit below the asset
+  // branch, so refusing a write on a static path was the asset runtime's job -
+  // and rebuilding the request for it took that job away, turning
+  // `POST /privacy` from a 405 into a 200 carrying the whole page.
+  if (!READS.has(request.method)) {
+    return known(405, "error.405");
+  }
+
   const page = GAME_PAGE_ROUTE.exec(url.pathname);
-  if (page && READS.has(request.method)) {
+  if (page) {
     return gamePage(Number(page[1]), url, env, languageFor(request), ctx);
   }
 
@@ -154,12 +198,22 @@ async function answer(
     // does not match one. Documents are translated before they leave, so the
     // first paint is already in the reader's language; anything that is not
     // HTML passes straight through.
-    const asset = await env.ASSETS.fetch(request);
+    // Rebuilt rather than forwarded, and only two things change.
+    //
+    // `method: "GET"` because the asset runtime honours a HEAD itself and
+    // answers with no body, which would leave nothing to translate and nothing
+    // to measure: a HEAD reported a page of zero bytes. The body is dropped at
+    // the boundary instead, once, where every other response's is.
+    //
+    // `redirect: "manual"` because a fresh Request defaults to following, and
+    // the asset runtime answers `/privacy.html`, `/privacy/` and `/index.html`
+    // with a 307 to the canonical form. Followed, all three became a 200
+    // serving identical bytes - three-way duplicate content on a site that
+    // keeps a second hostname alive purely to avoid unredirected duplicates.
+    const asset = await env.ASSETS.fetch(
+      new Request(request.url, { headers: request.headers, method: "GET", redirect: "manual" }),
+    );
     return translated(asset, languageFor(request));
-  }
-
-  if (!READS.has(request.method)) {
-    return known(405, "error.405");
   }
 
   try {
