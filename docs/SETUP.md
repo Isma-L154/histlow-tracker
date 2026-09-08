@@ -256,18 +256,31 @@ until the next morning's run — Resident Evil Requiem reached a new all-time lo
 thirteen hours after that day's only firing and sat unpublished until it was
 dispatched by hand.
 
-`schedule.min_interval_hours` is 2. The setting exists to stop the same work
-being done twice, by a duplicated firing or a manual dispatch landing beside a
-scheduled one, and those arrive seconds apart — so almost any value serves the
-guard, and the only thing a high value buys is silently dropping the second run
-of the day.
+`schedule.min_interval_hours` is 1, the loosest the validator allows, and that
+is deliberate.
 
-The arithmetic that picks 2: the firings are nominally twelve hours apart, and
-the measured delay spans `1h35m` to `11h07m`, a worst swing of `9h32m`. Two
-consecutive firings can therefore land as little as `2h28m` apart. The gate
-opens at `min_interval_hours` minus the 20-minute drift grace — so 2 opens at
-`1h40m` and clears that tightest gap by 48 minutes, while 3 would open at
-`2h40m` and drop the run.
+The setting stops the same work being done twice. A manual dispatch is not the
+case it covers: **force** defaults to on and the gate returns on it before the
+interval is ever consulted, so a dispatch is never blocked. What remains is a
+duplicated delivery of the same cron, and a scheduled run landing right after a
+manual dispatch that already recorded the run — both a matter of seconds to
+minutes. Every hour of interval beyond that is an hour in which a legitimate
+firing is silently dropped instead.
+
+The arithmetic: the firings are nominally twelve hours apart, and GitHub
+delivered the observed ones `1h35m` to `11h07m` late — a swing of `9h32m`, so
+two can land as little as `2h28m` apart. The gate opens at
+`min_interval_hours` minus the 20-minute drift grace:
+
+| Value | Gate opens at | Headroom over a `2h28m` gap |
+| --- | --- | --- |
+| **1** | `40m` | `1h48m` |
+| 2 | `1h40m` | `48m` |
+| 3 | `2h40m` | drops the run |
+
+The headroom is worth having because that delay range was measured entirely on
+the `12:23` firing — the `00:23` slot has never run, and the workflow's own
+comment notes that GitHub's queueing depends on the hour requested.
 
 ### Cost
 

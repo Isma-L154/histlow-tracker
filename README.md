@@ -161,7 +161,7 @@ dependencies, no servers, no cost. Notifications land on iOS through the pre-ins
 Shortcuts app, so there is no third-party app to install.
 
 ```
-GitHub Actions (cron, once a day)
+GitHub Actions (cron, fires twice a day)
         |
         |  1. Steam  IWishlistService/GetWishlist    -> app ids
         |  2. Steam  appdetails (batched, 30/req)    -> current prices

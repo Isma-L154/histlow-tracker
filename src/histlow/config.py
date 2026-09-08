@@ -75,13 +75,15 @@ class ScheduleConfig:
     one. Changing the cadence means editing the cron and this together.
     """
 
-    #: 2 for a twice-daily cron. The firings are nominally 12h apart, but
-    #: GitHub delivers them 1h35m to 11h07m late, so two can land as little as
-    #: 2h28m apart. The gate opens at this value minus DRIFT_GRACE, so 2 opens
-    #: at 1h40m and clears that by 48m, while 3 would open at 2h40m and
-    #: silently drop the second run of the day. The guard itself only needs to
-    #: outlast a duplicated firing, which arrives within seconds.
-    min_interval_hours: int = 2
+    #: 1, the loosest the validator allows. The guard only has to outlast a
+    #: duplicated delivery of the same cron - seconds - and every extra hour is
+    #: an hour in which a legitimate firing is silently dropped. Firings are
+    #: nominally 12h apart but arrive 1h35m to 11h07m late, so two can land
+    #: 2h28m apart; the gate opens at this value minus DRIFT_GRACE, so 1 opens
+    #: at 40m and clears that by 1h48m where 3 would drop the run outright.
+    #: That delay range was measured only on the 12:23 firing, so the headroom
+    #: is deliberate: the 00:23 slot has never run.
+    min_interval_hours: int = 1
 
     def __post_init__(self) -> None:
         if not 1 <= self.min_interval_hours <= 24:
