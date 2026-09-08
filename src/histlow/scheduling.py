@@ -1,6 +1,6 @@
 """Decides whether a given cron firing should do real work.
 
-The workflow fires once a day and every firing does real work. There is no
+The workflow fires twice a day and every firing does real work. There is no
 seasonal schedule, and that is a deliberate simplification.
 
 An earlier design ran once a day normally and escalated to every three hours
@@ -10,9 +10,12 @@ site that tracks them accurately is off limits. Worse, it optimised the wrong
 thing: a discount appearing on an ordinary Tuesday would wait up to a day,
 which is the case the tracker exists for.
 
-Running always costs about 240 billed minutes a month against a 2000-minute
-free tier, and roughly thirteen HTTP requests per run. Paying that removes an
-entire class of maintenance and cuts worst-case latency from a day to hours.
+Running on a fixed cadence costs roughly thirteen HTTP requests per firing and
+no billed minutes at all: this repository is public, so Actions minutes are
+unmetered. An earlier version of this note weighed 240 billed minutes a month
+against a 2000-minute free tier, which is a private repository's accounting and
+never applied here. Removing that imagined constraint is what allows a second
+daily firing, and it cuts worst-case latency from a day to twelve hours.
 
 What remains is a single guard against doing the same work twice, which the
 elapsed-time check below provides.

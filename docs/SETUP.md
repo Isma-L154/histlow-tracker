@@ -239,27 +239,42 @@ day.
 
 ### Cadence
 
-Once a day at `12:23 UTC`, which is `06:23` in Costa Rica year round — the
-country sits at UTC-6 and does not observe daylight saving, so the local time
-never drifts. Sale seasons get no special treatment.
+The workflow fires twice a day, at `00:23 UTC` and `12:23 UTC` — `18:23` and
+`06:23` in Costa Rica year round, since the country sits at UTC-6 and does not
+observe daylight saving, so the local times never drift. Sale seasons get no
+special treatment.
 
-The run is asked for in the morning although the payload is read in the
-evening. GitHub delivers scheduled runs late by anything from one hour to
-eleven, so a cron placed at the hour you want to be notified lands near
-midnight instead. Asking for the morning means even the worst delay observed
-still finishes before the suggested `20:00` poll, and the usual delay finishes
-before noon.
+Do not read those as the hours you will be notified at. GitHub delivers
+scheduled runs late by anything from one hour to eleven, so no cron can be
+aimed at a particular local hour. Two firings twelve hours apart bound the wait
+instead of trying to hit a target: with the typical four-hour delay one refresh
+lands mid-morning and the other late evening, bracketing the polling times in
+step 7.
 
-`schedule.min_interval_hours` is 20, not 24, and that is deliberate. GitHub
-delays scheduled runs by anything from one hour to eleven; a strict 24 would
-skip an entire day whenever one firing ran late and the next ran on time. 20
-absorbs a swing of only 4h20m between two consecutive delays, though, and the
-observed range is wider than that — see issue #99.
+Once a day was not enough. A sale that starts in the afternoon is invisible
+until the next morning's run — Resident Evil Requiem reached a new all-time low
+thirteen hours after that day's only firing and sat unpublished until it was
+dispatched by hand.
+
+`schedule.min_interval_hours` is 2. The setting exists to stop the same work
+being done twice, by a duplicated firing or a manual dispatch landing beside a
+scheduled one, and those arrive seconds apart — so almost any value serves the
+guard, and the only thing a high value buys is silently dropping the second run
+of the day.
+
+The arithmetic that picks 2: the firings are nominally twelve hours apart, and
+the measured delay spans `1h35m` to `11h07m`, a worst swing of `9h32m`. Two
+consecutive firings can therefore land as little as `2h28m` apart. The gate
+opens at `min_interval_hours` minus the 20-minute drift grace — so 2 opens at
+`1h40m` and clears that tightest gap by 48 minutes, while 3 would open at
+`2h40m` and drop the run.
 
 ### Cost
 
-About 14 seconds and a handful of HTTP requests per run, so roughly 30 billed
-minutes a month against the 2000-minute free tier for private repositories.
+About 14 seconds and a handful of HTTP requests per run. Nothing is billed:
+this repository is public, and Actions minutes are unmetered for public
+repositories. The 2000-minute free tier that earlier notes weighed this against
+is a private repository's accounting and never applied.
 
 ### Re-alerting
 

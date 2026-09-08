@@ -1,21 +1,30 @@
 ﻿name: tracker
 
-# Once a day, every day, with no seasonal calendar. No official Steam API
-# publishes the sale dates, hand-maintained ones rot, and a discount appearing
-# on an ordinary Tuesday is exactly what this exists to catch - so a sale
-# season gets no special treatment.
+# The workflow fires twice a day, every day, with no seasonal calendar. No
+# official Steam API publishes the sale dates, hand-maintained ones rot, and a
+# discount appearing on an ordinary Tuesday is exactly what this exists to
+# catch - so a sale season gets no special treatment.
 #
-# 12:23 UTC is 06:23 in Costa Rica (UTC-6 all year, no DST). The run is asked
-# for in the local morning, not the evening it is read in, because GitHub
-# delivers scheduled runs late by anything from one hour to eleven. An evening
-# cron therefore lands near midnight, and no offset chases a delay that
-# variable - so the run is placed far enough ahead of the phone's polling times
-# that even the worst delay observed still beats them.
+# Twice a day, twelve hours apart. Costa Rica is UTC-6 all year with no DST,
+# so 00:23 UTC is 18:23 local and 12:23 UTC is 06:23 local.
+#
+# Once a day was not enough. Resident Evil Requiem hit a new all-time low at
+# 17:21 UTC, thirteen hours after that day's only run, and sat unpublished
+# until a manual dispatch. GitHub adds its own one-to-eleven-hour delivery
+# delay on top, so a single firing can leave a discount unseen for most of a
+# day. Two firings halve that, and with the typical four-hour delay one refresh
+# lands mid-morning and the other late evening - bracketing the polling times
+# the phone automation uses.
+#
+# Cost is not a constraint: this repository is public, so Actions minutes are
+# unmetered. The every-3-hours budget the scheduling module used to cite was
+# written against a private repo's free tier.
 #
 # The odd minute is deliberate: GitHub queues scheduled runs hardest on the
 # hour, and a job asking for 12:00 is routinely delayed further.
 on:
   schedule:
+    - cron: "23 0 * * *"
     - cron: "23 12 * * *"
   workflow_dispatch:
     inputs:

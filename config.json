@@ -2,16 +2,16 @@
   "$comment": [
     "Non-secret runtime configuration. Safe to commit and to review in a diff.",
     "Every secret lives in .env / GitHub Actions secrets - never here.",
-    "The workflow cron fires once a day; this file decides whether a given",
+    "The workflow cron fires twice a day; this file decides whether a given",
     "firing does real work, so the cadence changes without touching any YAML."
   ],
 
   "schedule": {
     "$comment": [
-      "The workflow fires once a day at 12:23 UTC, which is 06:23 in Costa Rica year round. It runs in the morning rather than the evening it is read in: GitHub delivers scheduled runs between one and eleven hours late, so an evening cron lands near midnight. Sale seasons get no special treatment: an ordinary Tuesday discount matters just as much.",
-      "min_interval_hours only guards against doing the same work twice, from a duplicated firing or a manual dispatch landing beside a scheduled one. It is deliberately 20 rather than 24: GitHub delays scheduled runs by anything from one hour to eleven, and a strict 24 would skip a whole day whenever one firing ran late and the next ran on time. Note that 20 absorbs a swing of only 4h20m between two consecutive delays; a wider swing still costs a day, which is issue #99."
+      "The workflow fires twice a day, at 00:23 and 12:23 UTC, which are 18:23 and 06:23 in Costa Rica year round. Once a day left a sale that started in the afternoon unpublished until the next morning. GitHub delivers scheduled runs between one and eleven hours late, so the exact local hour cannot be aimed at; two firings twelve hours apart bound the wait instead. Sale seasons get no special treatment: an ordinary Tuesday discount matters just as much.",
+      "min_interval_hours only guards against doing the same work twice, from a duplicated firing or a manual dispatch landing beside a scheduled one. Those arrive seconds apart, so almost any value serves the guard and the only cost of a high one is skipping runs that were legitimate. It is 2. The firings are nominally 12h apart, but GitHub's delay spans 1h35m to 11h07m - a worst swing of 9h32m - so two can land as little as 2h28m apart. The gate opens at min_interval_hours minus the 20m drift grace, so 2 opens at 1h40m and clears that tightest gap by 48m. 3 would open at 2h40m and drop the run. 2 is still orders of magnitude longer than any duplicate firing, which arrives within seconds."
     ],
-    "min_interval_hours": 20
+    "min_interval_hours": 2
   },
 
   "alerts": {
