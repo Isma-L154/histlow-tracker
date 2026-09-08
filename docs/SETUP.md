@@ -239,27 +239,55 @@ day.
 
 ### Cadence
 
-Once a day at `12:23 UTC`, which is `06:23` in Costa Rica year round — the
-country sits at UTC-6 and does not observe daylight saving, so the local time
-never drifts. Sale seasons get no special treatment.
+The workflow fires twice a day, at `00:23 UTC` and `12:23 UTC` — `18:23` and
+`06:23` in Costa Rica year round, since the country sits at UTC-6 and does not
+observe daylight saving, so the local times never drift. Sale seasons get no
+special treatment.
 
-The run is asked for in the morning although the payload is read in the
-evening. GitHub delivers scheduled runs late by anything from one hour to
-eleven, so a cron placed at the hour you want to be notified lands near
-midnight instead. Asking for the morning means even the worst delay observed
-still finishes before the suggested `20:00` poll, and the usual delay finishes
-before noon.
+Do not read those as the hours you will be notified at. GitHub delivers
+scheduled runs late by anything from one hour to eleven, so no cron can be
+aimed at a particular local hour. Two firings twelve hours apart bound the wait
+instead of trying to hit a target: with the typical four-hour delay one refresh
+lands mid-morning and the other late evening, bracketing the polling times in
+step 7.
 
-`schedule.min_interval_hours` is 20, not 24, and that is deliberate. GitHub
-delays scheduled runs by anything from one hour to eleven; a strict 24 would
-skip an entire day whenever one firing ran late and the next ran on time. 20
-absorbs a swing of only 4h20m between two consecutive delays, though, and the
-observed range is wider than that — see issue #99.
+Once a day was not enough. A sale that starts in the afternoon is invisible
+until the next morning's run — Resident Evil Requiem reached a new all-time low
+thirteen hours after that day's only firing and sat unpublished until it was
+dispatched by hand.
+
+`schedule.min_interval_hours` is 1, the loosest the validator allows, and that
+is deliberate.
+
+The setting stops the same work being done twice. A manual dispatch is not the
+case it covers: **force** defaults to on and the gate returns on it before the
+interval is ever consulted, so a dispatch is never blocked. What remains is a
+duplicated delivery of the same cron, and a scheduled run landing right after a
+manual dispatch that already recorded the run — both a matter of seconds to
+minutes. Every hour of interval beyond that is an hour in which a legitimate
+firing is silently dropped instead.
+
+The arithmetic: the firings are nominally twelve hours apart, and GitHub
+delivered the observed ones `1h35m` to `11h07m` late — a swing of `9h32m`, so
+two can land as little as `2h28m` apart. The gate opens at
+`min_interval_hours` minus the 20-minute drift grace:
+
+| Value | Gate opens at | Headroom over a `2h28m` gap |
+| --- | --- | --- |
+| **1** | `40m` | `1h48m` |
+| 2 | `1h40m` | `48m` |
+| 3 | `2h40m` | drops the run |
+
+The headroom is worth having because that delay range was measured entirely on
+the `12:23` firing — the `00:23` slot has never run, and the workflow's own
+comment notes that GitHub's queueing depends on the hour requested.
 
 ### Cost
 
-About 14 seconds and a handful of HTTP requests per run, so roughly 30 billed
-minutes a month against the 2000-minute free tier for private repositories.
+About 14 seconds and a handful of HTTP requests per run. Nothing is billed:
+this repository is public, and Actions minutes are unmetered for public
+repositories. The 2000-minute free tier that earlier notes weighed this against
+is a private repository's accounting and never applied.
 
 ### Re-alerting
 
