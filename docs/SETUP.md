@@ -231,7 +231,7 @@ so several are needed for several checks.
 Suggested: `09:00`, `14:00`, `20:00`.
 
 More often adds nothing. The workflow itself only refreshes the payload once a
-day outside sale windows.
+day.
 
 ---
 
@@ -251,8 +251,10 @@ still finishes before the suggested `20:00` poll, and the usual delay finishes
 before noon.
 
 `schedule.min_interval_hours` is 20, not 24, and that is deliberate. GitHub
-delays scheduled runs by minutes to hours; a strict 24 would skip an entire day
-whenever one firing ran late and the next ran on time.
+delays scheduled runs by anything from one hour to eleven; a strict 24 would
+skip an entire day whenever one firing ran late and the next ran on time. 20
+absorbs a swing of only 4h20m between two consecutive delays, though, and the
+observed range is wider than that — see issue #99.
 
 ### Cost
 

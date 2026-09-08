@@ -1,6 +1,6 @@
 """Decides whether a given cron firing should do real work.
 
-The workflow fires every few hours and every firing does real work. There is no
+The workflow fires once a day and every firing does real work. There is no
 seasonal schedule, and that is a deliberate simplification.
 
 An earlier design ran once a day normally and escalated to every three hours
