@@ -76,8 +76,9 @@ class ScheduleConfig:
     """
 
     #: 20 rather than 24 for a once-daily cron: GitHub delays scheduled runs
-    #: by minutes to hours, and a strict 24 would skip a whole day whenever one
-    #: firing ran late and the next ran on time.
+    #: by anything from one hour to eleven, and a strict 24 would skip a whole
+    #: day whenever one firing ran late and the next ran on time. This absorbs
+    #: a swing of only 4h20m between consecutive delays; see issue #99.
     min_interval_hours: int = 20
 
     def __post_init__(self) -> None:
