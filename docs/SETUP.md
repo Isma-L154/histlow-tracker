@@ -239,9 +239,16 @@ day outside sale windows.
 
 ### Cadence
 
-Once a day at `00:17 UTC`, which is `18:17` in Costa Rica year round — the
+Once a day at `12:23 UTC`, which is `06:23` in Costa Rica year round — the
 country sits at UTC-6 and does not observe daylight saving, so the local time
 never drifts. Sale seasons get no special treatment.
+
+The run is asked for in the morning although the payload is read in the
+evening. GitHub delivers scheduled runs late by anything from one hour to
+eleven, so a cron placed at the hour you want to be notified lands near
+midnight instead. Asking for the morning means even the worst delay observed
+still finishes before the suggested `20:00` poll, and the usual delay finishes
+before noon.
 
 `schedule.min_interval_hours` is 20, not 24, and that is deliberate. GitHub
 delays scheduled runs by minutes to hours; a strict 24 would skip an entire day
