@@ -1,31 +1,11 @@
 /**
- * Secrets are not visible to `wrangler types`.
- *
- * `worker-configuration.d.ts` is generated from `wrangler.jsonc`, which lists
- * plain vars only - a secret exists solely in Cloudflare's store, so nothing
- * in the config describes it. Declaring it here by interface merging keeps the
- * type accurate without committing anything sensitive, and without the
- * generated file needing to be edited by hand.
+ * Secrets, which `wrangler types` cannot see: they exist only in Cloudflare's
+ * store, so they are declared here by interface merging.
  */
-
 interface Env {
-  /**
-   * Steam Web API key.
-   *
-   * Set with `wrangler secret put STEAM_WEB_API_KEY`. Required by the
-   * achievement schema and player progress endpoints; absent, the API answers
-   * 503 rather than pretending the game has no achievements.
-   */
+  /** Set with `wrangler secret put`. Without it the API answers 503. */
   STEAM_WEB_API_KEY: string;
-
-  /**
-   * IGDB, by way of Twitch.
-   *
-   * Optional, unlike the Steam key, and typed that way on purpose: the
-   * completion time hides itself when these are absent, so "not configured" is
-   * an ordinary state the code has to handle rather than a misconfiguration
-   * the type system should rule out.
-   */
+  /** IGDB, through Twitch. Optional: the sections that need them hide themselves. */
   TWITCH_CLIENT_ID?: string;
   TWITCH_CLIENT_SECRET?: string;
 }

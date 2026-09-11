@@ -75,11 +75,10 @@ describe("the modules this file checks", () => {
   it("are found rather than listed", () => {
     // Guards the guard. Everything below is only as good as this enumeration,
     // and a glob that silently matched nothing would make all of it vacuous.
-    // Twelve today - eleven modules and `env.d.ts`. A floor below that let a
-    // deleted module clear it, and the pattern is recursive because the day a
-    // helper lands in `src/lib/` a non-recursive one would leave it uncovered:
-    // the allowlist-fails-open shape this whole block argues against.
-    expect(Object.keys(SOURCES).length).toBeGreaterThanOrEqual(12);
+    // A floor at the current count (every module plus `env.d.ts`), so a
+    // deleted module cannot clear it. Recursive, so a helper added under
+    // `src/lib/` is covered without anyone remembering to add it.
+    expect(Object.keys(SOURCES).length).toBeGreaterThanOrEqual(16);
     expect(Object.keys(SOURCES)).toContain("../src/index.ts");
     for (const [name, source] of Object.entries(SOURCES)) {
       expect(source.length, `${name} came back empty`).toBeGreaterThan(100);

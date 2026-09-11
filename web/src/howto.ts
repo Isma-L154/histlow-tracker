@@ -1,21 +1,15 @@
 /**
  * Turning guide passages into steps for one achievement.
  *
- * The model is a rewriter, never a source. Everything it is allowed to say has
- * to come from the passages it is handed, for two reasons: it has no reliable
- * memory of any particular game's achievements, and a completionist who follows
- * an invented step loses hours before finding out. When the passages do not
- * answer the question, saying so is the correct output.
- *
- * Translation is the other half of the job. The best-rated guides for a given
- * game are frequently in Russian or English, and reading them is exactly the
- * work this page exists to remove.
+ * The model is a rewriter, never a source: it has no reliable memory of a game's
+ * achievements, and an invented step costs a completionist hours. It also
+ * translates, since the best guides for a game are often in Russian.
  */
 
 import { logFailure } from "./http.ts";
 import type { Passage } from "./guides.ts";
 
-export interface HowTo {
+interface HowTo {
   steps: string;
   /** False when the model reported the passages do not cover the achievement. */
   answered: boolean;
@@ -76,15 +70,13 @@ export async function explainAchievement(
         { role: "system", content: SYSTEM },
         { role: "user", content: prompt },
       ],
-      // Enough for a short list; the cap is also what keeps a single answer
-      // from eating a meaningful slice of the daily free allocation.
+      // The cap also keeps one answer from eating the daily free allocation.
       max_tokens: 400,
       // Low but not zero: the job is rewriting, not composing.
       temperature: 0.2,
     } as Parameters<Ai["run"]>[1]);
   } catch (error) {
-    // Most often the daily free allocation is spent. The caller still has the
-    // passages, so the page degrades to showing the source text.
+    // Usually the daily allocation is spent. The caller still has the passages.
     logFailure("workers ai call failed", error);
     return null;
   }

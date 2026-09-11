@@ -49,7 +49,6 @@ export const DICTIONARY = {
     "profile.save": "Save",
     "profile.remove": "Remove",
     "profile.saved": "Saved in this browser.",
-    "profile.saving": "Saved. Reloading the achievements with your progress…",
     "profile.removed": "Removed. No achievement is marked as unlocked any more.",
     "profile.noStorage": "This browser will not store data, so this will be forgotten when you leave.",
     "hero.title": "Find out how every achievement is earned",
@@ -118,7 +117,6 @@ export const DICTIONARY = {
     "howto.disclaimer":
       "Automatic summary of guides written by other players. If something looks wrong, the link goes to the original.",
     "howto.searchSteam": "Search Steam yourself",
-    "howto.language": "The steps are written in English whichever language this page is in.",
   },
   es: {
     "brand.tagline": "los logros de Steam, explicados",
@@ -148,7 +146,6 @@ export const DICTIONARY = {
     "profile.save": "Guardar",
     "profile.remove": "Quitar",
     "profile.saved": "Guardado en este navegador.",
-    "profile.saving": "Guardado. Recargando los logros con tu progreso…",
     "profile.removed": "Quitado. Ya no se marca ningún logro como conseguido.",
     "profile.noStorage": "Este navegador no permite guardar datos, así que se olvidará al salir.",
     "hero.title": "Descubre cómo se consigue cada logro",
@@ -218,7 +215,6 @@ export const DICTIONARY = {
     "howto.disclaimer":
       "Resumen automático de guías escritas por otros jugadores. Si algo no cuadra, el enlace lleva al original.",
     "howto.searchSteam": "Buscar a mano en Steam",
-    "howto.language": "Los pasos están en inglés, sea cual sea el idioma de la página.",
   },
 };
 
@@ -278,13 +274,8 @@ export function fromAcceptLanguage(header) {
   return ranked.find((entry) => LANGUAGES.includes(entry.base))?.base ?? DEFAULT_LANGUAGE;
 }
 
-/**
- * The attributes a `data-i18n-*` marker can fill.
- *
- * Text is not the only thing a reader sees: a placeholder is visible, and an
- * aria-label is the only thing a screen reader gets.
- */
-const ATTRIBUTES = ["placeholder", "aria-label", "title", "alt"];
+/** The attributes a `data-i18n-*` marker can fill: text is not all a reader sees. */
+export const ATTRIBUTES = ["placeholder", "aria-label", "title", "alt"];
 
 /**
  * Translates a document, or any part of one, in place.

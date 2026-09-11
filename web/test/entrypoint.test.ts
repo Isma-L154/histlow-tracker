@@ -17,6 +17,11 @@ import { describe, expect, it } from "vitest";
 import entry from "../src/index.ts?raw";
 import * as module_ from "../src/index.ts";
 
+/** Every Worker module, since the routes, the cache helpers and the pages live apart. */
+const WORKER = Object.values(
+  import.meta.glob("../src/**/*.ts", { query: "?raw", import: "default", eager: true }),
+).join("\n");
+
 describe("src/index.ts", () => {
   it("exports only its default handler", () => {
     // Checked against the loaded module rather than the text, so a re-export or
@@ -50,16 +55,15 @@ describe("src/index.ts", () => {
  * construction. These assert that it stays that way, because the failure is
  * silent and only visible as a stale answer nobody can explain.
  *
- * They reach only as far as a key written as a literal at the call site. One
- * built into a variable first — as the guide corpus and the IGDB token both
- * are, deliberately, for reasons written where they are built — is invisible
- * here and has to be read by a person.
+ * They read every Worker module, and reach only as far as a key written as a
+ * literal at the call site. One built into a variable first - as the guide
+ * corpus and the IGDB token both are, deliberately - has to be read by a person.
  */
 describe("cache keys are scoped to the deployment", () => {
   it("builds every key through the one function that adds the version", () => {
     // A route that calls `cache.match` with a string of its own bypasses the
     // versioning entirely, which is how this would come back.
-    const rogue = [...entry.matchAll(/cache\.(?:match|put)\(\s*[`"']/g)];
+    const rogue = [...WORKER.matchAll(/cache\.(?:match|put)\(\s*[`"']/g)];
     expect(rogue.map((m) => m[0]), "build the key with key(url, …, env)").toEqual([]);
   });
 
@@ -67,7 +71,7 @@ describe("cache keys are scoped to the deployment", () => {
     // Without `env` the version is unavailable, and the call would not compile
     // — but a future overload or a default could make it compile and silently
     // drop the scoping.
-    const calls = [...entry.matchAll(/\bkey\(url,[\s\S]{0,200}?\)\s*,/g)].map((m) => m[0]);
+    const calls = [...WORKER.matchAll(/\bkey\(url,[\s\S]{0,200}?\)\s*,/g)].map((m) => m[0]);
     expect(calls.length).toBeGreaterThan(3);
     for (const call of calls) {
       expect(call, `${call.slice(0, 60)} is not scoped`).toMatch(/,\s*env\s*\)/);

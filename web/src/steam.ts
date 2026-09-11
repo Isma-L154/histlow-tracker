@@ -1,24 +1,18 @@
 /**
- * Steam client.
+ * Steam client. No single endpoint answers "what do I still need for 100%?",
+ * so several are combined:
  *
- * Four endpoints, deliberately mixed, because no single one answers the
- * question "what do I still need for 100%?":
- *
- * | Endpoint                             | Key | Gives                       |
- * |--------------------------------------|-----|-----------------------------|
- * | SearchApps                           | no  | game search                 |
- * | appdetails                           | no  | title, header image         |
- * | GetSchemaForGame                     | yes | names, descriptions, icons  |
- * | GetGlobalAchievementPercentagesForApp| no  | how rare each one is        |
- * | GetPlayerAchievements                | yes | which ones you already have |
- *
- * The rarity figure is the point of the whole page. Steam shows achievements
- * in the developer's arbitrary order; sorted by global unlock percentage they
- * become a difficulty ranking, which is what a completionist actually plans
- * against.
+ * | Endpoint                              | Key | Gives                       |
+ * |---------------------------------------|-----|-----------------------------|
+ * | SearchApps                            | no  | game search                 |
+ * | appdetails                            | no  | title, header image         |
+ * | GetSchemaForGame                      | yes | names, descriptions, icons  |
+ * | GetGlobalAchievementPercentagesForApp | no  | how rare each one is        |
+ * | GetPlayerAchievements                 | yes | which ones you already have |
+ * | ResolveVanityURL, GetPlayerSummaries  | yes | a profile's id and name     |
  */
 
-export interface SearchResult {
+interface SearchResult {
   appId: number;
   name: string;
   icon: string | null;
@@ -51,15 +45,9 @@ export class SteamError extends Error {
     message: string,
     /** Status this API should answer with. */
     readonly status: number,
-    /** Status Steam gave us, kept so callers can tell a bad request from an outage. */
+    /** Status Steam gave us, so callers can tell a bad request from an outage. */
     readonly upstreamStatus: number = 0,
-    /**
-     * A code for the client, where the status alone is ambiguous.
-     *
-     * A 404 from the game route means "no achievements"; a 404 from the profile
-     * route means "no such profile". The client shows these in two languages
-     * and so cannot use the prose.
-     */
+    /** A dictionary key for the client, where the status alone is ambiguous. */
     readonly reason?: string,
   ) {
     super(message);
@@ -68,29 +56,25 @@ export class SteamError extends Error {
 }
 
 /**
- * Whether an error means Steam has nothing under that app id.
- *
- * The distinction this draws is what makes the answer cacheable. "That id has
- * no achievements" is stable and will be just as true tomorrow, so re-asking
- * spends the key for nothing; an outage is transient, and storing it would
- * leave a real game answering "no achievements" for a day after Steam
- * recovered. `upstreamStatus` is the only thing that separates them, and it
- * stays 0 when the 404 is this code's own judgement rather than Steam's.
- *
- * A function rather than an inline check because two routes ask it and they
- * were drifting: the page had the full test and the API route had none, which
- * is exactly how the API route ended up paying for the same unknown id for
- * ever.
+ * Whether an error means Steam has nothing under that app id - a stable answer
+ * worth caching - rather than an outage, which must not be cached.
+ * `upstreamStatus` is what separates them.
  */
 export function unknownGame(error: unknown): error is SteamError {
   return error instanceof SteamError && error.status === 404 && error.upstreamStatus < 500;
 }
 
+/** A client for this deployment's key, or a 503 when none is configured. */
+export function steamClient(env: Env): SteamClient {
+  if (!env.STEAM_WEB_API_KEY) {
+    throw new SteamError("The Steam API key is not configured on this deployment.", 503);
+  }
+  return new SteamClient(env.STEAM_WEB_API_KEY);
+}
+
 const SEARCH_URL = "https://steamcommunity.com/actions/SearchApps/";
 const STORE_URL = "https://store.steampowered.com/api/appdetails";
 const API_BASE = "https://api.steampowered.com/ISteamUserStats";
-
-/** Resolving a custom URL and reading a profile name live under a different service. */
 const USER_API_BASE = "https://api.steampowered.com/ISteamUser";
 
 /** Steam is slow often enough that an unbounded wait would burn the request. */
@@ -120,12 +104,7 @@ export class SteamClient {
     });
   }
 
-  /**
-   * Everything the page needs for one game, in a single response.
-   *
-   * The three upstream calls are issued together rather than in sequence: they
-   * do not depend on each other, and Steam's latency dominates the request.
-   */
+  /** Everything the page needs for one game; the upstream calls are independent, so they go out together. */
   async gameAchievements(appId: number, steamId: string | null): Promise<GameAchievements> {
     const [schema, globals, store, player] = await Promise.all([
       this.schema(appId),
@@ -148,8 +127,7 @@ export class SteamClient {
         unlocked: player ? (player.get(entry.key)?.unlocked ?? false) : null,
         unlockedAt: player ? (player.get(entry.key)?.at ?? null) : null,
       }))
-      // Rarest first. Anything Steam has no figure for sorts last rather than
-      // being treated as 0%, which would fake it to the top of the list.
+      // Rarest first. No figure sorts last, rather than faking its way to the top as 0%.
       .sort((a, b) => (a.globalPercent ?? 101) - (b.globalPercent ?? 101));
 
     return {
@@ -163,14 +141,8 @@ export class SteamClient {
   }
 
   /**
-   * The SteamID64 behind a custom profile name, and who it belongs to.
-   *
-   * The name is fetched alongside deliberately. Handing someone back a
-   * seventeen-digit number tells them nothing they can check; handing back
-   * "that is Some Player" lets them see at a glance whether it found the right
-   * person, which is the whole reason this exists.
-   *
-   * Uses the same Steam key the rest of the client holds - no new credential.
+   * The SteamID64 behind a custom profile name, with the profile's display name,
+   * so the reader can see at a glance whether the right person was found.
    */
   async resolveVanity(name: string): Promise<{ steamId: string; profileName: string | null }> {
     const url = new URL(`${USER_API_BASE}/ResolveVanityURL/v1/`);
@@ -180,8 +152,7 @@ export class SteamClient {
     const body = await this.getJson<unknown>(url, "the profile name");
     const response = asRecord(asRecord(body)?.["response"]);
 
-    // Steam answers 200 with `success: 42` for a name it does not know, so the
-    // status alone says nothing.
+    // Steam answers an unknown name with 200 and `success: 42`.
     if (response?.["success"] !== 1 || typeof response["steamid"] !== "string") {
       throw new SteamError("Steam does not know that profile name.", 404, 0, "profile.unknown");
     }
@@ -189,12 +160,7 @@ export class SteamClient {
     return { steamId: response["steamid"], profileName: await this.profileName(response["steamid"]) };
   }
 
-  /**
-   * The display name on a profile, or null.
-   *
-   * Best-effort: a private profile withholds it, and that is not a reason to
-   * refuse an id Steam has already confirmed.
-   */
+  /** A profile's display name, or null: a private profile withholds it. */
   async profileName(steamId: string): Promise<string | null> {
     const url = new URL(`${USER_API_BASE}/GetPlayerSummaries/v2/`);
     url.searchParams.set("key", this.apiKey);
@@ -211,11 +177,8 @@ export class SteamClient {
   }
 
   /**
-   * One achievement's official name and description.
-   *
-   * Resolved from Steam rather than accepted from the caller: the name is what
-   * the guide corpus is searched for and what reaches the model's prompt, so it
-   * has to come from an authoritative source, not from a query parameter.
+   * One achievement's official name and description, from Steam rather than the
+   * caller: the name is searched for and reaches the model's prompt.
    */
   async achievementByKey(
     appId: number,
@@ -224,8 +187,6 @@ export class SteamClient {
     const entry = (await this.schema(appId)).find((item) => item.key === key);
     return entry ? { name: entry.name, description: entry.description } : null;
   }
-
-  // -- individual sources -------------------------------------------------
 
   private async schema(appId: number): Promise<Omit<Achievement, "globalPercent" | "unlocked" | "unlockedAt">[]> {
     const url = new URL(`${API_BASE}/GetSchemaForGame/v2/`);
@@ -236,9 +197,8 @@ export class SteamClient {
     try {
       body = await this.getJson<unknown>(url, "achievement list");
     } catch (error) {
-      // Steam answers an unknown app id with a 4xx rather than an empty
-      // schema. Treating that as "no achievements" lets the caller report a
-      // missing game instead of an upstream outage, which is what it is.
+      // Steam answers an unknown app id with a 4xx rather than an empty schema;
+      // reading that as "no achievements" reports a missing game, not an outage.
       if (error instanceof SteamError && error.upstreamStatus < 500) return [];
       throw error;
     }
@@ -283,8 +243,7 @@ export class SteamClient {
         }
       }
     } catch {
-      // Rarity is the most valuable column but not a reason to fail the page:
-      // without it the list still renders, just unsorted by difficulty.
+      // Without rarity the list still renders, just not ordered by difficulty.
     }
     return percentages;
   }
@@ -316,8 +275,7 @@ export class SteamClient {
       }
       return progress;
     } catch {
-      // A private profile, or a game the player does not own. Both are normal;
-      // the page simply shows no personal progress.
+      // A private profile, or a game the player does not own: no progress shown.
       return null;
     }
   }
@@ -339,8 +297,6 @@ export class SteamClient {
     }
   }
 
-  // -- transport ----------------------------------------------------------
-
   private async getJson<T>(url: URL | string, what: string): Promise<T> {
     const response = await fetch(url, {
       headers: { "User-Agent": "histlow-achievements/0.1", Accept: "application/json" },
@@ -348,8 +304,7 @@ export class SteamClient {
     });
 
     if (!response.ok) {
-      // The URL is withheld deliberately: GetSchemaForGame carries the API key
-      // as a query parameter, and this message reaches the browser.
+      // The URL is withheld: it can carry the API key, and this message reaches the browser.
       throw new SteamError(
         response.status === 403
           ? `Steam rejected the request for ${what}. The configured API key may be invalid.`
