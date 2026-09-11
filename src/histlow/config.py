@@ -1,54 +1,40 @@
-"""Loading and validation of settings from the environment and `config.json`.
+"""Settings from the environment (identity, never committed) and `config.json` (behaviour).
 
-The split is deliberate and security-relevant:
-
-* `config.json` holds behaviour. It is committed, reviewable in a diff, and
-  contains nothing sensitive.
-* The environment holds identity. It is never committed and is supplied by
-  GitHub Actions secrets in CI.
-
-Validation is strict and happens once, at startup. A malformed configuration
-must fail loudly and immediately rather than surface later as an empty result
-set that looks indistinguishable from "no deals today".
+Validated once at startup, so a bad configuration fails loudly instead of
+looking like a day with no deals.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
-
-DEFAULT_CONFIG_FILENAME = "config.json"
+from typing import Any, TypeVar
 
 _STEAM_ID64_LENGTH = 17
 _TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
 
+_Section = TypeVar("_Section")
+
 
 class ConfigError(RuntimeError):
-    """Raised when settings are missing, malformed or mutually inconsistent."""
+    """Settings are missing, malformed or mutually inconsistent."""
 
 
 @dataclass(frozen=True, slots=True)
 class Secrets:
-    """Identity material. Never logged, never serialised, never committed."""
-
     steam_id64: str
     itad_api_key: str
     gist_id: str
     gist_token: str
 
     def redactable_values(self) -> tuple[str, ...]:
-        """Values to seed the log redaction filter with."""
         candidates = (self.steam_id64, self.itad_api_key, self.gist_id, self.gist_token)
         return tuple(value for value in candidates if value)
 
     def require_publishing_credentials(self) -> None:
-        """Guards the publish step; both values are optional until then.
-
-        The gist is created by `scripts/bootstrap_gist.py`, so a first
-        `--dry-run` has to be possible before these exist.
-        """
+        """Enforced only at publish time, so a first `--dry-run` works before the gist exists."""
         missing = [
             name
             for name, value in (("GIST_ID", self.gist_id), ("GIST_TOKEN", self.gist_token))
@@ -60,29 +46,17 @@ class Secrets:
                 "run scripts/bootstrap_gist.py to create the gist, or pass --dry-run"
             )
 
-    def __repr__(self) -> str:  # pragma: no cover - defensive only
-        """Prevents an accidental `print(settings)` from dumping credentials."""
+    def __repr__(self) -> str:
+        """Keeps an accidental `print(settings)` from dumping credentials."""
         return "Secrets(<redacted>)"
 
 
 @dataclass(frozen=True, slots=True)
 class ScheduleConfig:
-    """How often the tracker is allowed to do real work.
+    """Guards against doing the same work twice, such as a duplicated cron delivery."""
 
-    GitHub Actions cron expressions are static, so the workflow fires on a
-    fixed cadence and this value guards against doing the same work twice -
-    from a duplicated firing, or a manual dispatch landing next to a scheduled
-    one. Changing the cadence means editing the cron and this together.
-    """
-
-    #: 1, the loosest the validator allows. The guard only has to outlast a
-    #: duplicated delivery of the same cron - seconds - and every extra hour is
-    #: an hour in which a legitimate firing is silently dropped. Firings are
-    #: nominally 12h apart but arrive 1h35m to 11h07m late, so two can land
-    #: 2h28m apart; the gate opens at this value minus DRIFT_GRACE, so 1 opens
-    #: at 40m and clears that by 1h48m where 3 would drop the run outright.
-    #: That delay range was measured only on the 12:23 firing, so the headroom
-    #: is deliberate: the 00:23 slot has never run.
+    #: The loosest value allowed. GitHub's delivery delay can land the two daily
+    #: firings under 2h30m apart, and a wider gate would silently drop one.
     min_interval_hours: int = 1
 
     def __post_init__(self) -> None:
@@ -94,28 +68,12 @@ class ScheduleConfig:
 
 @dataclass(frozen=True, slots=True)
 class AlertRules:
-    """Thresholds governing which deals qualify and how often they re-alert."""
-
     min_discount_percent: int = 1
     reprice_threshold_minor: int = 1
     max_items_in_payload: int = 25
-
-    #: How long a deal keeps appearing in the payload after it is first
-    #: reported.
-    #:
-    #: The phone polls on a timer rather than receiving a push, so an alert
-    #: published and replaced between two polls is never seen - and since it is
-    #: recorded as alerted, it is never published again either. One missed poll
-    #: used to cost the deal permanently. Set to 0 to publish each alert once.
+    #: Days a reported deal stays in the payload, so a poll that missed it still sees it.
     repeat_for_days: int = 2
-
-    #: When true, only a sale that beats every earlier price is reported.
-    #: Returning to a record set by an earlier sale stays silent.
-    #:
-    #: This makes alerts considerably rarer, and deliberately so. Steam tends
-    #: to repeat a title's deepest discount, so a game can sit at its all-time
-    #: low repeatedly without ever going lower. Set to false to be told about
-    #: those too.
+    #: Report only sales that beat every earlier price, not returns to an old record.
     require_new_record: bool = True
 
     def __post_init__(self) -> None:
@@ -133,24 +91,15 @@ class AlertRules:
 
 @dataclass(frozen=True, slots=True)
 class NotificationConfig:
-    """User-facing wording, kept out of the source so it can be any language.
-
-    `headline_template` receives a single `{count}` placeholder. It is rendered
-    once at load time so a typo fails at startup rather than at the moment an
-    alert would have fired.
-    """
+    """User-facing wording, kept out of the source so it can be in any language."""
 
     headline_template: str = "\U0001f525 {count} en nuevo minimo historico"
-    #: Joins the per-game lines in the notification body. A newline keeps the
-    #: list readable as it grows; a run reporting eight games is 200 characters
-    #: of unbroken text otherwise.
     separator: str = "\n"
-    #: Prefixed to games whose sale beat every earlier price. Empty by default:
-    #: `AlertRules.require_new_record` already restricts reports to records, so
-    #: marking every entry would be noise. Useful when that rule is turned off.
+    #: Prefixes record-setting games. Empty: `require_new_record` makes every one a record.
     record_marker: str = ""
 
     def __post_init__(self) -> None:
+        # Rendered here so a template typo fails at startup, not when an alert fires.
         try:
             self.headline_template.format(count=0)
         except (IndexError, KeyError, ValueError) as exc:
@@ -162,8 +111,6 @@ class NotificationConfig:
 
 @dataclass(frozen=True, slots=True)
 class StateConfig:
-    """Retention policy for the de-duplication store."""
-
     retention_days: int = 180
 
     def __post_init__(self) -> None:
@@ -173,8 +120,6 @@ class StateConfig:
 
 @dataclass(frozen=True, slots=True)
 class Settings:
-    """The fully validated configuration for one run."""
-
     secrets: Secrets
     country: str
     comparison_country: str
@@ -186,28 +131,15 @@ class Settings:
     state: StateConfig = field(default_factory=StateConfig)
 
 
-# ---------------------------------------------------------------------------
-# Loading
-# ---------------------------------------------------------------------------
-
-
 def load_settings(env: Mapping[str, str], config_path: Path) -> Settings:
-    """Builds :class:`Settings` from an environment mapping and a config file.
-
-    `env` is injected rather than read from `os.environ` directly so tests can
-    exercise every validation branch without mutating process state.
-    """
     secrets, problems = _load_secrets(env)
 
     country = env.get("STORE_COUNTRY", "").strip().upper()
     if len(country) != 2 or not country.isalpha():
         problems.append(f"STORE_COUNTRY must be a 2-letter ISO 3166-1 code, got {country!r}")
 
-    # ITAD does not carry price history for every currency Steam sells in; it
-    # reports Costa Rica and Mexico in USD, for example. Comparing a colon
-    # price against a dollar low is meaningless, so the at-or-below decision
-    # runs in a region ITAD does track while prices are still shown in the
-    # user's own. US is the safe default: ITAD always reports it in USD.
+    # ITAD reports some regions (Costa Rica, Mexico) in USD, so the at-or-below
+    # decision runs in a region it tracks while prices show in the user's own.
     comparison_country = env.get("COMPARISON_COUNTRY", "US").strip().upper()
     if len(comparison_country) != 2 or not comparison_country.isalpha():
         problems.append(
@@ -215,9 +147,7 @@ def load_settings(env: Mapping[str, str], config_path: Path) -> Settings:
         )
 
     if problems:
-        raise ConfigError(
-            "invalid configuration:\n  - " + "\n  - ".join(problems)
-        )
+        raise ConfigError("invalid configuration:\n  - " + "\n  - ".join(problems))
 
     document = _read_config_file(config_path)
 
@@ -227,10 +157,10 @@ def load_settings(env: Mapping[str, str], config_path: Path) -> Settings:
         comparison_country=comparison_country,
         log_level=env.get("LOG_LEVEL", "INFO").strip().upper() or "INFO",
         dry_run=env.get("DRY_RUN", "").strip().lower() in _TRUE_VALUES,
-        schedule=_parse_schedule(document.get("schedule", {})),
-        alerts=_parse_alerts(document.get("alerts", {})),
-        notification=_parse_notification(document.get("notification", {})),
-        state=_parse_state(document.get("state", {})),
+        schedule=_parse_section(ScheduleConfig, document, "schedule"),
+        alerts=_parse_section(AlertRules, document, "alerts"),
+        notification=_parse_section(NotificationConfig, document, "notification"),
+        state=_parse_section(StateConfig, document, "state"),
     )
 
 
@@ -241,8 +171,7 @@ def _load_secrets(env: Mapping[str, str]) -> tuple[Secrets, list[str]]:
     if not steam_id:
         problems.append("STEAM_ID64 is required")
     elif not (steam_id.isdigit() and len(steam_id) == _STEAM_ID64_LENGTH):
-        # The value itself is withheld from the message: it is treated as a
-        # secret and this error surfaces in CI logs.
+        # The value is withheld: it is treated as a secret, and this reaches CI logs.
         problems.append(f"STEAM_ID64 must be {_STEAM_ID64_LENGTH} digits")
 
     itad_key = env.get("ITAD_API_KEY", "").strip()
@@ -252,7 +181,6 @@ def _load_secrets(env: Mapping[str, str]) -> tuple[Secrets, list[str]]:
     secrets = Secrets(
         steam_id64=steam_id,
         itad_api_key=itad_key,
-        # Optional at load time; enforced by `require_publishing_credentials`.
         gist_id=env.get("GIST_ID", "").strip(),
         gist_token=env.get("GIST_TOKEN", "").strip(),
     )
@@ -261,10 +189,7 @@ def _load_secrets(env: Mapping[str, str]) -> tuple[Secrets, list[str]]:
 
 def _read_config_file(path: Path) -> dict:
     try:
-        # utf-8-sig strips a byte order mark if present and behaves exactly
-        # like utf-8 otherwise. Windows editors and PowerShell's Set-Content
-        # add one silently, and json.loads rejects it outright - a confusing
-        # startup failure for what looks like an untouched file.
+        # utf-8-sig: Windows editors and PowerShell's Set-Content add a BOM json rejects.
         raw = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError as exc:
         raise ConfigError(f"configuration file not found: {path}") from exc
@@ -281,43 +206,17 @@ def _read_config_file(path: Path) -> dict:
     return document
 
 
-def _parse_schedule(section: Mapping) -> ScheduleConfig:
-    defaults = ScheduleConfig()
-    try:
-        interval = int(section.get("min_interval_hours", defaults.min_interval_hours))
-    except (TypeError, ValueError) as exc:
-        raise ConfigError(f"schedule.min_interval_hours must be an integer: {exc}") from exc
-    return ScheduleConfig(min_interval_hours=interval)
-
-
-def _parse_alerts(section: Mapping) -> AlertRules:
-    defaults = AlertRules()
-    return AlertRules(
-        min_discount_percent=int(
-            section.get("min_discount_percent", defaults.min_discount_percent)
-        ),
-        reprice_threshold_minor=int(
-            section.get("reprice_threshold_minor", defaults.reprice_threshold_minor)
-        ),
-        max_items_in_payload=int(
-            section.get("max_items_in_payload", defaults.max_items_in_payload)
-        ),
-        require_new_record=bool(
-            section.get("require_new_record", defaults.require_new_record)
-        ),
-        repeat_for_days=int(section.get("repeat_for_days", defaults.repeat_for_days)),
-    )
-
-
-def _parse_notification(section: Mapping) -> NotificationConfig:
-    defaults = NotificationConfig()
-    return NotificationConfig(
-        headline_template=str(section.get("headline_template", defaults.headline_template)),
-        separator=str(section.get("separator", defaults.separator)),
-        record_marker=str(section.get("record_marker", defaults.record_marker)),
-    )
-
-
-def _parse_state(section: Mapping) -> StateConfig:
-    defaults = StateConfig()
-    return StateConfig(retention_days=int(section.get("retention_days", defaults.retention_days)))
+def _parse_section(cls: type[_Section], document: Mapping[str, Any], name: str) -> _Section:
+    """Builds one section, coercing each value to the type of its default."""
+    section = document.get(name, {})
+    defaults = cls()
+    values = {}
+    for spec in fields(cls):
+        default = getattr(defaults, spec.name)
+        try:
+            values[spec.name] = type(default)(section.get(spec.name, default))
+        except (TypeError, ValueError) as exc:
+            raise ConfigError(
+                f"{name}.{spec.name} must be {type(default).__name__}: {exc}"
+            ) from exc
+    return cls(**values)

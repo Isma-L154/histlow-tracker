@@ -1,27 +1,17 @@
 """Steam storefront adapter: wishlist contents and current prices.
 
-Two endpoints are used, both public and unauthenticated:
-
-``IWishlistService/GetWishlist/v1``
-    Returns app ids only. The legacy ``/wishlist/profiles/<id>/wishlistdata/``
-    route this replaced is deprecated and is deliberately not used.
-
-``store.steampowered.com/api/appdetails``
-    Accepts a batch of app ids only when the response is narrowed with
-    ``filters=price_overview``. That projection drops the game name, which is
-    why titles come from ITAD instead. Verified behaviour:
-    ``filters=basic`` rejects multi-id requests with HTTP 400, and a single-id
-    request returns roughly 12 KB per game.
+`IWishlistService/GetWishlist` lists app ids. `appdetails` accepts a batch of
+ids only with `filters=price_overview`, which drops the name (`filters=basic`
+rejects a batch with HTTP 400), so titles come from ITAD instead.
 """
 
 from __future__ import annotations
 
 import logging
 from collections.abc import Iterator, Sequence
-from datetime import UTC, datetime
 from typing import Any
 
-from .domain import DomainError, Money, PriceQuote, WishlistEntry
+from .domain import DomainError, Money, PriceQuote
 from .net import HttpClient
 
 log = logging.getLogger(__name__)
@@ -29,9 +19,7 @@ log = logging.getLogger(__name__)
 WISHLIST_URL = "https://api.steampowered.com/IWishlistService/GetWishlist/v1/"
 APPDETAILS_URL = "https://store.steampowered.com/api/appdetails"
 
-#: Verified to succeed at this size against the live endpoint. Steam applies a
-#: per-IP budget of roughly 200 requests per five minutes, so batching is what
-#: keeps a large wishlist inside the limit.
+#: Verified against the live endpoint. Steam allows ~200 requests per five minutes per IP.
 PRICE_BATCH_SIZE = 30
 
 
@@ -44,19 +32,17 @@ class WishlistUnavailableError(SteamError):
 
 
 class SteamClient:
-    """Reads wishlist membership and live prices for a single storefront region."""
+    """Reads wishlist membership and live prices for one storefront region."""
 
     def __init__(self, http: HttpClient, country: str) -> None:
         self._http = http
         self._country = country
 
-    def fetch_wishlist(self, steam_id64: str) -> list[WishlistEntry]:
-        """Returns every app on the wishlist.
+    def fetch_wishlist(self, steam_id64: str) -> list[int]:
+        """Returns the wishlisted app ids.
 
-        Steam answers a private or non-existent profile with HTTP 200 and an
-        empty object rather than an error status. Treating that as "no games"
-        would turn a misconfigured profile into a permanently silent tracker,
-        so it is raised as a failure with an actionable message instead.
+        Steam answers a private profile with HTTP 200 and an empty object, so that
+        is raised rather than read as an empty wishlist and a silent tracker.
         """
         document = self._http.get_json(WISHLIST_URL, params={"steamid": steam_id64})
         response = _as_mapping(document.get("response"))
@@ -68,21 +54,14 @@ class SteamClient:
                 "Check https://steamcommunity.com/my/edit/settings"
             )
 
-        entries = [entry for item in response["items"] if (entry := _parse_wishlist_item(item))]
-        log.info("wishlist contains %d apps", len(entries))
-        return entries
+        app_ids = [
+            app_id for item in response["items"] if (app_id := _wishlist_app_id(item)) is not None
+        ]
+        log.info("wishlist contains %d apps", len(app_ids))
+        return app_ids
 
     def fetch_price_quotes(self, app_ids: Sequence[int]) -> dict[int, PriceQuote]:
-        """Returns current prices keyed by app id, skipping anything unpriced.
-
-        Batches are issued sequentially. A wishlist of this project's expected
-        size resolves in a single request, and sequential issue keeps the
-        failure semantics obvious; concurrency would buy nothing measurable.
-
-        Apps absent from the result are silently unpriced rather than errors:
-        free-to-play titles, unreleased games and region-locked entries all
-        legitimately carry no price.
-        """
+        """Current prices by app id. Free, unreleased and region-locked apps carry none."""
         quotes: dict[int, PriceQuote] = {}
 
         for batch in _chunked(app_ids, PRICE_BATCH_SIZE):
@@ -100,25 +79,13 @@ class SteamClient:
         return quotes
 
 
-# ---------------------------------------------------------------------------
-# Parsing
-# ---------------------------------------------------------------------------
-
-
-def _parse_wishlist_item(item: Any) -> WishlistEntry | None:
+def _wishlist_app_id(item: Any) -> int | None:
     if not isinstance(item, dict):
         return None
-    try:
-        app_id = int(item["appid"])
-    except (KeyError, TypeError, ValueError):
+    app_id = _coerce_int(item.get("appid"), default=None)
+    if app_id is None:
         log.debug("skipping malformed wishlist item")
-        return None
-
-    return WishlistEntry(
-        app_id=app_id,
-        added_at=_epoch_to_datetime(item.get("date_added")),
-        priority=_coerce_int(item.get("priority"), default=0),
-    )
+    return app_id
 
 
 def _parse_price_batch(document: Any) -> dict[int, PriceQuote]:
@@ -132,8 +99,7 @@ def _parse_price_batch(document: Any) -> dict[int, PriceQuote]:
         if app_id is None or not isinstance(entry, dict) or not entry.get("success"):
             continue
 
-        # Free-to-play apps answer with `"data": []` - a JSON array, not an
-        # object - so the type check here is load-bearing, not defensive noise.
+        # Free-to-play apps answer with `"data": []`, an array rather than an object.
         data = entry.get("data")
         if not isinstance(data, dict):
             continue
@@ -161,17 +127,12 @@ def _parse_price_overview(app_id: int, overview: Any) -> PriceQuote | None:
             app_id=app_id,
             current=Money(final, currency.upper()),
             regular=Money(initial, currency.upper()),
-            discount_percent=_coerce_int(overview.get("discount_percent"), default=0) or 0,
+            discount_percent=_coerce_int(overview.get("discount_percent"), default=0),
         )
     except DomainError as exc:
-        # A single malformed entry must not abort the run for every other game.
+        # One malformed entry must not abort the run for every other game.
         log.warning("app %d has an invalid price and was skipped: %s", app_id, exc)
         return None
-
-
-# ---------------------------------------------------------------------------
-# Small helpers
-# ---------------------------------------------------------------------------
 
 
 def _chunked(items: Sequence[int], size: int) -> Iterator[Sequence[int]]:
@@ -185,16 +146,6 @@ def _as_mapping(value: Any) -> dict:
 
 def _coerce_int(value: Any, default: int | None) -> int | None:
     try:
-        return int(value)  # type: ignore[arg-type]
+        return int(value)
     except (TypeError, ValueError):
         return default
-
-
-def _epoch_to_datetime(value: Any) -> datetime | None:
-    seconds = _coerce_int(value, default=None)
-    if seconds is None:
-        return None
-    try:
-        return datetime.fromtimestamp(seconds, tz=UTC)
-    except (OverflowError, OSError, ValueError):
-        return None

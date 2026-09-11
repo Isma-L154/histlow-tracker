@@ -76,12 +76,16 @@ class TestPersistence:
         path.write_text(
             json.dumps({"version": STATE_VERSION + 1, "alerts": {"1": {}}}), encoding="utf-8"
         )
-        assert len(TrackerState.load(path)) == 0
+        state = TrackerState.load(path)
+        assert state.last_run_at is None
+        assert state.should_alert(1, Money(999, "EUR"), threshold_minor=1)
 
     def test_a_corrupt_file_degrades_to_empty(self, tmp_path: Path) -> None:
         path = tmp_path / "state.json"
         path.write_text("{ truncated", encoding="utf-8")
-        assert len(TrackerState.load(path)) == 0
+        state = TrackerState.load(path)
+        assert state.last_run_at is None
+        assert state.should_alert(1, Money(999, "EUR"), threshold_minor=1)
 
     def test_malformed_records_are_dropped_individually(self, tmp_path: Path) -> None:
         path = tmp_path / "state.json"
@@ -107,8 +111,9 @@ class TestPersistence:
         )
 
         state = TrackerState.load(path)
-        assert len(state) == 1
         assert not state.should_alert(1, Money(999, "EUR"), threshold_minor=1)
+        for dropped in (2, 3, 4):
+            assert state.should_alert(dropped, Money(999, "EUR"), threshold_minor=1)
 
     def test_a_naive_timestamp_is_assumed_utc(self, tmp_path: Path) -> None:
         path = tmp_path / "state.json"
@@ -124,15 +129,19 @@ class TestPurge:
         state.record_alert(1, Money(999, "EUR"), now=NOW)
         later = NOW + timedelta(days=200)
 
-        assert state.purge_expired(retention=timedelta(days=180), now=later) == 1
+        state.purge_expired(retention=timedelta(days=180), now=later)
         assert state.should_alert(1, Money(999, "EUR"), threshold_minor=1)
 
     def test_fresh_records_survive(self, state: TrackerState) -> None:
         state.record_alert(1, Money(999, "EUR"), now=NOW)
         later = NOW + timedelta(days=10)
 
-        assert state.purge_expired(retention=timedelta(days=180), now=later) == 0
+        state.purge_expired(retention=timedelta(days=180), now=later)
         assert not state.should_alert(1, Money(999, "EUR"), threshold_minor=1)
 
-    def test_purging_nothing_is_safe(self, state: TrackerState) -> None:
-        assert state.purge_expired(retention=timedelta(days=180), now=NOW) == 0
+    def test_purging_nothing_leaves_the_file_untouched(self, tmp_path: Path) -> None:
+        path = tmp_path / "state.json"
+        state = TrackerState.load(path)
+        state.purge_expired(retention=timedelta(days=180), now=NOW)
+        state.save()
+        assert not path.exists()

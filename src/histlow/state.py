@@ -1,14 +1,7 @@
-"""Run state persisted between executions.
+"""Run state kept between executions: when work last ran, and what was already reported.
 
-Holds two things:
-
-* When the pipeline last did real work, which drives the scheduling gate.
-* Which games have already been alerted on and at what price, which is what
-  stops a week-long sale from producing the same notification every few hours.
-
-The re-alert rule is deliberately asymmetric. A game already reported at 9.99
-stays quiet at 9.99 and at 10.99, but reports again at 8.99. Only a genuinely
-better price is worth interrupting someone for.
+Re-alerting is asymmetric on purpose: a game reported at 9.99 stays quiet at
+9.99 and 10.99, and reports again only at a genuinely better price.
 """
 
 from __future__ import annotations
@@ -29,15 +22,11 @@ STATE_VERSION = 1
 
 @dataclass(frozen=True, slots=True)
 class AlertRecord:
-    """The last price at which a given app was reported."""
-
     price: Money
     alerted_at: datetime
 
 
 class TrackerState:
-    """An in-memory view of run state, persisted on demand."""
-
     def __init__(
         self,
         path: Path,
@@ -49,14 +38,12 @@ class TrackerState:
         self._last_run_at = last_run_at
         self._dirty = False
 
-    # -- construction -------------------------------------------------------
-
     @classmethod
     def load(cls, path: Path) -> TrackerState:
         document = read_json(path, default={})
         if not isinstance(document, dict) or document.get("version") != STATE_VERSION:
-            # Discarding on a version bump can cause one duplicate notification.
-            # Guessing at an old layout could suppress a real one, which is worse.
+            # Discarding risks one duplicate notification; guessing at an old
+            # layout could suppress a real one.
             return cls(path)
 
         alerts: dict[int, AlertRecord] = {}
@@ -71,8 +58,6 @@ class TrackerState:
 
         return cls(path, alerts, _parse_datetime(document.get("last_run_at")))
 
-    # -- queries ------------------------------------------------------------
-
     @property
     def last_run_at(self) -> datetime | None:
         return self._last_run_at
@@ -80,9 +65,7 @@ class TrackerState:
     def should_alert(self, app_id: int, price: Money, *, threshold_minor: int) -> bool:
         """True when this price is worth interrupting the user for.
 
-        A differing currency is treated as never-alerted: the storefront region
-        changed, so the recorded price is not comparable and suppressing on it
-        would hide a real deal.
+        A different currency means the region changed, so the old price is not comparable.
         """
         previous = self._alerts.get(app_id)
         if previous is None:
@@ -92,18 +75,11 @@ class TrackerState:
         return previous.price.minor_units - price.minor_units >= threshold_minor
 
     def alerted_at(self, app_id: int, price: Money) -> datetime | None:
-        """When this app was last reported, if it was reported at this price.
-
-        A differing price or currency returns None: the recorded alert names a
-        figure the store no longer offers, so republishing it would put a stale
-        price on someone's lock screen.
-        """
+        """When this app was last reported, provided it was at exactly this price."""
         previous = self._alerts.get(app_id)
         if previous is None or previous.price != price:
             return None
         return previous.alerted_at
-
-    # -- mutation -----------------------------------------------------------
 
     def record_alert(self, app_id: int, price: Money, *, now: datetime) -> None:
         self._alerts[app_id] = AlertRecord(price=price, alerted_at=now)
@@ -113,12 +89,8 @@ class TrackerState:
         self._last_run_at = now
         self._dirty = True
 
-    def purge_expired(self, *, retention: timedelta, now: datetime) -> int:
-        """Drops records older than `retention` so the file cannot grow forever.
-
-        An expired record simply allows the game to alert again, which is the
-        desired behaviour years after the fact.
-        """
+    def purge_expired(self, *, retention: timedelta, now: datetime) -> None:
+        """Drops records older than `retention`, which lets those games alert again."""
         stale = [
             app_id
             for app_id, record in self._alerts.items()
@@ -129,7 +101,6 @@ class TrackerState:
         if stale:
             self._dirty = True
             log.debug("purged %d expired alert records", len(stale))
-        return len(stale)
 
     def save(self) -> None:
         if not self._dirty:
@@ -151,14 +122,6 @@ class TrackerState:
         )
         self._dirty = False
 
-    def __len__(self) -> int:
-        return len(self._alerts)
-
-
-# ---------------------------------------------------------------------------
-# Parsing
-# ---------------------------------------------------------------------------
-
 
 def _parse_record(value: Any) -> AlertRecord | None:
     if not isinstance(value, dict):
@@ -173,8 +136,7 @@ def _parse_record(value: Any) -> AlertRecord | None:
     try:
         return AlertRecord(price=Money(minor, currency.upper()), alerted_at=alerted_at)
     except DomainError:
-        # One malformed record must not discard the whole file. Dropping it
-        # costs at most a single duplicate notification for that game.
+        # One bad record costs at most one duplicate notification, not the whole file.
         return None
 
 

@@ -48,7 +48,7 @@ class TestStorage:
 
 class TestIdentityCache:
     def test_missing_file_starts_empty(self, tmp_path: Path) -> None:
-        assert len(IdentityCache.load(tmp_path / "identities.json")) == 0
+        assert not IdentityCache.load(tmp_path / "identities.json").knows(730, now=NOW)
 
     def test_remembers_across_a_save_and_reload(self, tmp_path: Path) -> None:
         path = tmp_path / "identities.json"
@@ -56,10 +56,10 @@ class TestIdentityCache:
         cache.remember(SILKSONG, now=NOW)
         cache.save()
 
-        assert IdentityCache.load(path).get(1030300, now=NOW) == SILKSONG
+        assert IdentityCache.load(path).get(1030300) == SILKSONG
 
     def test_unknown_app_returns_none(self, tmp_path: Path) -> None:
-        assert IdentityCache.load(tmp_path / "c.json").get(730, now=NOW) is None
+        assert IdentityCache.load(tmp_path / "c.json").get(730) is None
 
     def test_save_is_skipped_when_nothing_changed(self, tmp_path: Path) -> None:
         path = tmp_path / "identities.json"
@@ -71,7 +71,7 @@ class TestIdentityCache:
         path.write_text(
             json.dumps({"version": CACHE_VERSION + 1, "entries": {"730": {}}}), encoding="utf-8"
         )
-        assert len(IdentityCache.load(path)) == 0
+        assert not IdentityCache.load(path).knows(730, now=NOW)
 
     def test_malformed_entries_are_dropped_on_load(self, tmp_path: Path) -> None:
         path = tmp_path / "identities.json"
@@ -91,8 +91,9 @@ class TestIdentityCache:
         )
 
         cache = IdentityCache.load(path)
-        assert len(cache) == 1
-        assert cache.get(730, now=NOW) is not None
+        assert cache.get(730) is not None
+        assert not cache.knows(570, now=NOW)
+        assert not cache.knows(440, now=NOW)
 
 
 class TestNegativeCaching:
@@ -100,7 +101,7 @@ class TestNegativeCaching:
         cache = IdentityCache.load(tmp_path / "c.json")
         cache.remember_missing(999999, now=NOW)
 
-        assert cache.get(999999, now=NOW) is None
+        assert cache.get(999999) is None
         assert cache.knows(999999, now=NOW) is True  # no lookup needed
 
     def test_an_expired_miss_is_retried(self, tmp_path: Path) -> None:
@@ -118,7 +119,7 @@ class TestNegativeCaching:
 
         far_future = NOW + timedelta(days=3650)
         assert cache.knows(1030300, now=far_future) is True
-        assert cache.get(1030300, now=far_future) == SILKSONG
+        assert cache.get(1030300) == SILKSONG
 
     def test_expired_misses_survive_a_reload_until_queried(self, tmp_path: Path) -> None:
         path = tmp_path / "c.json"

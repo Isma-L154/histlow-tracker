@@ -1,12 +1,7 @@
-"""Atomic JSON persistence for the on-disk cache and alert state.
+"""Atomic JSON persistence for the identity cache and alert state.
 
-Both files are restored from the GitHub Actions cache at the start of a run and
-saved at the end. A run cancelled mid-write must never leave a truncated file
-behind: a corrupt identity cache would cost a round of redundant lookups, but a
-corrupt alert state would re-notify every game already reported.
-
-`os.replace` is atomic on both POSIX and Windows, so a reader sees either the
-previous complete file or the new complete file, never a partial one.
+A run cancelled mid-write must never leave a truncated file: a corrupt alert
+state would re-notify every game already reported.
 """
 
 from __future__ import annotations
@@ -22,16 +17,13 @@ log = logging.getLogger(__name__)
 
 
 def read_json(path: Path, default: Any) -> Any:
-    """Reads `path`, falling back to `default` for any recoverable problem.
+    """Reads `path`, falling back to `default` when it is missing or corrupt.
 
-    A missing file is the normal first-run case. A corrupt file is degraded
-    rather than fatal: losing cached state costs one noisier run, whereas
-    aborting would leave the tracker permanently broken until someone
-    intervened manually.
+    Degrading costs one noisier run; aborting would leave the tracker broken
+    until someone intervened.
     """
     try:
-        # utf-8-sig for the same reason as elsewhere: these files are written
-        # by this program, but a user may open and re-save one while debugging.
+        # utf-8-sig: a user may re-save the file in an editor that adds a BOM.
         raw = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         return default
@@ -47,11 +39,9 @@ def read_json(path: Path, default: Any) -> Any:
 
 
 def write_json_atomic(path: Path, payload: Any) -> None:
-    """Writes `payload` to `path` via a temporary file and an atomic rename."""
+    """Writes via a temporary file and `os.replace`, which is atomic on POSIX and Windows."""
     path.parent.mkdir(parents=True, exist_ok=True)
-
-    # The temporary file is created in the destination directory so that
-    # `os.replace` stays within one filesystem and therefore stays atomic.
+    # Same directory as the target, so the rename never crosses filesystems.
     descriptor, temp_name = tempfile.mkstemp(
         dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
     )

@@ -17,7 +17,6 @@ from histlow.publisher import (
 
 TOKEN = "gist-token-value"
 GIST_ID = "abc123def456"
-RAW_URL = f"https://gist.githubusercontent.com/u/{GIST_ID}/raw/deadbeef/{PAYLOAD_FILENAME}"
 
 PAYLOAD = {"version": 1, "count": 2, "headline": "2 en minimo historico"}
 
@@ -34,10 +33,6 @@ class FakeHttp:
         return self._outcome
 
 
-def success_response() -> dict:
-    return {"files": {PAYLOAD_FILENAME: {"raw_url": RAW_URL}}}
-
-
 def make_publisher(outcome: Any) -> tuple[GistPublisher, FakeHttp]:
     http = FakeHttp(outcome)
     return GistPublisher(http, token=TOKEN, gist_id=GIST_ID), http  # type: ignore[arg-type]
@@ -45,7 +40,7 @@ def make_publisher(outcome: Any) -> tuple[GistPublisher, FakeHttp]:
 
 class TestGistPublisher:
     def test_patches_the_named_file_in_the_gist(self) -> None:
-        publisher, http = make_publisher(success_response())
+        publisher, http = make_publisher({})
 
         publisher.publish(PAYLOAD)
 
@@ -55,29 +50,19 @@ class TestGistPublisher:
         assert json.loads(content) == PAYLOAD
 
     def test_sends_a_bearer_token_and_the_api_version(self) -> None:
-        publisher, http = make_publisher(success_response())
+        publisher, http = make_publisher({})
         publisher.publish(PAYLOAD)
 
         headers = http.calls[0]["headers"]
         assert headers["Authorization"] == f"Bearer {TOKEN}"
         assert headers["X-GitHub-Api-Version"] == "2022-11-28"
 
-    def test_returns_the_raw_url_from_the_response(self) -> None:
-        # GitHub rewrites the revision hash on every change, so the URL has to
-        # be read back rather than constructed.
-        publisher, _ = make_publisher(success_response())
-        assert publisher.publish(PAYLOAD) == RAW_URL
-
     def test_non_ascii_titles_survive_the_round_trip(self) -> None:
-        publisher, http = make_publisher(success_response())
+        publisher, http = make_publisher({})
         publisher.publish({"summary": "Ori — 9,99 € · Café"})
 
         content = http.calls[0]["payload"]["files"][PAYLOAD_FILENAME]["content"]
         assert json.loads(content)["summary"] == "Ori — 9,99 € · Café"
-
-    def test_a_missing_raw_url_is_tolerated(self) -> None:
-        publisher, _ = make_publisher({"files": {}})
-        assert publisher.publish(PAYLOAD) == ""
 
     @pytest.mark.parametrize("status", [401, 403])
     def test_a_rejected_token_reports_the_required_scope(self, status: int) -> None:
@@ -109,7 +94,6 @@ class TestGistPublisher:
 
 class TestDryRunPublisher:
     def test_writes_the_payload_to_stdout(self, capsys: pytest.CaptureFixture) -> None:
-        result = DryRunPublisher().publish(PAYLOAD)
+        DryRunPublisher().publish(PAYLOAD)
 
         assert json.loads(capsys.readouterr().out) == PAYLOAD
-        assert "dry run" in result

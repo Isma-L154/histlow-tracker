@@ -1,21 +1,10 @@
-"""One-off helper: create the secret gist that bridges to the iOS Shortcut.
-
-Run once during setup:
+"""One-off setup: creates the secret gist the iOS Shortcut polls.
 
     python scripts/bootstrap_gist.py
 
-It creates a secret gist holding an empty payload, writes `GIST_ID` into
-`.env`, and saves the Shortcut's URL to `var/shortcut-url.txt`.
-
-Neither the token, the gist id nor the raw URL is ever printed. A secret gist
-is unlisted and unsearchable, but its URL is unguessable rather than
-access-controlled, so the URL is itself a credential and is treated like one -
-writing it to a git-ignored file instead of the terminal keeps it out of shell
-history, scrollback and any transcript.
-
-Its contents are public store data - app ids, titles and prices - with no
-account identifier, so the worst case of disclosure is revealing which games
-are on sale.
+Writes `GIST_ID` into `.env` and the Shortcut's URL into `var/shortcut-url.txt`.
+Nothing sensitive is printed: the URL is a credential in practice, so it goes to
+a git-ignored file rather than to terminal scrollback.
 """
 
 from __future__ import annotations
@@ -29,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from histlow.dotenv import merge_environment, read_dotenv
 from histlow.net import HttpClient, HttpError
-from histlow.publisher import GISTS_URL, PAYLOAD_FILENAME
+from histlow.publisher import GISTS_URL, GITHUB_HEADERS, PAYLOAD_FILENAME
 
 DESCRIPTION = "Steam HistLow Tracker payload (read by an iOS Shortcut)"
 ENV_PATH = Path(".env")
@@ -75,11 +64,7 @@ def main() -> int:
                 "public": False,
                 "files": {PAYLOAD_FILENAME: {"content": json.dumps(INITIAL_PAYLOAD, indent=2)}},
             },
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/vnd.github+json",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
+            headers={"Authorization": f"Bearer {token}", **GITHUB_HEADERS},
         )
     except HttpError as exc:
         print(f"Could not create the gist: {exc}", file=sys.stderr)

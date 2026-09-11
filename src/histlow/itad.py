@@ -1,22 +1,8 @@
-"""IsThereAnyDeal adapter: identity resolution and Steam-specific price lows.
+"""IsThereAnyDeal adapter: identity lookup, all-time Steam lows and price history.
 
-Two endpoints are used:
-
-``GET /games/lookup/v1``
-    Resolves a Steam app id to an ITAD game id and, usefully, its title. One
-    app per request, which is why results are cached permanently.
-
-``POST /games/storelow/v2``
-    Returns the all-time lowest price per shop, up to 200 games per request.
-
-Scoping the low to Steam is the decision the whole project depends on. The
-generic ``/games/historylow/v1`` reports the lowest price across every shop
-ITAD tracks; key resellers routinely undercut Steam, so a Steam price would
-essentially never match that figure and the tracker would never fire.
-
-The API key travels in the ``ITAD-API-Key`` header rather than the documented
-``key`` query parameter, keeping it out of URLs entirely and therefore out of
-any log line, proxy record or error message.
+The low is scoped to Steam. The cross-shop low is set by key resellers, which a
+Steam price would essentially never match, so the tracker would never fire.
+The API key travels in a header, which keeps it out of URLs and therefore logs.
 """
 
 from __future__ import annotations
@@ -26,14 +12,7 @@ from collections.abc import Iterator, Sequence
 from datetime import datetime
 from typing import Any
 
-from .domain import (
-    ITAD_STEAM_SHOP_ID,
-    DomainError,
-    GameIdentity,
-    HistoricalLow,
-    Money,
-    PricePoint,
-)
+from .domain import DomainError, GameIdentity, HistoricalLow, Money, PricePoint
 from .net import HttpClient, HttpError, PermanentHttpError
 
 log = logging.getLogger(__name__)
@@ -42,6 +21,9 @@ BASE_URL = "https://api.isthereanydeal.com"
 LOOKUP_URL = f"{BASE_URL}/games/lookup/v1"
 STORELOW_URL = f"{BASE_URL}/games/storelow/v2"
 HISTORY_URL = f"{BASE_URL}/games/history/v2"
+
+#: Steam's shop id at ITAD, per `GET /service/shops/v1`.
+STEAM_SHOP_ID = 61
 
 #: Documented maximum for the storelow request body.
 STORELOW_BATCH_SIZE = 200
@@ -58,19 +40,13 @@ class ItadAuthError(ItadError):
 
 
 class ItadClient:
-    """Resolves game identities and their all-time Steam lows."""
-
     def __init__(self, http: HttpClient, api_key: str, country: str) -> None:
         self._http = http
         self._headers = {API_KEY_HEADER: api_key}
         self._country = country
 
     def lookup(self, app_id: int) -> GameIdentity | None:
-        """Resolves one Steam app id, or None when ITAD does not carry it.
-
-        A missing game is an ordinary outcome, not a failure: ITAD's catalogue
-        does not cover every DLC, demo or regionally delisted title.
-        """
+        """Resolves one Steam app id; None when ITAD does not carry it, as with many DLC."""
         try:
             document = self._http.get_json(
                 LOOKUP_URL, params={"appid": app_id}, headers=self._headers
@@ -97,14 +73,8 @@ class ItadClient:
             title=title if isinstance(title, str) and title else f"App {app_id}",
         )
 
-    def fetch_steam_lows(
-        self, identities: Sequence[GameIdentity]
-    ) -> dict[int, HistoricalLow]:
-        """Returns the all-time Steam low per app id, keyed by Steam app id.
-
-        Games absent from the result have no recorded Steam low and are simply
-        not comparable; the caller skips them rather than guessing.
-        """
+    def fetch_steam_lows(self, identities: Sequence[GameIdentity]) -> dict[int, HistoricalLow]:
+        """The all-time Steam low per app id; apps without one are absent."""
         if not identities:
             return {}
 
@@ -116,7 +86,7 @@ class ItadClient:
                 document = self._http.post_json(
                     STORELOW_URL,
                     payload=batch,
-                    params={"country": self._country, "shops": str(ITAD_STEAM_SHOP_ID)},
+                    params={"country": self._country, "shops": str(STEAM_SHOP_ID)},
                     headers=self._headers,
                 )
             except PermanentHttpError as exc:
@@ -127,40 +97,23 @@ class ItadClient:
         log.info("resolved %d Steam historical lows out of %d games", len(lows), len(identities))
         return lows
 
-
     def fetch_price_history(self, itad_id: str) -> list[PricePoint]:
-        """Returns the Steam price log for one game, newest entry first.
+        """The Steam price log for one game, or empty when it cannot be loaded.
 
-        Used only to tell a newly set record apart from a return to an older
-        one, and only for games that already qualified, so at most a handful of
-        calls per run.
-
-        A failure here degrades to an empty log rather than aborting: the alert
-        itself is already decided, and losing the "new record" label is a much
-        smaller loss than losing the notification.
+        Failing soft keeps one game from aborting the run; its record status is
+        then unknown, which `selector.record_setting_deals` drops.
         """
         try:
             document = self._http.get_json(
                 HISTORY_URL,
-                params={
-                    "id": itad_id,
-                    "country": self._country,
-                    "shops": str(ITAD_STEAM_SHOP_ID),
-                },
+                params={"id": itad_id, "country": self._country, "shops": str(STEAM_SHOP_ID)},
                 headers=self._headers,
             )
         except HttpError as exc:
             log.warning("could not load price history: %s", exc)
             return []
 
-        points = _parse_history(document)
-        points.sort(key=lambda point: point.recorded_at, reverse=True)
-        return points
-
-
-# ---------------------------------------------------------------------------
-# Parsing
-# ---------------------------------------------------------------------------
+        return _parse_history(document)
 
 
 def _parse_history(document: Any) -> list[PricePoint]:
@@ -176,21 +129,12 @@ def _parse_history(document: Any) -> list[PricePoint]:
         deal = entry.get("deal")
         if recorded_at is None or not isinstance(deal, dict):
             continue
-
-        price = deal.get("price")
-        if not isinstance(price, dict):
-            continue
-        amount_int = price.get("amountInt")
-        currency = price.get("currency")
-        if not isinstance(amount_int, int) or not isinstance(currency, str):
-            continue
-
         try:
-            points.append(
-                PricePoint(price=Money(amount_int, currency.upper()), recorded_at=recorded_at)
-            )
+            price = _parse_money(deal.get("price"))
         except DomainError:
             continue
+        if price is not None:
+            points.append(PricePoint(price=price, recorded_at=recorded_at))
 
     return points
 
@@ -220,11 +164,8 @@ def _parse_storelow_batch(
 def _extract_steam_low(app_id: int, entries: Any) -> HistoricalLow | None:
     """Picks the Steam entry out of a `lows` array.
 
-    The shop id is re-checked here even though the request already filtered on
-    it. If that filter were ever ignored server-side, silently accepting a key
-    reseller's low would make the tracker permanently silent - the exact
-    failure this project is built to avoid - so the guarantee is enforced
-    locally rather than trusted.
+    The shop is re-checked although the request filtered on it: accepting a key
+    reseller's low, should the filter ever be ignored, would silence the tracker.
     """
     if not isinstance(entries, list):
         return None
@@ -233,29 +174,33 @@ def _extract_steam_low(app_id: int, entries: Any) -> HistoricalLow | None:
         if not isinstance(entry, dict):
             continue
         shop = entry.get("shop")
-        if not isinstance(shop, dict) or shop.get("id") != ITAD_STEAM_SHOP_ID:
-            continue
-
-        price = entry.get("price")
-        if not isinstance(price, dict):
-            continue
-
-        amount_int = price.get("amountInt")
-        currency = price.get("currency")
-        if not isinstance(amount_int, int) or not isinstance(currency, str):
+        if not isinstance(shop, dict) or shop.get("id") != STEAM_SHOP_ID:
             continue
 
         try:
-            return HistoricalLow(
-                app_id=app_id,
-                low=Money(amount_int, currency.upper()),
-                recorded_at=_parse_timestamp(entry.get("timestamp")),
-            )
+            low = _parse_money(entry.get("price"))
         except DomainError as exc:
             log.warning("app %d has an invalid historical low and was skipped: %s", app_id, exc)
             return None
+        if low is None:
+            continue
+
+        return HistoricalLow(
+            app_id=app_id, low=low, recorded_at=_parse_timestamp(entry.get("timestamp"))
+        )
 
     return None
+
+
+def _parse_money(price: Any) -> Money | None:
+    """Reads ITAD's `{"amountInt", "currency"}` shape; raises DomainError on a bad value."""
+    if not isinstance(price, dict):
+        return None
+    amount = price.get("amountInt")
+    currency = price.get("currency")
+    if not isinstance(amount, int) or not isinstance(currency, str):
+        return None
+    return Money(amount, currency.upper())
 
 
 def _parse_timestamp(value: Any) -> datetime | None:
@@ -267,15 +212,9 @@ def _parse_timestamp(value: Any) -> datetime | None:
         return None
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
 def _classify_permanent(exc: PermanentHttpError) -> ItadError:
     if exc.status in (401, 403):
-        # Deliberately does not echo the key or the URL: this message is
-        # designed to be safe in a public CI log.
+        # Safe for a public CI log: neither the key nor the URL is echoed.
         return ItadAuthError(
             "ITAD rejected the API key. Confirm ITAD_API_KEY matches an application "
             "at https://isthereanydeal.com/apps/my/ and that the account email is verified."
@@ -283,6 +222,6 @@ def _classify_permanent(exc: PermanentHttpError) -> ItadError:
     return ItadError(str(exc))
 
 
-def _chunked(items: Sequence[str], size: int) -> Iterator[list[str]]:
+def _chunked(items: list[str], size: int) -> Iterator[list[str]]:
     for start in range(0, len(items), size):
-        yield list(items[start : start + size])
+        yield items[start : start + size]

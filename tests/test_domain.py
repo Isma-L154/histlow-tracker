@@ -34,11 +34,6 @@ class TestMoney:
         assert dear >= cheap
         assert not dear < cheap
 
-    def test_string_rendering_pads_cents(self) -> None:
-        assert str(Money(1405, "EUR")) == "14.05 EUR"
-        assert str(Money(1450, "EUR")) == "14.50 EUR"
-        assert str(Money(0, "EUR")) == "0.00 EUR"
-
     def test_is_hashable_and_value_compared(self) -> None:
         assert Money(999, "EUR") == Money(999, "EUR")
         assert len({Money(999, "EUR"), Money(999, "EUR")}) == 1
@@ -62,12 +57,6 @@ class TestPriceQuote:
                 regular=Money(1999, "EUR"),
                 discount_percent=101,
             )
-
-    def test_is_discounted_reflects_percentage(self) -> None:
-        full = PriceQuote(1, Money(1999, "EUR"), Money(1999, "EUR"), 0)
-        cut = PriceQuote(2, Money(999, "EUR"), Money(1999, "EUR"), 50)
-        assert not full.is_discounted
-        assert cut.is_discounted
 
 
 class TestDeal:

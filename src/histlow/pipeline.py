@@ -1,15 +1,9 @@
 """Wires the adapters and the decision logic into one run.
 
-This is the only module that knows about all the others. Everything it calls is
-either a pure function or an adapter behind a narrow interface, so the ordering
-below is the entire control flow of the project:
-
     wishlist -> prices -> discount filter -> identities -> historical lows
-             -> at-or-below filter -> de-duplication -> publish
+             -> at-or-below filter -> record filter -> de-duplication -> publish
 
-The discount filter placement is the optimisation the design rests on. For a
-typical wishlist it removes roughly three quarters of the entries before any
-historical data is requested.
+Filtering to discounted games first is what keeps ITAD traffic small.
 """
 
 from __future__ import annotations
@@ -37,7 +31,7 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class Paths:
-    """Locations of the two files carried between runs by the Actions cache."""
+    """The two files the Actions cache carries between runs."""
 
     state: Path
     identities: Path
@@ -49,8 +43,6 @@ class Paths:
 
 @dataclass(frozen=True, slots=True)
 class RunResult:
-    """A structured summary of what happened, used for logging and tests."""
-
     ran: bool
     reason: str
     wishlist_size: int = 0
@@ -59,7 +51,6 @@ class RunResult:
     record_setting: int = 0
     alerted: int = 0
     repeated: int = 0
-    published_url: str = ""
 
     def describe(self) -> str:
         if not self.ran:
@@ -79,7 +70,6 @@ def run(
     forced: bool = False,
     http: HttpClient | None = None,
 ) -> RunResult:
-    """Executes one full tracker run and returns what it did."""
     state = TrackerState.load(paths.state)
 
     decision = decide(
@@ -93,8 +83,7 @@ def run(
 
     http = http or HttpClient()
     steam = SteamClient(http, country=settings.country)
-    # Historical lows and the prices they are compared against must come from
-    # the same region, or the currencies will not line up.
+    # Lows and the prices compared against them must share a region, or the currencies differ.
     reference_steam = SteamClient(http, country=settings.comparison_country)
     itad = ItadClient(
         http, api_key=settings.secrets.itad_api_key, country=settings.comparison_country
@@ -114,23 +103,18 @@ def run(
             reason=decision.reason,
         )
     finally:
-        # Lookups already performed are valid work even if a later stage
-        # failed; persisting them keeps the next attempt cheap. This is a pure
-        # performance cache and cannot change which deals qualify, so it is
-        # saved in dry-run mode too.
+        # Lookups already paid for survive a later failure. Saved in a dry run
+        # too: the cache cannot change which deals qualify.
         cache.save()
 
     if settings.dry_run:
-        # A dry run must leave no trace. Recording alerts here would mark the
-        # previewed deals as already reported, and the next real run would
-        # suppress the very notification the preview was checking.
+        # Recording alerts here would make the next real run suppress what was previewed.
         log.info("dry run: alert state left untouched")
         return result
 
     state.mark_run(now)
     state.purge_expired(retention=timedelta(days=settings.state.retention_days), now=now)
     state.save()
-
     return result
 
 
@@ -147,7 +131,7 @@ def _execute(
     reason: str,
 ) -> RunResult:
     wishlist = steam.fetch_wishlist(settings.secrets.steam_id64)
-    quotes = steam.fetch_price_quotes([entry.app_id for entry in wishlist])
+    quotes = steam.fetch_price_quotes(wishlist)
 
     discounted = selector.discounted_app_ids(quotes, settings.alerts)
     log.info("%d of %d wishlisted apps are discounted", len(discounted), len(wishlist))
@@ -156,45 +140,36 @@ def _execute(
     lows = itad.fetch_steam_lows(list(identities.values()))
 
     store_quotes = {app_id: quotes[app_id] for app_id in discounted}
-    reference_quotes = _reference_quotes(
-        settings, reference_steam, store_quotes, discounted
-    )
+    reference_quotes = _reference_quotes(settings, reference_steam, store_quotes)
 
     at_low = selector.qualifying_deals(store_quotes, reference_quotes, identities, lows)
     log.info("%d discounted apps are at or below their all-time Steam low", len(at_low))
-
-    # History distinguishes a sale that beat every earlier price from one
-    # merely returning to an old record. It runs on this set only - already
-    # narrowed to games at their low - so it costs a handful of requests.
+    # History runs only on this already-narrowed set, so it costs a handful of requests.
     at_low = selector.annotate_records(at_low, _record_statuses(itad, identities, lows, at_low))
 
     candidates = at_low
     if settings.alerts.require_new_record:
         candidates = selector.record_setting_deals(at_low)
-        _log_record_filter(at_low, candidates)
+        log.info("%d of %d beat their previous record", len(candidates), len(at_low))
+        if matched := len(at_low) - len(candidates):
+            log.info("%d were at their low but did not beat it", matched)
 
     fresh = selector.unreported_deals(candidates, state, settings.alerts)
-    # Deals already reported are republished for a while, because the phone
-    # polls rather than being pushed to: a payload that appears and is replaced
-    # between two polls is never read, and would never be published again.
     repeated = selector.repeated_deals(candidates, state, settings.alerts, now=now)
     ranked = selector.rank_for_payload([*fresh, *repeated], settings.alerts)
 
-    payload = build_payload(
-        ranked,
-        generated_at=now,
-        headline_template=settings.notification.headline_template,
-        separator=settings.notification.separator,
-        record_marker=settings.notification.record_marker,
+    publisher.publish(
+        build_payload(
+            ranked,
+            generated_at=now,
+            headline_template=settings.notification.headline_template,
+            separator=settings.notification.separator,
+            record_marker=settings.notification.record_marker,
+        )
     )
-    published_url = publisher.publish(payload)
 
-    # Recorded only after a successful publish. Marking them earlier would
-    # suppress the alert permanently if publishing had failed.
-    #
-    # Only the fresh ones. Re-recording a repeat would push its timestamp
-    # forward on every run, so a long sale would never age out of the repeat
-    # window and would notify daily until it ended.
+    # Only after a successful publish, and only the fresh ones: re-recording a
+    # repeat would push its window forward every run, so it would never age out.
     for deal in fresh:
         state.record_alert(deal.app_id, deal.current, now=now)
 
@@ -207,7 +182,6 @@ def _execute(
         record_setting=sum(1 for deal in at_low if deal.record.sets_new_record),
         alerted=len(fresh),
         repeated=len(repeated),
-        published_url=published_url,
     )
 
 
@@ -217,67 +191,31 @@ def _record_statuses(
     lows: Mapping[int, HistoricalLow],
     deals: Sequence[Deal],
 ) -> dict[int, RecordStatus]:
-    """Works out which of the alerted games just set a new record."""
-    statuses: dict[int, RecordStatus] = {}
-
-    for deal in deals:
-        identity = identities.get(deal.app_id)
-        low = lows.get(deal.app_id)
-        if identity is None or low is None:
-            continue
-        statuses[deal.app_id] = selector.classify_record(
-            itad.fetch_price_history(identity.itad_id), low
+    # Every deal already has an identity and a low: `qualifying_deals` skips the rest.
+    return {
+        deal.app_id: selector.classify_record(
+            itad.fetch_price_history(identities[deal.app_id].itad_id), lows[deal.app_id]
         )
-
-    return statuses
-
-
-def _log_record_filter(at_low: Sequence[Deal], kept: Sequence[Deal]) -> None:
-    """Explains the record filter's decision, naming anything it could not judge.
-
-    An unknown status is dropped, so a failed history lookup silently costs an
-    alert. That has to be visible in the log, because it is indistinguishable
-    from "nothing beat its record" otherwise.
-    """
-    log.info("%d of %d beat their previous record", len(kept), len(at_low))
-
-    unknown = [
-        deal.app_id
-        for deal in at_low
-        if not deal.record.sets_new_record and deal.record.previous_low is None
-    ]
-    matched = len(at_low) - len(kept)
-    if matched:
-        log.info("%d were at their low but did not beat it", matched)
-    if unknown:
-        log.debug("record status could not be established for apps %s", unknown)
+        for deal in deals
+    }
 
 
 def _reference_quotes(
-    settings: Settings,
-    reference_steam: SteamClient,
-    store_quotes: dict[int, PriceQuote],
-    discounted: list[int],
+    settings: Settings, reference_steam: SteamClient, store_quotes: dict[int, PriceQuote]
 ) -> dict[int, PriceQuote]:
-    """Prices in the comparison region, for the at-or-below decision.
-
-    When both regions are the same the store prices already are the reference
-    prices, so the second request is skipped entirely. Only a user whose
-    currency ITAD does not track pays for the extra call, and only for the
-    handful of games that survived the discount filter.
-    """
+    """Prices in the comparison region; no request when it is the store region."""
     if settings.comparison_country == settings.country:
         return store_quotes
-    if not discounted:
+    if not store_quotes:
         return {}
 
     log.info(
         "fetching %s reference prices for %d discounted apps (%s is not tracked by ITAD)",
         settings.comparison_country,
-        len(discounted),
+        len(store_quotes),
         settings.country,
     )
-    return reference_steam.fetch_price_quotes(discounted)
+    return reference_steam.fetch_price_quotes(list(store_quotes))
 
 
 def _resolve_identities(
@@ -293,7 +231,7 @@ def _resolve_identities(
 
     for app_id in app_ids:
         if cache.knows(app_id, now=now):
-            cached = cache.get(app_id, now=now)
+            cached = cache.get(app_id)
             if cached is not None:
                 identities[app_id] = cached
             continue
@@ -301,8 +239,6 @@ def _resolve_identities(
         looked_up += 1
         identity = itad.lookup(app_id)
         if identity is None:
-            # Remembered as a miss so an app ITAD does not carry is not
-            # re-queried on every run.
             cache.remember_missing(app_id, now=now)
             log.debug("ITAD does not carry app %d; skipping", app_id)
             continue
