@@ -1,15 +1,10 @@
 /**
  * The old address, after the rename.
  *
- * `cazalogros.cloudils.com` has been shared, bookmarked and indexed, and it is
- * listed in `sitemap.xml`. It stays routed to this Worker so those links can be
- * answered rather than dropped, and every one of them is sent to the same path
- * on the new host.
- *
- * The alternative - leaving the old host serving the site - was ruled out by a
- * decision already written into `wrangler.jsonc` about the workers.dev address:
- * two live URLs for one site means the old one keeps being linked, and every
- * later decision about the domain gets made twice.
+ * `cazalogros.cloudils.com` has been shared, bookmarked, indexed and listed in
+ * `sitemap.xml`, so it stays routed here and every path is sent to the same
+ * path on the new host. Leaving it serving the site was ruled out: two live
+ * URLs for one site means every later decision gets made twice.
  */
 
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
@@ -35,11 +30,9 @@ describe("the old host", () => {
     ["an api route", "/api/health"],
     ["a path that does not exist", "/nothing-here"],
   ])("redirects %s permanently", async (_name, path) => {
-    // These call the handler directly, so they prove what it does once it is
-    // reached - not that it is reached. Whether a path invokes the Worker at
-    // all is decided by `run_worker_first` in wrangler.jsonc, which this pool
-    // does not apply. The fall-through case above is exactly where those two
-    // differ, and it was verified separately against a running server.
+    // These prove what the handler does once reached, not that it is reached:
+    // `run_worker_first` decides that, and this pool does not apply it. The
+    // fall-through case above was verified against a running server.
     const response = await get(`${OLD}${path}`);
     // 301 rather than 302: the move is permanent, and a temporary redirect
     // would leave search engines indexing the old address indefinitely.

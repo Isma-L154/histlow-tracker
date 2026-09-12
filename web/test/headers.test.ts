@@ -2,20 +2,13 @@
  * That a response the Worker builds is protected like one the asset runtime
  * serves.
  *
- * `public/_headers` is applied by the asset runtime, so every static file
- * carries the site's Content-Security-Policy and the rest. A response
- * constructed in Worker code never passes through it, and `/game/<id>` - the
- * one document on this site assembled by hand, from a game name written by a
- * developer and relayed by Steam - was shipping with no policy at all. The
- * escaping in `preview.ts` is what stands between a hostile title and the
- * page; a CSP is the layer meant to be there when escaping is wrong, and it
- * was missing exactly where it would be needed.
+ * `/game/<id>` - the one document assembled by hand, out of a game name
+ * written by a developer and relayed by Steam - shipped with no policy at all,
+ * which is exactly where one would be doing something.
  *
- * The rule asserted here is a comparison, not a list. A list in the test is a
- * third copy of the same thing, and it would go stale in step with the code it
- * is supposed to catch: adding a header to `_headers` and forgetting the
- * Worker would leave every copy agreeing with every other. So the static side
- * is read at run time and the Worker is required to match it.
+ * The rule asserted is a comparison, not a list: a list here would be a third
+ * copy that goes stale in step with the code it is meant to catch, so the
+ * static side is read at run time and the Worker is required to match it.
  */
 
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";

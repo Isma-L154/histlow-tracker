@@ -1,15 +1,11 @@
 /**
  * That the release list says it too.
  *
- * A separate file, and the separation is the point. `announced` is module
- * state, and the pool gives each test file its own copy - so the only way to
- * observe a branch that announces is to be the first thing in a file to reach
- * one. Alongside the completion-time cases, `/api/upcoming` ran with the flag
- * already set: the line was exercised and its behaviour was invisible.
- *
- * That was a live mutant. Deleting the announcement from this branch left all
- * 290 tests green, on half of what the change is named for, and review is what
- * caught it rather than the mutation table in the pull request.
+ * A separate file, and the separation is the point: `announced` is module
+ * state and the pool gives each file its own copy, so a branch that announces
+ * can only be observed by the first thing in a file to reach one. Beside the
+ * completion-time cases this ran with the flag already set, and deleting the
+ * announcement left every test green.
  */
 
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
