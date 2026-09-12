@@ -256,38 +256,20 @@ until the next morning's run — Resident Evil Requiem reached a new all-time lo
 thirteen hours after that day's only firing and sat unpublished until it was
 dispatched by hand.
 
-`schedule.min_interval_hours` is 1, the loosest the validator allows, and that
-is deliberate.
+`schedule.min_interval_hours` is 1, the loosest the validator allows.
 
-The setting stops the same work being done twice. A manual dispatch is not the
-case it covers: **force** defaults to on and the gate returns on it before the
-interval is ever consulted, so a dispatch is never blocked. What remains is a
-duplicated delivery of the same cron, and a scheduled run landing right after a
-manual dispatch that already recorded the run — both a matter of seconds to
-minutes. Every hour of interval beyond that is an hour in which a legitimate
-firing is silently dropped instead.
-
-The arithmetic: the firings are nominally twelve hours apart, and GitHub
-delivered the observed ones `1h35m` to `11h07m` late — a swing of `9h32m`, so
-two can land as little as `2h28m` apart. The gate opens at
-`min_interval_hours` minus the 20-minute drift grace:
-
-| Value | Gate opens at | Headroom over a `2h28m` gap |
-| --- | --- | --- |
-| **1** | `40m` | `1h48m` |
-| 2 | `1h40m` | `48m` |
-| 3 | `2h40m` | drops the run |
-
-The headroom is worth having because that delay range was measured entirely on
-the `12:23` firing — the `00:23` slot has never run, and the workflow's own
-comment notes that GitHub's queueing depends on the hour requested.
+The setting stops the same work being done twice — a duplicated delivery of the
+same cron, or a scheduled run landing right after a manual dispatch. Both
+arrive within minutes, so a low value serves it, and every hour beyond that is
+an hour in which a legitimate firing is dropped instead. The firings are twelve
+hours apart but GitHub delivers them `1h35m` to `11h07m` late, so two can land
+`2h28m` apart: 1 opens the gate at `40m`, where 3 would open it at `2h40m` and
+drop the run. `tests/test_schedule_documentation.py` enforces that margin.
 
 ### Cost
 
-About 14 seconds and a handful of HTTP requests per run. Nothing is billed:
-this repository is public, and Actions minutes are unmetered for public
-repositories. The 2000-minute free tier that earlier notes weighed this against
-is a private repository's accounting and never applied.
+About 14 seconds and a handful of HTTP requests per run, and nothing is billed:
+Actions minutes are unmetered for public repositories.
 
 ### Re-alerting
 

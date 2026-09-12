@@ -8,7 +8,7 @@
 secrets/
 
 # --- Runtime state ---------------------------------------------------------
-# Regenerated on every run and restored from the Actions cache. It mirrors
+# Regenerated every run and restored from the Actions cache. It mirrors
 # wishlist contents, so it stays out of version control.
 var/
 *.state.json
@@ -19,8 +19,7 @@ node_modules/
 # Local Worker secrets, the browser-side equivalent of .env.
 .dev.vars
 .dev.vars.*
-# Regenerated from wrangler.jsonc by `wrangler types`; committing it would
-# let the checked-in copy drift from the config it describes.
+# Regenerated from wrangler.jsonc, and a checked-in copy would drift from it.
 web/worker-configuration.d.ts
 
 # --- Python ----------------------------------------------------------------
@@ -48,8 +47,6 @@ desktop.ini
 # Local security-scan output
 static_analysis_semgrep_*/
 
-# A shell command that writes to %SystemDrive% in cmd syntax, run somewhere
-# that does not expand it, creates a directory of that literal name here
-# instead of touching the system drive. It happened once and a `git add -A`
-# committed a megabyte of Windows icon caches with it.
+# cmd syntax that nothing expanded once created a directory of this literal
+# name, and `git add -A` committed a megabyte of Windows icon caches with it.
 %SystemDrive%/

@@ -21,8 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.11 is the floor declared in pyproject; 3.12 is what the tracker
-        # workflow runs. Both are exercised so neither can drift.
+        # The floor declared in pyproject, and the version the tracker runs.
         python-version: ["3.11", "3.12"]
 
     steps:
@@ -43,8 +42,7 @@ jobs:
       - name: Test
         run: python -m pytest
 
-      # The runtime must stay dependency-free. Importing the whole package on a
-      # bare interpreter is what proves it, rather than trusting pyproject.
+      # Proves the runtime is dependency-free, rather than trusting pyproject.
       - name: Verify the runtime has no third-party dependencies
         env:
           PYTHONPATH: src
@@ -59,9 +57,8 @@ jobs:
           print('all modules import on a bare interpreter')
           "
 
-  # The Worker's own checks. These ran only inside deploy-web, which fires
-  # after a merge - so a broken Worker passed review and failed on main, twice.
-  # A gate that cannot fail before merging is not a gate.
+  # Here rather than only in deploy-web, which runs after a merge: a gate that
+  # cannot fail before merging is not a gate.
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -81,8 +78,7 @@ jobs:
         working-directory: web
         run: npm ci
 
-      # Generated from wrangler.jsonc, so a checkout does not have one.
-      # Reads configuration only; needs no credentials.
+      # Generated from wrangler.jsonc; reads config only, needs no credentials.
       - name: Generate binding types
         working-directory: web
         run: npx wrangler types
@@ -91,8 +87,7 @@ jobs:
         working-directory: web
         run: npx tsc --noEmit
 
-      # Runs in workerd with `remoteBindings: false`, so no Cloudflare
-      # credential is involved and nothing here can reach the real account.
+      # workerd with `remoteBindings: false`: no credential, no reach into the account.
       - name: Test
         working-directory: web
         run: npm test
