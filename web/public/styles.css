@@ -776,7 +776,7 @@ main {
   width: 40px;
   height: 40px;
   border-radius: 6px;
-  background: var(--panel-strong);
+  background: var(--panel-hover);
   object-fit: cover;
 }
 
@@ -811,7 +811,7 @@ main {
 }
 
 .achievement.is-unlocked {
-  border-left-color: var(--ok);
+  border-left-color: var(--unlocked);
 }
 
 .howto-button {
