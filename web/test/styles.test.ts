@@ -57,3 +57,32 @@ describe("the hidden attribute outranks the stylesheet", () => {
     expect(rivals.map((m) => m[0])).toEqual([]);
   });
 });
+
+/** What the stylesheet defines, and what it reads without a fallback. */
+function customProperties(): { used: Set<string>; defined: Set<string> } {
+  const css = declarations();
+  const defined = new Set([...css.matchAll(/(--[\w-]+)\s*:/g)].map((m) => m[1]!));
+  // Only a `var()` with no fallback. One with a fallback is deliberate:
+  // `--topbar-height` is published by the client and is absent until it is.
+  const used = new Set([...css.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)].map((m) => m[1]!));
+  return { used, defined };
+}
+
+describe("every custom property it reads is defined", () => {
+  it("reads none that resolve to nothing", () => {
+    // An undefined `var()` with no fallback is invalid at computed-value time,
+    // so the declaration silently takes its inherited or initial value instead.
+    // `--ok` did exactly that: `border-left-color` fell back to `currentColor`,
+    // and every unlocked achievement was marked in the text colour rather than
+    // the green it was meant to be. Nothing failed, and nothing said so.
+    const { used, defined } = customProperties();
+    expect([...used].filter((name) => !defined.has(name))).toEqual([]);
+  });
+
+  it("found properties at all", () => {
+    // Guards the guard: a regex matching nothing would assert nothing.
+    const { used, defined } = customProperties();
+    expect(used.size).toBeGreaterThan(5);
+    expect(defined.size).toBeGreaterThan(5);
+  });
+});
