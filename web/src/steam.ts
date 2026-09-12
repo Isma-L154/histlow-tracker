@@ -80,7 +80,7 @@ const USER_API_BASE = "https://api.steampowered.com/ISteamUser";
 /** Steam is slow often enough that an unbounded wait would burn the request. */
 const TIMEOUT_MS = 8000;
 
-export class SteamClient {
+class SteamClient {
   constructor(private readonly apiKey: string) {}
 
   async search(query: string): Promise<SearchResult[]> {
