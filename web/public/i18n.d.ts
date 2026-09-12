@@ -15,6 +15,9 @@ export declare const DEFAULT_LANGUAGE: Language;
 export declare const LANGUAGES: Language[];
 export declare const DICTIONARY: Record<Language, Table>;
 
+/** The attributes a `data-i18n-*` marker can fill. */
+export declare const ATTRIBUTES: readonly string[];
+
 /** One string, with `{placeholders}` filled in. Falls back to English. */
 export declare function t(
   language: string,

@@ -1,19 +1,12 @@
 /**
  * Steam community guides as a text corpus.
  *
- * Steam publishes guide metadata through its API but not guide bodies: the
- * `file_description` field of IPublishedFileService/GetDetails carries only the
- * author's summary, `num_children` is 0 and `file_url` points at the cover
- * image. The text a reader actually wants exists solely in the rendered page,
- * so it is read from there.
- *
- * Parsing happens through HTMLRewriter rather than string matching because the
- * Workers free plan allows 10ms of CPU per request. HTMLRewriter does its work
- * in the runtime rather than in JavaScript, and narrow selectors keep the
- * number of callbacks - the part that does cost JavaScript time - small.
+ * Steam's API publishes guide metadata but not bodies, so the text is read from
+ * the rendered page. HTMLRewriter parses in the runtime rather than in
+ * JavaScript, which keeps the work inside the free plan's 10ms of CPU.
  */
 
-export interface GuideSection {
+interface GuideSection {
   title: string;
   text: string;
 }
@@ -28,7 +21,7 @@ export interface Guide {
 
 const COMMUNITY = "https://steamcommunity.com";
 
-/** Guides longer than this are truncated: past it they are screenshot galleries. */
+/** Past this, a guide section is a screenshot gallery. */
 const MAX_SECTION_CHARS = 4000;
 
 const FETCH_HEADERS = {
@@ -37,16 +30,11 @@ const FETCH_HEADERS = {
   "Accept-Language": "es,en;q=0.8",
 };
 
-export function guideUrl(id: string): string {
+function guideUrl(id: string): string {
   return `${COMMUNITY}/sharedfiles/filedetails/?id=${id}`;
 }
 
-/**
- * The ids of a game's achievement guides, best rated first.
- *
- * `requiredtags[]=Achievements` and `browsefilter=toprated` were both verified
- * to change the result set rather than being decorative.
- */
+/** A game's achievement guides, best rated first. Both filters were verified to change the results. */
 export async function fetchGuideIds(appId: number, limit: number): Promise<string[]> {
   return guideIdsFrom(
     `${COMMUNITY}/app/${appId}/guides/?browsefilter=toprated&requiredtags%5B%5D=Achievements`,
@@ -55,14 +43,8 @@ export async function fetchGuideIds(appId: number, limit: number): Promise<strin
 }
 
 /**
- * Guide ids for one achievement by name.
- *
- * The shared corpus is built from a game's best-rated achievement guides, which
- * for many games are route walkthroughs that never name an individual
- * achievement. Searching for the name finds the guides written about that one
- * achievement instead. `searchText` was verified to filter rather than being
- * ignored: a real name returns dozens of guides and a nonsense string returns
- * none.
+ * Guides about one achievement, found by its name, for games whose top guides
+ * are route walkthroughs that never name one. `searchText` was verified to filter.
  */
 export async function fetchGuideIdsFor(
   appId: number,
@@ -102,11 +84,8 @@ async function guideIdsFrom(url: string, limit: number): Promise<string[]> {
 }
 
 /**
- * One guide, flattened to titled sections of plain text.
- *
- * Images are dropped rather than described. A large share of Steam guides lean
- * on screenshots, and a section that survives as a title with no text is kept
- * out of the corpus instead of being offered as an answer.
+ * One guide, flattened to titled sections of plain text. Images are dropped, and
+ * a section left with no text is not kept.
  */
 export async function fetchGuide(id: string): Promise<Guide | null> {
   const response = await fetch(guideUrl(id), { headers: FETCH_HEADERS });
@@ -170,8 +149,7 @@ export async function fetchGuide(id: string): Promise<Guide | null> {
   return {
     id,
     title: collapse(title) || `Guide ${id}`,
-    // The block is the author's name followed by their online status on its own
-    // line, so the first non-empty line is the name.
+    // The block is the author's name, then their online status on its own line.
     author: collapse(author.split("\n").find((line) => line.trim().length > 0) ?? "") || "Unknown author",
     url: guideUrl(id),
     sections,
@@ -193,15 +171,12 @@ const LEAD = 350;
 const TRAIL = 1100;
 
 /**
- * The passages of a corpus that actually discuss one achievement.
+ * The passages of a corpus that discuss one achievement.
  *
- * The achievement's own name is by far the strongest signal, and it survives
- * translation: Steam keeps achievement names in English even inside a Russian
- * guide, which is what makes a foreign-language corpus searchable at all.
- *
- * A section that scores nothing is dropped rather than included at low
- * confidence. Feeding unrelated prose to the model is how it starts inventing
- * steps, and a wrong answer costs a completionist more than no answer.
+ * The achievement's name is the strongest signal, and it survives translation:
+ * Steam keeps names in English even inside a Russian guide. A section that
+ * scores nothing is dropped, because unrelated prose is what makes a model
+ * invent steps.
  */
 export function findPassages(
   guides: Guide[],
@@ -209,12 +184,7 @@ export function findPassages(
   description: string,
   max: number,
   options: {
-    /**
-     * Treat a guide whose own title names the achievement as being about it
-     * throughout. Such a guide explains "this achievement" for pages on end
-     * without repeating its name, so demanding the name inside each section
-     * would reject the one document written to answer the question.
-     */
+    /** A guide whose title names the achievement is about it throughout, without repeating it. */
     guideTitleQualifies?: boolean;
   } = {},
 ): Passage[] {
@@ -235,8 +205,7 @@ export function findPassages(
       if (inTitle) score += 40;
       if (at >= 0) score += 20 + Math.min(occurrences(haystack, needle) - 1, 3) * 5;
       if (wholeGuideQualifies) score += 15;
-      // Keywords alone never qualify a passage; they only rank ones that
-      // already mention the achievement by name.
+      // Keywords only rank passages that already name the achievement.
       if (score > 0) {
         score += keywords.filter((word) => haystack.includes(word)).length;
       }
@@ -256,8 +225,7 @@ export function findPassages(
 
   found.sort((a, b) => b.score - a.score);
 
-  // At most one passage per guide until every guide has had a turn, so three
-  // sections of one rambling walkthrough cannot crowd out three other authors.
+  // One passage per guide first, so one rambling walkthrough cannot crowd out other authors.
   const perGuide = new Set<string>();
   const primary = found.filter((passage) => {
     if (perGuide.has(passage.guideId)) return false;
@@ -289,9 +257,8 @@ function distinctiveWords(description: string): string[] {
 }
 
 /**
- * HTMLRewriter hands back the source text of a node, so entities written by
- * Steam arrive undecoded. Only the five that XML defines are handled: anything
- * rarer is noise in a paragraph of prose, not a correctness problem.
+ * HTMLRewriter hands back source text, so Steam's entities arrive undecoded. Only
+ * the common ones are handled; anything rarer is noise in prose, not an error.
  */
 function decodeEntities(value: string): string {
   return value

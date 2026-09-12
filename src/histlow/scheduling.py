@@ -1,25 +1,4 @@
-"""Decides whether a given cron firing should do real work.
-
-The workflow fires twice a day and every firing does real work. There is no
-seasonal schedule, and that is a deliberate simplification.
-
-An earlier design ran once a day normally and escalated to every three hours
-during hand-maintained sale windows. It had two problems. The dates had to be
-kept current by hand, since no official Steam API publishes them and the one
-site that tracks them accurately is off limits. Worse, it optimised the wrong
-thing: a discount appearing on an ordinary Tuesday would wait up to a day,
-which is the case the tracker exists for.
-
-Running on a fixed cadence costs roughly thirteen HTTP requests per firing and
-no billed minutes at all: this repository is public, so Actions minutes are
-unmetered. An earlier version of this note weighed 240 billed minutes a month
-against a 2000-minute free tier, which is a private repository's accounting and
-never applied here. Removing that imagined constraint is what allows a second
-daily firing, and it cuts worst-case latency from a day to twelve hours.
-
-What remains is a single guard against doing the same work twice, which the
-elapsed-time check below provides.
-"""
+"""Decides whether a cron firing does real work: a guard against doing it twice."""
 
 from __future__ import annotations
 
@@ -28,17 +7,12 @@ from datetime import datetime, timedelta
 
 from .config import ScheduleConfig
 
-#: Absorbs GitHub's scheduling drift. Scheduled runs are routinely a few
-#: minutes late and occasionally early; without this, a firing arriving just
-#: shy of the interval would be skipped and the real cadence would slip by a
-#: whole cron slot every time it happened.
+#: Lets a firing that lands just short of the interval still run.
 DRIFT_GRACE = timedelta(minutes=20)
 
 
 @dataclass(frozen=True, slots=True)
 class RunDecision:
-    """Whether to proceed, and the reason, which is logged either way."""
-
     should_run: bool
     reason: str
 
@@ -50,7 +24,6 @@ def decide(
     last_run_at: datetime | None,
     forced: bool = False,
 ) -> RunDecision:
-    """Returns the run decision for this firing."""
     if forced:
         return RunDecision(True, "manual dispatch")
 
@@ -59,8 +32,7 @@ def decide(
 
     elapsed = now - last_run_at
     if elapsed < timedelta(0):
-        # The stored timestamp is in the future, so the clock or the state file
-        # is wrong. Running is the safe direction: at worst it repeats work.
+        # A future timestamp means a wrong clock or state file; running at worst repeats work.
         return RunDecision(True, "recorded last run is in the future")
 
     interval = timedelta(hours=schedule.min_interval_hours)
@@ -69,8 +41,7 @@ def decide(
 
     return RunDecision(
         False,
-        f"only {_format(elapsed)} since last run, minimum is "
-        f"{schedule.min_interval_hours}h",
+        f"only {_format(elapsed)} since last run, minimum is {schedule.min_interval_hours}h",
     )
 
 

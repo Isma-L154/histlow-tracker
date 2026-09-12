@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import worker from "../src/index.ts";
 import { DICTIONARY } from "../public/i18n.js";
 import { credentials } from "../src/igdb.ts";
-import { storable } from "../src/http.ts";
+import { storable } from "../src/edge-cache.ts";
 import { resolveSteamId } from "../src/profile.ts";
 import { SteamError, unknownGame } from "../src/steam.ts";
 

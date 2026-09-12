@@ -9,9 +9,8 @@ description = "Alerts when a wishlisted Steam game beats its all-time low price 
 readme = "README.md"
 requires-python = ">=3.11"
 
-# Intentionally empty. The runtime uses the standard library only, which
-# removes the entire third-party supply chain from the threat model and keeps
-# CI startup at roughly 80 ms with no install step.
+# Empty on purpose: the standard library only, so there is no third-party
+# supply chain to review, and CI needs no install step.
 dependencies = []
 
 [project.optional-dependencies]
@@ -51,7 +50,6 @@ ignore = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-# `tests` is on the path so shared fixtures live in an ordinary module rather
-# than being imported relatively, which requires a package.
+# `tests` on the path lets shared fixtures live in a plain module.
 pythonpath = ["src", "tests"]
 addopts = "-q --strict-markers"

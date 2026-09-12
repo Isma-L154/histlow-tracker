@@ -1,24 +1,17 @@
 /**
- * Whether a click on a link belongs to this page or to the browser.
- *
- * Split out of the handler so it can be tested. It is the most fragile logic
- * in the client: four guards, and getting any one of them backwards silently
- * turns "open this in a new tab" into "navigate the tab I was reading", which
- * is the kind of thing nobody reports and everybody notices.
+ * Whether a click on a link belongs to the page or to the browser. Getting a
+ * guard backwards turns "open in a new tab" into navigating the current one.
  *
  * @param {Pick<MouseEvent, "defaultPrevented" | "button" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">} event
  * @returns {boolean} true when the page should handle the click itself.
  */
 export function handledInPage(event) {
-  // Something upstream already decided what this click means.
   if (event.defaultPrevented) return false;
 
-  // Only the primary button. Middle click opens a tab and right click opens a
-  // menu, and both arrive here in browsers that do not split them off.
+  // Middle and right clicks arrive here in browsers that do not split them off.
   if (event.button !== 0) return false;
 
-  // A modified click asks for a second tab, a new window, or a saved file -
-  // never for this page to change underneath the reader.
+  // A modified click asks for a new tab, a new window or a download.
   if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
 
   return true;

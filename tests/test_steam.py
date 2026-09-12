@@ -56,12 +56,7 @@ class TestFetchWishlist:
             }
         )
 
-        entries = client.fetch_wishlist("76561198028121353")
-
-        assert [e.app_id for e in entries] == [1030300, 292030]
-        assert entries[0].priority == 1
-        assert entries[0].added_at is not None
-        assert entries[0].added_at.tzinfo is not None  # always timezone-aware
+        assert client.fetch_wishlist("76561198028121353") == [1030300, 292030]
         assert http.calls[0][1] == {"steamid": "76561198028121353"}
 
     def test_private_profile_raises_instead_of_reporting_zero_games(self) -> None:
@@ -92,13 +87,7 @@ class TestFetchWishlist:
             }
         )
 
-        assert [e.app_id for e in client.fetch_wishlist("1")] == [730, 570]
-
-    def test_missing_date_added_is_tolerated(self) -> None:
-        client, _ = make_client({"response": {"items": [{"appid": 730}]}})
-        entry = client.fetch_wishlist("1")[0]
-        assert entry.added_at is None
-        assert entry.priority == 0
+        assert client.fetch_wishlist("1") == [730, 570]
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +118,6 @@ class TestFetchPriceQuotes:
         assert quote.current == Money(999, "EUR")
         assert quote.regular == Money(1999, "EUR")
         assert quote.discount_percent == 50
-        assert quote.is_discounted
 
     def test_sends_the_configured_region(self) -> None:
         client, http = make_client({})

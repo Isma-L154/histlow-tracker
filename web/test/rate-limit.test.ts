@@ -1,9 +1,9 @@
 /**
  * The limit on the model-backed route, proven by tripping it.
  *
- * A configured limit that has never been provoked is an assumption. These
- * tests exist because the audit found sixty consecutive requests sailing
- * through, and a passing config file would not have told anyone.
+ * A configured limit that has never been provoked is an assumption: the audit
+ * found sixty consecutive requests sailing through, and a passing config file
+ * would not have told anyone.
  */
 
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";

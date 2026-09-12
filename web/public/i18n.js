@@ -1,18 +1,10 @@
 /**
- * The interface, in two languages.
+ * The interface in two languages, imported by the Worker (which translates the
+ * HTML before it leaves) and by the client (which translates what it draws).
  *
- * One file, imported by both sides. The Worker substitutes the strings into the
- * HTML before it leaves, so a Spanish reader never sees a frame of English; the
- * client imports the same table to translate what it renders itself and to
- * redraw when the toggle is used. Two copies of these strings would drift, and
- * the drift would be invisible until someone complained.
- *
- * Only the interface is translated. The achievement steps are generated in
- * English and stay that way: the Workers AI free tier allows roughly seventy
- * first-time lookups a day, and a second language would halve that for both.
- *
- * Achievement names, game titles and guide text are data, not interface, and
- * are never translated.
+ * Only the interface is translated. Names, titles and guide text are data, and
+ * the generated steps stay in English: the Workers AI free tier covers about
+ * seventy first-time answers a day, and a second language would halve it.
  */
 
 /** The language used when nothing else applies, and the source of these keys. */
@@ -49,7 +41,6 @@ export const DICTIONARY = {
     "profile.save": "Save",
     "profile.remove": "Remove",
     "profile.saved": "Saved in this browser.",
-    "profile.saving": "Saved. Reloading the achievements with your progress…",
     "profile.removed": "Removed. No achievement is marked as unlocked any more.",
     "profile.noStorage": "This browser will not store data, so this will be forgotten when you leave.",
     "hero.title": "Find out how every achievement is earned",
@@ -118,7 +109,6 @@ export const DICTIONARY = {
     "howto.disclaimer":
       "Automatic summary of guides written by other players. If something looks wrong, the link goes to the original.",
     "howto.searchSteam": "Search Steam yourself",
-    "howto.language": "The steps are written in English whichever language this page is in.",
   },
   es: {
     "brand.tagline": "los logros de Steam, explicados",
@@ -148,7 +138,6 @@ export const DICTIONARY = {
     "profile.save": "Guardar",
     "profile.remove": "Quitar",
     "profile.saved": "Guardado en este navegador.",
-    "profile.saving": "Guardado. Recargando los logros con tu progreso…",
     "profile.removed": "Quitado. Ya no se marca ningún logro como conseguido.",
     "profile.noStorage": "Este navegador no permite guardar datos, así que se olvidará al salir.",
     "hero.title": "Descubre cómo se consigue cada logro",
@@ -218,18 +207,10 @@ export const DICTIONARY = {
     "howto.disclaimer":
       "Resumen automático de guías escritas por otros jugadores. Si algo no cuadra, el enlace lleva al original.",
     "howto.searchSteam": "Buscar a mano en Steam",
-    "howto.language": "Los pasos están en inglés, sea cual sea el idioma de la página.",
   },
 };
 
-/**
- * One string, with `{placeholders}` filled in.
- *
- * Falls back to English rather than to the key. A missing translation should
- * read as slightly wrong, not as `game.progress` - and CI fails on a missing
- * key anyway, so this only ever runs for a key added and deployed in the same
- * breath as its own bug.
- */
+/** One string, with `{placeholders}` filled in. Falls back to English, never to the raw key. */
 export function t(language, key, values) {
   const table = DICTIONARY[language] ?? DICTIONARY[DEFAULT_LANGUAGE];
   const template = table[key] ?? DICTIONARY[DEFAULT_LANGUAGE][key];
@@ -240,24 +221,15 @@ export function t(language, key, values) {
   );
 }
 
-/**
- * Which language to show, given what the browser asked for and what was chosen.
- *
- * An explicit choice always wins: someone who picked English on a Spanish
- * laptop meant it, and re-deciding for them on every visit would be a bug they
- * cannot work around.
- */
+/** An explicit choice always beats what the browser asks for. */
 export function pickLanguage(acceptLanguage, stored) {
   if (LANGUAGES.includes(stored)) return stored;
   return fromAcceptLanguage(acceptLanguage);
 }
 
 /**
- * The best supported language named by an `Accept-Language` header.
- *
- * Quality values are honoured, because `en;q=0.8, es` means Spanish however it
- * is ordered. Regional tags match on their base - `es-419` is Latin American
- * Spanish and this site has one Spanish.
+ * The best supported language in an `Accept-Language` header. Quality values
+ * are honoured, and regional tags match on their base (`es-419` is Spanish).
  */
 export function fromAcceptLanguage(header) {
   if (typeof header !== "string" || header === "") return DEFAULT_LANGUAGE;
@@ -278,21 +250,10 @@ export function fromAcceptLanguage(header) {
   return ranked.find((entry) => LANGUAGES.includes(entry.base))?.base ?? DEFAULT_LANGUAGE;
 }
 
-/**
- * The attributes a `data-i18n-*` marker can fill.
- *
- * Text is not the only thing a reader sees: a placeholder is visible, and an
- * aria-label is the only thing a screen reader gets.
- */
-const ATTRIBUTES = ["placeholder", "aria-label", "title", "alt"];
+/** The attributes a `data-i18n-*` marker can fill: text is not all a reader sees. */
+export const ATTRIBUTES = ["placeholder", "aria-label", "title", "alt"];
 
-/**
- * Translates a document, or any part of one, in place.
- *
- * Marked by attribute rather than by selector so that the markup says which
- * strings are translatable. A list of selectors in a script would go stale the
- * first time someone edited the HTML without reading it.
- */
+/** Translates a document, or part of one, in place, wherever the markup marks a string. */
 export function translate(root, language) {
   for (const element of root.querySelectorAll("[data-i18n]")) {
     element.textContent = t(language, element.dataset.i18n);

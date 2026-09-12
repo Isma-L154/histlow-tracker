@@ -1,20 +1,9 @@
-"""A small hardened JSON-over-HTTPS client built on the standard library.
+"""A JSON-over-HTTPS client on the standard library, so the runtime has no dependencies.
 
-Using `urllib` rather than `requests`/`httpx` keeps the runtime dependency
-count at zero, which removes the third-party supply chain from the threat model
-entirely and lets CI skip the install step.
-
-Hardening applied here:
-
-* HTTPS is mandatory and a redirect may never downgrade the scheme.
-* Redirects may never cross to a different host. `urllib` replays request
-  headers on redirect, so a cross-host hop would hand an API token to whoever
-  controls the redirect target.
-* Every request carries an explicit timeout; a hung socket cannot stall the job.
-* Responses are size-capped before being read into memory.
-* Failures are classified as transient (worth retrying) or permanent (a bug or
-  a bad credential, retrying only wastes quota).
-* Backoff is exponential with jitter and honours `Retry-After`.
+Hardening: HTTPS only; no redirect that changes host or downgrades the scheme
+(urllib replays headers, which would hand an API token to the new host); an
+explicit timeout; a response size cap; and retries for transient failures only,
+with jittered exponential backoff that honours `Retry-After`.
 """
 
 from __future__ import annotations
@@ -26,48 +15,39 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable
 from typing import Any
 
 log = logging.getLogger(__name__)
 
-DEFAULT_TIMEOUT_SECONDS = 15.0
+TIMEOUT_SECONDS = 15.0
 DEFAULT_MAX_ATTEMPTS = 4
-DEFAULT_BACKOFF_BASE_SECONDS = 1.0
+BACKOFF_BASE_SECONDS = 1.0
 MAX_BACKOFF_SECONDS = 30.0
-
-#: Well beyond any payload this tracker handles; a wishlist of several hundred
-#: titles serialises to under 2 MB. Guards against a malformed or hostile
-#: response exhausting the runner's memory.
+#: Far above any real payload; guards the runner's memory against a hostile response.
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
-
 USER_AGENT = "histlow-tracker/0.1 (+https://github.com/Isma-L154/histlow-tracker)"
 
 _RETRYABLE_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
 class HttpError(Exception):
-    """Base class for every failure raised by :class:`HttpClient`.
-
-    `status` carries the HTTP status when one was received, so callers can
-    branch on it structurally instead of pattern-matching error text.
-    """
+    """Base for every client failure; `status` holds the HTTP status when one arrived."""
 
     status: int | None = None
 
 
 class TransientHttpError(HttpError):
-    """The endpoint may succeed later: timeout, throttling or a 5xx."""
+    """Timeout, throttling or a 5xx: may succeed later."""
 
     retry_after: float | None = None
 
 
 class PermanentHttpError(HttpError):
-    """Retrying cannot help: bad credentials, bad request, blocked redirect."""
+    """Bad credentials, a bad request or a blocked redirect: retrying cannot help."""
 
 
 class _StrictRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Allows redirects only when they stay on the same host and remain HTTPS."""
-
     def redirect_request(
         self,
         req: urllib.request.Request,
@@ -93,33 +73,19 @@ class _StrictRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 
 class HttpClient:
-    """Performs JSON requests with retries, backoff and strict redirect rules.
-
-    A single instance is shared across adapters so that connection handling and
-    retry policy stay uniform. Instances are cheap; they hold no mutable state
-    beyond the opener.
-    """
+    """JSON requests with retries, backoff and strict redirect rules."""
 
     def __init__(
         self,
         *,
-        timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
-        backoff_base: float = DEFAULT_BACKOFF_BASE_SECONDS,
-        user_agent: str = USER_AGENT,
-        sleep: Any = time.sleep,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         if max_attempts < 1:
             raise ValueError("max_attempts must be at least 1")
-        self._timeout = timeout
         self._max_attempts = max_attempts
-        self._backoff_base = backoff_base
-        self._user_agent = user_agent
-        # Injected so tests exercise the retry ladder without real delays.
         self._sleep = sleep
         self._opener = urllib.request.build_opener(_StrictRedirectHandler)
-
-    # -- public API ---------------------------------------------------------
 
     def get_json(
         self,
@@ -138,22 +104,24 @@ class HttpClient:
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
     ) -> Any:
-        body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
-        merged = {"Content-Type": "application/json", **(headers or {})}
-        return self._request_with_retries("POST", url, params=params, headers=merged, body=body)
+        return self._send_json("POST", url, payload, params, headers)
 
     def patch_json(
+        self, url: str, *, payload: Any, headers: dict[str, str] | None = None
+    ) -> Any:
+        return self._send_json("PATCH", url, payload, None, headers)
+
+    def _send_json(
         self,
+        method: str,
         url: str,
-        *,
         payload: Any,
-        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None,
+        headers: dict[str, str] | None,
     ) -> Any:
         body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         merged = {"Content-Type": "application/json", **(headers or {})}
-        return self._request_with_retries("PATCH", url, params=None, headers=merged, body=body)
-
-    # -- internals ----------------------------------------------------------
+        return self._request_with_retries(method, url, params=params, headers=merged, body=body)
 
     def _request_with_retries(
         self,
@@ -170,15 +138,11 @@ class HttpClient:
         for attempt in range(1, self._max_attempts + 1):
             try:
                 raw = self._perform(method, full_url, headers, body)
-            except PermanentHttpError:
-                raise
             except TransientHttpError as exc:
                 last_error = exc
                 if attempt == self._max_attempts:
                     break
-                delay = self._backoff_delay(attempt, getattr(exc, "retry_after", None))
-                # `_safe_url` strips the query string: ITAD accepts its API key
-                # as a query parameter, so a full URL must never be logged.
+                delay = self._backoff_delay(attempt, exc.retry_after)
                 log.warning(
                     "%s %s failed (attempt %d/%d): %s - retrying in %.1fs",
                     method,
@@ -214,31 +178,29 @@ class HttpClient:
         if scheme != "https":
             raise PermanentHttpError(f"refusing non-HTTPS request to scheme {scheme!r}")
 
-        # S310 flags unvalidated schemes; the guard above restricts this call
-        # to HTTPS, and `_StrictRedirectHandler` keeps every hop on HTTPS too.
+        # S310: the scheme is checked above and the redirect handler keeps every hop on HTTPS.
         request = urllib.request.Request(full_url, data=body, method=method)  # noqa: S310
-        request.add_header("User-Agent", self._user_agent)
+        request.add_header("User-Agent", USER_AGENT)
         request.add_header("Accept", "application/json")
         for key, value in (headers or {}).items():
             request.add_header(key, value)
 
         safe = _safe_url(full_url)
         try:
-            with self._opener.open(request, timeout=self._timeout) as response:
+            with self._opener.open(request, timeout=TIMEOUT_SECONDS) as response:
                 return _read_capped(response)
         except urllib.error.HTTPError as exc:
             raise _classify_http_error(exc, full_url) from exc
         except urllib.error.URLError as exc:
             raise TransientHttpError(f"network failure for {safe}: {exc.reason}") from exc
         except TimeoutError as exc:
-            raise TransientHttpError(f"timeout after {self._timeout}s for {safe}") from exc
+            raise TransientHttpError(f"timeout after {TIMEOUT_SECONDS}s for {safe}") from exc
 
     def _backoff_delay(self, attempt: int, retry_after: float | None) -> float:
         if retry_after is not None:
             return min(retry_after, MAX_BACKOFF_SECONDS)
-        exponential = self._backoff_base * (2 ** (attempt - 1))
-        # Full jitter: spreads concurrent retries instead of synchronising them
-        # into a second thundering herd against an already struggling endpoint.
+        exponential = BACKOFF_BASE_SECONDS * (2 ** (attempt - 1))
+        # Jitter keeps retries from synchronising into a second thundering herd.
         return min(exponential, MAX_BACKOFF_SECONDS) * (0.5 + random.random() / 2)  # noqa: S311
 
 
@@ -255,12 +217,7 @@ def _classify_http_error(exc: urllib.error.HTTPError, url: str) -> HttpError:
 
 
 def _parse_retry_after(value: str | None) -> float | None:
-    """Reads the delta-seconds form of `Retry-After`.
-
-    The HTTP-date form is ignored on purpose: the ordinary backoff ladder is a
-    safe fallback, and date parsing would add clock-skew failure modes for no
-    practical gain against the two APIs in use.
-    """
+    """Delta-seconds only; the HTTP-date form falls back to the normal backoff."""
     if not value:
         return None
     try:
@@ -278,17 +235,10 @@ def _read_capped(response: Any) -> bytes:
 
 
 def _build_url(url: str, params: dict[str, Any] | None) -> str:
-    if not params:
-        return url
-    encoded = urllib.parse.urlencode(
-        {k: v for k, v in params.items() if v is not None},
-        doseq=True,
-    )
-    separator = "&" if urllib.parse.urlsplit(url).query else "?"
-    return f"{url}{separator}{encoded}"
+    return f"{url}?{urllib.parse.urlencode(params)}" if params else url
 
 
 def _safe_url(url: str) -> str:
-    """Drops the query string so credentials passed as parameters never log."""
+    """Drops the query string, so a credential passed as a parameter never reaches a log."""
     parts = urllib.parse.urlsplit(url)
     return f"{parts.scheme}://{parts.netloc}{parts.path}"

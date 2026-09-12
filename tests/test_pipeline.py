@@ -26,7 +26,6 @@ from histlow.domain import (
     Money,
     PricePoint,
     PriceQuote,
-    WishlistEntry,
 )
 from histlow.pipeline import Paths, run
 from histlow.publisher import PublishError
@@ -56,8 +55,8 @@ class FakeSteam:
         self._quotes = quotes
         self.price_requests: list[list[int]] = []
 
-    def fetch_wishlist(self, _steam_id: str) -> list[WishlistEntry]:
-        return [WishlistEntry(app_id=app_id) for app_id in self._wishlist]
+    def fetch_wishlist(self, _steam_id: str) -> list[int]:
+        return list(self._wishlist)
 
     def fetch_price_quotes(self, app_ids) -> dict[int, PriceQuote]:
         self.price_requests.append(list(app_ids))
@@ -131,11 +130,10 @@ class FakePublisher:
         self.published: list[dict] = []
         self._error = error
 
-    def publish(self, payload: dict) -> str:
+    def publish(self, payload: dict) -> None:
         if self._error:
             raise self._error
         self.published.append(payload)
-        return "https://gist.example/raw/histlow.json"
 
 
 def quote(app_id: int, current: int, regular: int, discount: int) -> PriceQuote:
@@ -566,7 +564,7 @@ class TestReferenceQuotes:
         steam = FakeSteam(wishlist=[], quotes={})
         store = self._store()
 
-        assert _reference_quotes(make_settings(), steam, store, [1]) is store
+        assert _reference_quotes(make_settings(), steam, store) is store
         assert steam.price_requests == []
 
     def test_a_different_region_is_fetched_for_the_discounted_subset_only(self) -> None:
@@ -576,7 +574,7 @@ class TestReferenceQuotes:
         steam = FakeSteam(wishlist=[], quotes=reference)
         settings = make_settings(country="CR", comparison_country="US")
 
-        result = _reference_quotes(settings, steam, self._store(), [1])
+        result = _reference_quotes(settings, steam, self._store())
 
         assert result[1].current == Money(2799, "USD")
         assert steam.price_requests == [[1]]
@@ -587,7 +585,7 @@ class TestReferenceQuotes:
         steam = FakeSteam(wishlist=[], quotes={})
         settings = make_settings(country="CR", comparison_country="US")
 
-        assert _reference_quotes(settings, steam, {}, []) == {}
+        assert _reference_quotes(settings, steam, {}) == {}
         assert steam.price_requests == []
 
 

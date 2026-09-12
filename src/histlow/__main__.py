@@ -1,15 +1,8 @@
 """Command-line entry point.
 
-Exit codes are distinct on purpose, because the responses differ:
-
-    0  the run completed, or the schedule gate decided there was no work
-    1  the configuration is wrong - a human has to fix something
-    2  an upstream dependency failed - likely transient, worth watching
-
-Anything other than 0 fails the workflow, which is deliberate. A tracker that
-quietly stops working is worse than one that visibly breaks: GitHub emails on a
-failed scheduled run, and that notification is the only thing standing between
-a broken pipeline and months of unexplained silence.
+Exit codes: 0 done or nothing to do, 1 configuration error, 2 upstream failure.
+Anything but 0 fails the workflow on purpose, so GitHub emails about a broken
+tracker instead of it going quiet.
 """
 
 from __future__ import annotations
@@ -80,14 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def _force_utf8_output() -> None:
-    """Makes stdout and stderr able to carry currency symbols.
-
-    A Windows console defaults to a legacy codepage, and cp1252 has no colon
-    sign. Printing a Costa Rican price would raise UnicodeEncodeError and take
-    the whole run down - which made `--dry-run`, whose entire purpose is to
-    preview a payload before publishing it, fail exactly when there was
-    something to preview. CI runs on UTF-8 and never saw it.
-    """
+    """A Windows console's legacy codepage cannot print ₡, which crashed `--dry-run`."""
     for stream in (sys.stdout, sys.stderr):
         reconfigure = getattr(stream, "reconfigure", None)
         if reconfigure is not None:
@@ -104,8 +90,6 @@ def main(argv: list[str] | None = None) -> int:
     if args.log_level:
         environment["LOG_LEVEL"] = args.log_level
 
-    # Logging is configured before anything else can fail, and is seeded with
-    # the loaded secrets so that even a failure message cannot leak one.
     try:
         settings = load_settings(environment, args.config)
     except ConfigError as exc:
@@ -113,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
         log.error("%s", exc)
         return EXIT_CONFIG_ERROR
 
+    # Seeded with the secrets, so not even a failure message can leak one.
     configure_logging(settings.log_level, settings.secrets.redactable_values())
 
     try:
@@ -123,13 +108,11 @@ def main(argv: list[str] | None = None) -> int:
             forced=args.force,
         )
     except (ConfigError, CurrencyMismatchError) as exc:
-        # A currency mismatch is a misconfigured region, not an outage: the
-        # fix is COMPARISON_COUNTRY, so it exits as a configuration error.
+        # A currency mismatch is fixed through COMPARISON_COUNTRY, so it is a config error.
         log.error("%s", exc)
         return EXIT_CONFIG_ERROR
     except (SteamError, ItadError, PublishError, HttpError) as exc:
-        # Upstream failure. The state file was not advanced, so the next run
-        # retries from a clean position rather than assuming success.
+        # State was not advanced, so the next run retries from a clean position.
         log.error("run failed: %s", exc)
         return EXIT_UPSTREAM_ERROR
 

@@ -2,9 +2,8 @@
  * The markup of the static shell, asserted against the files that ship.
  *
  * These pages have no build step, so nothing else would notice a hand-edited
- * tag going stale. The files are read as text rather than parsed in a browser
- * because what is being checked is what leaves the server - which is also all
- * a preview scraper ever sees.
+ * tag going stale. Read as text, because that is what leaves the server and
+ * all a preview scraper ever sees.
  */
 
 import { describe, expect, it } from "vitest";
@@ -19,12 +18,8 @@ const PAGES: ReadonlyArray<[name: string, html: string]> = [
 ];
 
 /**
- * The brand link: its opening tag and everything inside it.
- *
- * Attribute order is not part of the contract, so the class is matched
- * wherever it sits in the tag. `app.js` looks this element up by class and
- * dereferences it at module scope, so a rename that got past this test would
- * take the whole client down with it, search box included.
+ * The brand link, matched by class wherever it sits in the tag. `app.js`
+ * dereferences this element at module scope, so a rename takes the client down.
  */
 function brand(html: string): string {
   const match = /<a[^>]*class="brand"[^>]*>[\s\S]*?<\/a>/.exec(html);

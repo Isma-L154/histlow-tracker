@@ -1,16 +1,9 @@
 /**
- * What happens when the site's policy cannot be read.
+ * The policy path in a cold isolate, before anything is remembered.
  *
- * A separate file because `remembered` in `headers.ts` is module state, and
- * the pool gives each test file its own copy of the module. Alongside the
- * other tests, every one of these would run against a policy some earlier test
- * had already cached, and would pass without reaching the code it names.
- *
- * These matter more than their size suggests. The first version of this module
- * treated "the fetch did not throw" as success, so a 404 from the asset
- * binding produced an empty policy, cached it for the life of the isolate, and
- * left every page unprotected - with no log, because nothing had failed, and
- * with no visible difference from a response that already had everything.
+ * The failure it guards - a reference response carrying no policy - cannot be
+ * produced through the asset binding, which always answers, so `policyFrom` is
+ * asserted directly rather than through `secured`.
  */
 
 import { env } from "cloudflare:test";

@@ -1,12 +1,7 @@
-"""A minimal `.env` reader for local runs.
+"""A minimal `.env` reader for local runs: `KEY=value`, optional quotes, `#` comments.
 
-CI supplies everything through the process environment, so this exists purely
-so a developer can keep credentials in a git-ignored file instead of exporting
-them by hand. It is a deliberately small subset of the format: `KEY=value`,
-optional surrounding quotes, `#` comments, blank lines.
-
-Real environment variables always win. A shell export is the more explicit
-signal of intent, and having the file silently override it would be surprising.
+CI supplies everything through the environment, and real environment variables
+always win over the file.
 """
 
 from __future__ import annotations
@@ -20,8 +15,7 @@ log = logging.getLogger(__name__)
 def read_dotenv(path: Path) -> dict[str, str]:
     """Parses `path`, returning an empty mapping when it does not exist."""
     try:
-        # utf-8-sig so a Windows editor's byte order mark does not end up
-        # glued to the first key name, which would silently lose that value.
+        # utf-8-sig, or a Windows editor's BOM glues itself to the first key.
         raw = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         return {}

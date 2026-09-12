@@ -1,16 +1,14 @@
 /**
  * Which requests reach Worker code at all.
  *
- * `run_worker_first` decides this, and nothing else in the suite can see it:
- * the other tests call the handler directly, so they prove what it does once
- * reached and never that anything reaches it. That gap has already produced one
- * bug in this repository - a list of literal routes left every path matching no
- * file being served by the asset runtime, so the redirect from the former
- * address never ran for them.
+ * `run_worker_first` decides it, and nothing else in the suite can see it: the
+ * other tests call the handler directly, so they prove what it does once
+ * reached and never that anything reaches it. That gap produced a bug here - a
+ * list of literal routes left every path matching no file with the asset
+ * runtime, so the redirect from the former address never ran for them.
  *
- * These assert the shape of the pattern rather than the behaviour, which is the
- * most that can be checked without a browser and a deployed Worker. The
- * behaviour itself was measured against `wrangler dev` with a marker header.
+ * These assert the shape of the pattern, which is the most that can be checked
+ * without a deployed Worker; the behaviour was measured against `wrangler dev`.
  */
 
 import { describe, expect, it } from "vitest";
@@ -26,16 +24,13 @@ function runWorkerFirst(): string[] {
 
 describe("run_worker_first", () => {
   it("routes every document to the Worker, including paths that match no file", () => {
-    // A list of known routes cannot do this. The SPA fallback serves the shell
-    // for anything unmatched, and the asset runtime does that without running
-    // Worker code - so the redirect from the former address would be skipped
-    // for exactly the mistyped and stale URLs that most need it.
+    // The SPA fallback serves unmatched paths without Worker code, which is
+    // exactly where the redirect from the former address is most needed.
     expect(runWorkerFirst()).toContain("/*");
   });
 
   it("keeps static files off the Worker", () => {
-    // The whole reason this is not simply `true`. These are the bulk of the
-    // requests and none of them can be bookmarked or shared.
+    // The bulk of the requests, and none of them can be bookmarked or shared.
     const negated = runWorkerFirst().filter((pattern) => pattern.startsWith("!"));
     for (const extension of [".css", ".js", ".png"]) {
       expect(negated, `${extension} should be served by the asset runtime`).toContain(`!/*${extension}`);

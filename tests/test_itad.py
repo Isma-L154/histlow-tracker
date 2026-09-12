@@ -11,9 +11,10 @@ from typing import Any
 
 import pytest
 
-from histlow.domain import ITAD_STEAM_SHOP_ID, GameIdentity, Money
+from histlow.domain import GameIdentity, Money
 from histlow.itad import (
     API_KEY_HEADER,
+    STEAM_SHOP_ID,
     STORELOW_BATCH_SIZE,
     ItadAuthError,
     ItadClient,
@@ -64,7 +65,7 @@ def make_client(*outcomes: Any) -> tuple[ItadClient, FakeHttp]:
 
 def steam_low(amount_int: int, currency: str = "EUR") -> dict:
     return {
-        "shop": {"id": ITAD_STEAM_SHOP_ID, "name": "Steam"},
+        "shop": {"id": STEAM_SHOP_ID, "name": "Steam"},
         "price": {"amount": amount_int / 100, "amountInt": amount_int, "currency": currency},
         "regular": {"amount": 19.99, "amountInt": 1999, "currency": currency},
         "cut": 50,
@@ -169,7 +170,7 @@ class TestFetchSteamLows:
         client.fetch_steam_lows([SILKSONG])
 
         call = http.calls[0]
-        assert call["params"] == {"country": "ES", "shops": str(ITAD_STEAM_SHOP_ID)}
+        assert call["params"] == {"country": "ES", "shops": str(STEAM_SHOP_ID)}
         assert call["payload"] == ["uuid-silksong"]
         assert call["headers"] == {API_KEY_HEADER: API_KEY}
 

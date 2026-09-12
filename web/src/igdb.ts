@@ -1,111 +1,64 @@
 /**
- * IGDB, for the things Steam does not publish.
+ * IGDB, for what Steam does not publish: how long a game takes, and what is
+ * coming out next.
  *
- * Steam knows nothing about how long a game takes to finish, and nothing about
- * what is coming out next. HowLongToBeat is the reference players know and is
- * not usable: its `robots.txt` disallows `/api`, the exact endpoint that would
- * be called, and the terms it links prohibit automated retrieval by name.
- *
- * IGDB is official, free, documented, and rate-limited in the open. It
- * authenticates through Twitch, so it costs two secrets - and everything here
- * is written so that not having them is an ordinary state rather than a
- * failure: the caller gets null and the page renders without the section.
+ * HowLongToBeat disallows automated retrieval; IGDB is official and free. It
+ * authenticates through Twitch, and having no credentials is an ordinary state:
+ * the caller gets nothing and the page renders without the section.
  */
 
-/** IGDB allows four requests a second; nothing here comes close. */
 const TIMEOUT_MS = 5000;
 
 const TOKEN_URL = "https://id.twitch.tv/oauth2/token";
 const API_BASE = "https://api.igdb.com/v4";
 
-/**
- * How early to stop trusting a token.
- *
- * Twitch tokens last about sixty days, so this is not about churn. It is about
- * never handing IGDB a token that expires between our clock and theirs.
- */
+/** Stop trusting a token this early, so it never expires between our clock and theirs. */
 const EXPIRY_MARGIN_SECONDS = 300;
 
 /**
- * How IGDB marks a Steam listing on `external_games`.
- *
- * Documented as Steam (1), alongside GOG (5) and Epic (26). The field itself is
- * deprecated in favour of `external_game_source`, and it is used anyway,
- * deliberately: the replacement is a reference id whose value for Steam is not
- * documented anywhere. Guessing that it kept the old number would risk silently
- * matching a different store, and a wrong completion time is the one failure
- * this module is built to avoid, because nothing about it looks wrong.
- *
- * If IGDB removes the field, the query fails, `completionTime` throws, the
- * section hides and the failure is logged. That is a safe and visible way to
- * find out - at which point the fix is to resolve the id by name from
- * `external_game_sources` rather than to guess a new constant.
+ * Steam in the deprecated `external_games.category`, used only when the
+ * replacement source id cannot be looked up by name. A guessed id could
+ * silently match another store, and a wrong completion time looks right.
  */
 const EXTERNAL_CATEGORY_STEAM = 1;
 
 /**
- * The platforms this section covers, matched by name rather than by id.
- *
- * The ids are not written down here on purpose. `PC_PLATFORM = 6` was, and it
- * was the smaller half of why the section listed games nobody was waiting for:
- * both queries asked for PC and nothing else, so a PlayStation or Xbox title
- * could not appear however wanted it was. Adding two more numbers would have
- * fixed the symptom and kept the habit - and an id that silently starts
- * meaning another platform is the one failure this module already goes out of
- * its way to avoid, which is why the Steam source id and the date format are
- * both looked up by name.
- *
- * Patterns rather than exact strings, for the same reason `exactDateFormat`
- * matches a shape instead of the literal "YYYYMMMMDD": a console gains a
- * revision and its name grows a suffix.
+ * Platforms matched by name rather than by id, since an id that silently starts
+ * meaning another platform is the failure this module avoids. Patterns, so a
+ * console revision with a suffixed name still matches.
  */
 const PLATFORM_IS_PC = /microsoft windows/i;
 const PLATFORM_IS_CONSOLE = /^(playstation 5|xbox series)/i;
 
-/** Where IGDB serves cover art. Also needs an entry in the page's CSP. */
+/** Where IGDB serves cover art. It also needs an entry in the page's CSP. */
 const IMAGE_BASE = "https://images.igdb.com/igdb/image/upload";
 
-/**
- * What a lookup produced, and where it stopped if it produced nothing.
- *
- * The reason travels because the three ways of finding no time are three
- * different operational facts, and the logs could not tell them apart - which
- * is how a query that had stopped matching went unnoticed until someone
- * checked production by hand.
- */
-export interface Lookup {
+/** A lookup's result, and where it stopped if it found nothing, so the logs can tell why. */
+interface Lookup {
   time: CompletionTime | null;
   stoppedAt: string | null;
 }
 
-export interface CompletionTime {
-  /** Seconds to finish the story, as IGDB reports it. */
+interface CompletionTime {
+  /** Seconds to finish the story. */
   normally: number | null;
   /** Seconds to finish everything, which is what this site is about. */
   completely: number | null;
 }
 
-/**
- * The releases found, and where the search stopped if none were.
- *
- * Three stages can each come up empty, and reporting the same nothing for all
- * of them is what made the completion time undiagnosable in #69. The lesson was
- * written down and this shipped next to it without it.
- */
-export interface UpcomingLookup {
+interface UpcomingLookup {
   releases: UpcomingRelease[];
   stoppedAt: string | null;
 }
 
-export interface UpcomingRelease {
+interface UpcomingRelease {
   name: string;
   /** Unix seconds. Only ever a date IGDB marked as exact. */
   releasedAt: number;
   coverUrl: string | null;
 }
 
-/** Everything the client needs, so the caller owns the lifetime of the token. */
-export interface IgdbCredentials {
+interface IgdbCredentials {
   clientId: string;
   clientSecret: string;
 }
@@ -115,13 +68,7 @@ interface Token {
   expiresAt: number;
 }
 
-/**
- * Reads the credentials, or reports that the feature is simply off.
- *
- * Absent secrets are not an error. Until the maintainer creates the Twitch
- * application the site works exactly as it does today, and that has to be a
- * quiet state rather than one that logs on every request.
- */
+/** The credentials, or null when the feature is simply not configured. */
 export function credentials(env: {
   TWITCH_CLIENT_ID?: string;
   TWITCH_CLIENT_SECRET?: string;
@@ -131,27 +78,12 @@ export function credentials(env: {
   return clientId && clientSecret ? { clientId, clientSecret } : null;
 }
 
-/** Whether this isolate has already said the credentials are absent. */
 let announced = false;
 
 /**
- * Says once, per isolate, that there are no credentials to use.
- *
- * Every other way of producing no time names the stage it stopped at. This one
- * did not, and it is the one that matters most operationally: the others are
- * ordinary facts about a game, while this is a configuration fault somebody
- * has to fix. It is also what cost the most time in #69 - six milliseconds, no
- * exception and no log, so "the credentials are not reaching the Worker" was
- * the first hypothesis, and it was wrong.
- *
- * Not on every request, which is why it was left silent to begin with and
- * still a good reason: a deployment that has simply never set the secrets
- * would write a line for every visitor for as long as it lives. Once per
- * isolate is enough to find, and rare enough to ignore.
- *
- * Says only what `credentials` already decided. Whether a secret is set to
- * something wrong is a different fact, and this cannot tell it apart from
- * absence - which is the right amount to know from a log line.
+ * Says once per isolate that there are no credentials. Once, or a deployment
+ * without them would log for every visitor; at all, because it is the one
+ * missing-data case that is somebody's to fix.
  */
 export function announceUnconfigured(): void {
   if (announced) return;
@@ -159,13 +91,7 @@ export function announceUnconfigured(): void {
   console.log("igdb not configured: no Twitch credentials, so completion times and upcoming releases are absent");
 }
 
-/**
- * A client for one request cycle.
- *
- * The token is handed in rather than fetched here, because it belongs in the
- * edge cache and this class should not know about caches. `accessToken` below
- * is the piece the caller caches.
- */
+/** A client for one request cycle. The token is handed in so the caller can cache it. */
 export class IgdbClient {
   constructor(
     private readonly clientId: string,
@@ -173,18 +99,11 @@ export class IgdbClient {
   ) {}
 
   /**
-   * How long a Steam game takes to finish, or null.
-   *
-   * Matched by Steam app id through IGDB's external-game table rather than by
-   * title. Title matching produces confident wrong answers - every franchise
-   * has a remaster and a demo - and a wrong completion time is worse than none,
-   * because nothing about it looks wrong.
+   * How long a Steam game takes to finish. Matched by Steam app id rather than by
+   * title, which produces confident wrong answers across remasters and demos.
    */
   async completionTime(steamAppId: number): Promise<Lookup> {
     const gameId = await this.gameIdForSteamApp(steamAppId);
-    // Reported rather than swallowed. Three different things produce no time,
-    // and until the caller can tell them apart, a query that has silently
-    // stopped matching looks exactly like a game nobody has timed.
     if (gameId === null) return { time: null, stoppedAt: "no game for that Steam id" };
 
     const rows = await this.query<{ normally?: number; completely?: number }>(
@@ -206,33 +125,20 @@ export class IgdbClient {
   }
 
   /**
-   * The most anticipated games with a real release date ahead of them.
+   * The most anticipated games with an exact release date ahead.
    *
-   * Two queries, in this order, because the order is the whole point.
-   *
-   * The obvious shape - fetch release dates nearest first, rank what comes back
-   * by anticipation - is wrong, and quietly. Anything dated beyond the fetch
-   * window is never considered however wanted it is, so a wave of small titles
-   * releasing next month can bury the one game everybody is waiting for. The
-   * ranking has to happen across all of IGDB, not across a slice of it.
-   *
-   * So `games` ranks first, natively, by `hypes` - which lives on the game and
-   * is what `sort` can actually order by. Then the exact dates for those games
-   * are fetched separately, because `games` carries only
-   * `first_release_date`, which IGDB sets even for a placeholder: a "Q4 2026"
-   * title is pinned to the start of its quarter, and counting down to that
-   * invents a precision nobody has.
-   *
-   * Precision comes from `date_format`, whose id is resolved by name rather
-   * than assumed. Over-fetches candidates because some of the most anticipated
-   * games have no exact date yet, and those drop out.
+   * Ranked across all of IGDB first, by `hypes` on `games`, and dated only
+   * afterwards: ranking the nearest release dates instead would let a wave of
+   * small titles bury the one game everybody is waiting for. `first_release_date`
+   * is set even for a placeholder quarter, so exact dates come from
+   * `release_dates`. Candidates are over-fetched because many have no exact date
+   * yet, and some turn out to reach only PC.
    */
   async upcoming(limit: number, now: number): Promise<UpcomingLookup> {
     const format = await this.exactDateFormat();
     const exact = format.id;
-    // Without it, nothing rather than everything: a countdown to a guessed
-    // date is worse than no countdown. The formats that were offered travel
-    // with the reason, so the next attempt reads rather than guesses.
+    // Nothing rather than a countdown to a guessed date. The formats offered
+    // travel with the reason, so the next attempt reads rather than guesses.
     if (exact === null) {
       return {
         releases: [],
@@ -241,10 +147,7 @@ export class IgdbClient {
     }
 
     const platforms = await this.majorPlatforms();
-    // Nothing rather than everything, again. Without the console ids there is
-    // no way to tell a PC-only indie from a game people are waiting for, and
-    // serving the old ranking while believing it was filtered is worse than
-    // serving nothing.
+    // Without console ids a PC-only indie cannot be told from an anticipated game.
     if (platforms.consoles.length === 0) {
       return {
         releases: [],
@@ -265,26 +168,18 @@ export class IgdbClient {
       "games",
       `fields id, name, cover.image_id, platforms;` +
         ` where first_release_date > ${seconds} & platforms = (${wanted}) & hypes != null;` +
-        // Over-fetches far harder than it used to. Two things thin the list
-        // now rather than one: a candidate can lack an exact date, as before,
-        // and it can also turn out to reach only PC. Asking for five times the
-        // limit left the section short.
         ` sort hypes desc; limit ${Math.min(500, Math.max(50, limit * 25))};`,
     );
 
-    // Keyed by id rather than by name: two IGDB entries can share a title - a
-    // demo and its game, a remaster - and collapsing those loses the wrong one.
+    // By id rather than name: a demo and its game can share a title.
     const games = new Map<number, { name: string; coverUrl: string | null }>();
     const consoles = new Set(platforms.consoles);
     for (const row of candidates) {
       if (row === null || typeof row !== "object") continue;
       const id = identifier(row.id);
       if (id === null || !row.name) continue;
-      // The filter that changes what this section is. Applied here rather than
-      // in the query because Apicalypse can ask whether a game touches any of
-      // a set of platforms, and cannot ask whether it touches a console while
-      // PC is in the same set - which it has to be, or a multiplatform release
-      // loses its PC date.
+      // Here rather than in the query: Apicalypse cannot ask whether a game
+      // touches a console while PC stays in the set its release is dated by.
       if (!reachesConsole(row.platforms, consoles)) continue;
       const imageId = row.cover?.image_id;
       games.set(id, {
@@ -304,9 +199,7 @@ export class IgdbClient {
         ` sort date asc; limit 200;`,
     );
 
-    // `candidates` came back ranked, so walking it preserves that order and the
-    // dates only have to be looked up. A game with several PC dates keeps its
-    // earliest, which is what arriving in date order gives.
+    // Dates arrive earliest first, so the first one seen per game is the one kept.
     const earliest = new Map<number, number>();
     for (const row of dates) {
       if (row === null || typeof row !== "object") continue;
@@ -316,11 +209,10 @@ export class IgdbClient {
       earliest.set(game, date);
     }
 
+    // `games` kept the ranked order of `candidates`.
     const releases: UpcomingRelease[] = [];
     for (const [id, game] of games) {
       const releasedAt = earliest.get(id);
-      // No exact date yet. Ordinary for an anticipated game, and the reason
-      // this over-fetches candidates.
       if (releasedAt === undefined) continue;
       releases.push({ ...game, releasedAt });
       if (releases.length === limit) break;
@@ -336,28 +228,8 @@ export class IgdbClient {
   }
 
   /**
-   * The `date_formats` row meaning a full day-month-year date.
-   *
-   * The whole table is fetched and matched in memory rather than filtered in
-   * the query. Asking for `where format = "YYYYMMMMDD"` returned nothing in
-   * production - the string, the field name or the comparison was wrong, and
-   * the query could not say which. There are about seven rows; reading them all
-   * costs nothing and cannot be wrong about a string.
-   *
-   * The match is on the format ending in a day component, because only a full
-   * date does. Quarters end in a quarter, a year-only format in the year.
-   *
-   * When nothing matches, the formats that were offered are reported, so the
-   * next person reads the answer instead of guessing at it as I did.
-   */
-  /**
-   * The ids behind the platform names, looked up rather than assumed.
-   *
-   * The whole table is fetched and matched in memory, like `exactDateFormat`,
-   * and for the same reason: filtering by name in the query means trusting a
-   * string comparison that has already been wrong here once. What matched
-   * travels back so a rename upstream is readable in the logs instead of
-   * arriving as an empty section nobody can explain.
+   * The platform ids behind the names. The whole table is read and matched in
+   * memory, because a string filter in the query has already been wrong here once.
    */
   private async majorPlatforms(): Promise<{
     all: number[];
@@ -388,9 +260,8 @@ export class IgdbClient {
         }
       }
 
-      // PC still belongs in the queries - a multiplatform game has to be
-      // findable and datable there too. It just no longer qualifies a game on
-      // its own, which is what `consoles` decides.
+      // PC stays in the queries, so a multiplatform game is found and dated there
+      // too; only `consoles` decides whether a game qualifies.
       return {
         all: pc === null ? consoles : [pc, ...consoles],
         consoles,
@@ -402,6 +273,11 @@ export class IgdbClient {
     }
   }
 
+  /**
+   * The `date_formats` row for a full day-month-year date: the one whose format
+   * ends in a day. Filtering on the string in the query returned nothing in
+   * production, and the table has about seven rows.
+   */
   private async exactDateFormat(): Promise<{ id: number | null; saw: string[] }> {
     try {
       const rows = await this.query<{ id?: number; format?: string }>(
@@ -425,13 +301,8 @@ export class IgdbClient {
   }
 
   /**
-   * IGDB's own id for a game, found through its Steam listing.
-   *
-   * Filtered on `external_game_source` resolved by name, with the deprecated
-   * `category` as a fallback. The replacement field is a reference id whose
-   * value for Steam is documented nowhere, so it is looked up rather than
-   * guessed - guessing risks matching a different store silently, which is the
-   * one failure this module exists to avoid.
+   * IGDB's id for a game, through its Steam listing: `external_game_source`
+   * resolved by name, with the deprecated `category` as the fallback.
    */
   private async gameIdForSteamApp(steamAppId: number): Promise<number | null> {
     const source = await this.steamSourceId();
@@ -456,19 +327,14 @@ export class IgdbClient {
       );
       return identifier(rows[0]?.id);
     } catch {
-      // The endpoint is newer than the field it replaces. Falling back to the
-      // deprecated filter is better than failing outright.
+      // The endpoint is newer than the field it replaces.
       return null;
     }
   }
 
   /**
-   * One IGDB query.
-   *
-   * Throws on anything unexpected. Every caller in this project treats a throw
-   * as "no data" and hides its section, so a failure costs a missing panel and
-   * never a broken page - but it is still a throw, so the caller can tell the
-   * difference between IGDB having nothing and IGDB being unreachable.
+   * One query. Throws on anything unexpected, so a caller can tell IGDB having
+   * nothing from IGDB being unreachable; every caller hides its section either way.
    */
   private async query<T>(endpoint: string, body: string): Promise<T[]> {
     const response = await fetch(`${API_BASE}/${endpoint}`, {
@@ -483,8 +349,7 @@ export class IgdbClient {
     });
 
     if (!response.ok) {
-      // The body can quote the query but never the token, which travels in a
-      // header. Status alone is what a caller can act on.
+      // The token travels in a header, so the status is all worth reporting.
       throw new Error(`IGDB returned ${response.status} for ${endpoint}`);
     }
 
@@ -493,13 +358,7 @@ export class IgdbClient {
   }
 }
 
-/**
- * Exchanges the credentials for an access token.
- *
- * Kept out of the client so the caller can cache the result. Asking Twitch for
- * a token on every page view would add a round trip to every request and spend
- * a rate limit on work whose answer is valid for two months.
- */
+/** Exchanges the credentials for an access token. */
 export async function accessToken(creds: IgdbCredentials, now: number): Promise<Token> {
   const url = new URL(TOKEN_URL);
   url.searchParams.set("client_id", creds.clientId);
@@ -508,8 +367,7 @@ export async function accessToken(creds: IgdbCredentials, now: number): Promise<
 
   const response = await fetch(url, { method: "POST", signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!response.ok) {
-    // Deliberately not echoing the body: the request carried the secret in its
-    // query string, and Twitch is known to quote the request back on error.
+    // The body is not echoed: the secret was in the query string, and Twitch quotes requests back.
     throw new Error(`Twitch returned ${response.status} for the IGDB token`);
   }
 
@@ -530,20 +388,42 @@ export function usable(token: Token, now: number): boolean {
 }
 
 /**
- * Whether a game's platform list reaches at least one console.
+ * An access token, kept in the edge cache for less than its own lifetime.
  *
- * The rule the "most anticipated" section now runs on, and the reason it is
- * this rule: requiring two platforms of three reads like a stricter filter and
- * throws away exactly the games the section is for, because a first-party
- * exclusive is as anticipated as anything and ships on one. Requiring a
- * console removes the PC-only indies that made the list wrong and keeps the
- * exclusives.
- *
- * An absent or empty list is not a console. IGDB expands `platforms` to ids or
- * to objects depending on the query, so both are read - a shape that changed
- * under this once already, in `external_game_sources`.
+ * Tokens last about sixty days, so fetching one per request would add a round
+ * trip to every page. `private` is only a signal: what keeps the entry out of
+ * reach is that `token.invalid` is not a routable path. Revisit if this zone
+ * ever gains a second Worker, which would share `caches.default`.
  */
-export function reachesConsole(platforms: unknown, consoles: Set<number>): boolean {
+export async function cachedToken(creds: IgdbCredentials, ctx: ExecutionContext): Promise<string> {
+  const cache = caches.default;
+  const cacheKey = "https://token.invalid/igdb/v1";
+
+  const hit = await cache.match(cacheKey);
+  if (hit) {
+    const stored = (await hit.json()) as Token;
+    if (usable(stored, Date.now())) return stored.value;
+  }
+
+  const token = await accessToken(creds, Date.now());
+  const lifetime = Math.max(60, Math.floor((token.expiresAt - Date.now()) / 1000));
+  ctx.waitUntil(
+    cache.put(
+      cacheKey,
+      new Response(JSON.stringify(token), {
+        headers: { "Content-Type": "application/json", "Cache-Control": `private, max-age=${lifetime}` },
+      }),
+    ),
+  );
+  return token.value;
+}
+
+/**
+ * Whether a platform list reaches a console. A console, not two platforms: a
+ * first-party exclusive ships on one and is as anticipated as anything. IGDB
+ * expands `platforms` to ids or to objects depending on the query, so both are read.
+ */
+function reachesConsole(platforms: unknown, consoles: Set<number>): boolean {
   if (!Array.isArray(platforms)) return false;
   return platforms.some((entry) => {
     const raw = entry !== null && typeof entry === "object" ? (entry as { id?: unknown }).id : entry;
@@ -552,18 +432,14 @@ export function reachesConsole(platforms: unknown, consoles: Set<number>): boole
   });
 }
 
-/** A finite number above zero, or null. IGDB uses both 0 and absence for "no". */
+/** A finite number above zero, or null. IGDB uses both 0 and absence for "none". */
 function positive(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 /**
- * An identifier, or null. Zero is a value here.
- *
- * `positive` is right for a time or a hype count, where IGDB uses zero and
- * absence interchangeably for "none". It is wrong for an id: reference tables
- * can number from zero, and rejecting that made the whole upcoming-releases
- * list return empty for ever, in silence.
+ * An identifier, or null. Zero is valid here: reference tables can number from
+ * it, and rejecting it once emptied the upcoming list silently.
  */
 function identifier(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;

@@ -1,24 +1,16 @@
 {
-  "$comment": [
-    "Non-secret runtime configuration. Safe to commit and to review in a diff.",
-    "Every secret lives in .env / GitHub Actions secrets - never here.",
-    "The workflow cron fires twice a day; this file decides whether a given",
-    "firing does real work, so the cadence changes without touching any YAML."
-  ],
+  "$comment": "Non-secret runtime behaviour. Every secret lives in .env or in Actions secrets, never here.",
 
   "schedule": {
-    "$comment": [
-      "The workflow fires twice a day, at 00:23 and 12:23 UTC, which are 18:23 and 06:23 in Costa Rica year round. Once a day left a sale that started in the afternoon unpublished until the next morning. GitHub delivers scheduled runs between one and eleven hours late, so the exact local hour cannot be aimed at; two firings twelve hours apart bound the wait instead. Sale seasons get no special treatment: an ordinary Tuesday discount matters just as much.",
-      "min_interval_hours only guards against doing the same work twice. A manual dispatch is not the case: workflow_dispatch defaults force to true and decide() returns on forced before it ever reaches the interval, so a dispatch is never gated. What it covers is a duplicated delivery of the same cron, and a scheduled run landing just after a manual dispatch that already recorded last_run_at. Both arrive within seconds to minutes. It is 1, the loosest value the validator allows, because the guard only needs to outlast those - and every hour of interval is an hour in which a legitimate firing is silently dropped instead. The firings are nominally 12h apart, but GitHub delivered the observed ones 1h35m to 11h07m late, a swing of 9h32m, so two can land 2h28m apart. The gate opens at min_interval_hours minus the 20m drift grace: 1 opens at 40m and clears that by 1h48m, 2 opens at 1h40m and clears it by only 48m, and 3 opens at 2h40m and drops the run outright. The extra headroom matters because that delay range was measured entirely on the 12:23 firing - the 00:23 slot has never run, and GitHub's queueing depends on the hour requested."
-    ],
+    "$comment": "Stops the same work being done twice, such as a duplicated cron delivery. Kept low so that GitHub bunching the two daily firings together cannot drop one; docs/SETUP.md has the arithmetic, and a test enforces it.",
     "min_interval_hours": 1
   },
 
   "alerts": {
     "$comment": [
-      "A deal reaches the shortlist when the current Steam price is at or below the historical Steam low. Comparisons run on integer minor units, never floats.",
-      "require_new_record then narrows that shortlist to sales that BEAT every earlier price. A game returning to a record set by an earlier sale stays silent. This makes alerts much rarer on purpose: Steam tends to repeat a title's deepest discount, so a game can sit at its all-time low again and again without ever going lower. Set it to false to hear about those too.",
-      "repeat_for_days keeps a reported deal in the payload for that long. The phone polls on a timer instead of receiving a push, so a payload published and replaced between two polls is never read - and because publishing records the alert, it would never be published again. One missed poll used to cost the deal outright. The price of fixing that is one notification per poll while the deal lingers: at two polls a day and two days, the same game is announced up to four times. Set to 0 to publish each alert exactly once."
+      "A deal reaches the shortlist when the current Steam price is at or below the historical Steam low, compared on integer minor units and never on floats.",
+      "require_new_record then narrows that shortlist to sales that BEAT every earlier price, which makes alerts much rarer on purpose: Steam repeats a title's deepest discount, so a game can sit at its all-time low again and again without ever going lower. Set it to false to hear about those too.",
+      "repeat_for_days keeps a reported deal in the payload that long, because the phone polls rather than being pushed to, and a payload published and replaced between two polls is never read. Set to 0 to publish each alert exactly once."
     ],
     "require_new_record": true,
     "repeat_for_days": 2,
@@ -28,17 +20,14 @@
   },
 
   "notification": {
-    "$comment": [
-      "Wording shown on the phone. Kept out of the source so it can be any language. The only placeholder is {count}.",
-      "record_marker prefixes games whose sale beat every earlier price. It is empty by default because require_new_record is on, so every reported game is already a record and the marker would be noise. Set it to something like \"🔥 \" if you turn that rule off."
-    ],
+    "$comment": "Wording shown on the phone, so it can be in any language. The only placeholder is {count}. record_marker prefixes record-setting games, and is empty because require_new_record already restricts reports to those.",
     "headline_template": "🔥 {count} en nuevo mínimo histórico",
     "separator": "\n",
     "record_marker": ""
   },
 
   "state": {
-    "$comment": "Entries older than this are purged so the state file cannot grow without bound.",
+    "$comment": "Entries older than this are purged, so the state file cannot grow without bound.",
     "retention_days": 180
   }
 }

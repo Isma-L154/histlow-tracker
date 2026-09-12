@@ -4,77 +4,42 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-20",
 
-  // Served from the project's own domain. `custom_domain` makes Cloudflare
-  // create the DNS record and issue the certificate itself, so there is no
-  // separate DNS step to keep in sync with this file.
+  // `custom_domain` has Cloudflare create the DNS record and certificate itself.
   "routes": [
     {
       "pattern": "howtoachieve.cloudils.com",
       "custom_domain": true
     },
-    // The former address. Kept so it reaches this Worker and can be answered
-    // with a permanent redirect - shared links, bookmarks and four sitemap
-    // entries point at it. Removing it here would not free the name; it would
-    // only turn every one of those links into an error.
+    // The former address, kept so shared links and bookmarks reach the Worker
+    // and get a permanent redirect instead of an error.
     {
       "pattern": "cazalogros.cloudils.com",
       "custom_domain": true
     }
   ],
 
-  // The workers.dev address is switched off rather than left as a second way
-  // in. Two live URLs for one site means the old one keeps being linked and
-  // bookmarked, and every later decision about the domain gets made twice.
+  // One public address, so a second one is not kept alive by links to it.
   "workers_dev": false,
 
-  // Serves the static site and the API from one deployment. Requests under
-  // /api/ hit the Worker, and so does every document request - see
-  // `run_worker_first` below for why the rename made that necessary. What it
-  // costs is one invocation per page view rather than none; what it saves is
-  // every stylesheet, script and image, which is the bulk of the requests and
-  // the reason the budget was a concern in the first place.
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    // `/game/*` joins the list because those pages are built by the Worker: it
-    // writes the title and cover art into the HTML so a shared link previews
-    // as the game rather than as the site.
-    //
-    // The rename widened this. Redirecting the old address needs the Worker to
-    // see the request, and `run_worker_first` matches paths, not hosts - so
-    // every path that can be typed, shared or linked has to reach it,
-    // including ones that match no file and fall through to the shell.
-    //
-    // Hence a catch-all with the static extensions negated, rather than a list
-    // of known routes: a list would have missed exactly those fall-through
-    // paths, and missed them silently. Stylesheets, scripts and images still
-    // never invoke Worker code. Nobody bookmarks a stylesheet.
-    //
-    // Measured rather than assumed - with a marker header on the asset
-    // response, `/nothing-here` reaches the Worker under this pattern and did
-    // not under a list of literal routes.
+    // Every document reaches the Worker - it translates pages, describes game
+    // pages and redirects the former host, including on paths that match no
+    // file - while static files never do. A catch-all with extensions negated,
+    // because a list of routes silently missed exactly those fall-through paths.
     "run_worker_first": ["/*", "!/*.css", "!/*.js", "!/*.png", "!/*.svg", "!/*.ico", "!/*.txt", "!/*.xml"],
     "not_found_handling": "single-page-application"
   },
 
-  // Only the model-backed route is limited, and only per caller.
-  //
-  // The edge cache covers repeat questions, but it cannot cover the first one:
-  // a script walking uncached achievement keys spends the whole daily
-  // allocation of neurons in minutes, and the feature then stops answering for
-  // everybody until the next day. Twenty a minute is far above what reading a
-  // page looks like and far below what draining the budget requires.
+  // Per caller. The cache covers repeated questions but not first ones, and a
+  // script walking uncached keys would otherwise spend a whole budget in minutes.
   "ratelimits": [
     {
       "name": "HOWTO_LIMITER",
       "namespace_id": "1001",
       "simple": { "limit": 20, "period": 60 }
     },
-    // Resolving a profile calls Steam with the API key, and a name Steam does
-    // not know cannot be answered from cache the first time. Without a limit,
-    // walking made-up names is a way to spend the key's whole allocation from
-    // one machine. Ten a minute is far above what setting up a profile looks
-    // like - it is done once - and far below what enumeration needs.
     {
       "name": "PROFILE_LIMITER",
       "namespace_id": "1002",
@@ -82,64 +47,30 @@
     }
   ],
 
-  // Rewrites community guide passages into steps in English. On the Workers
-  // free plan this cannot bill: the daily allocation of 10,000 Neurons simply
-  // stops serving once spent, and the page falls back to the raw passages.
+  // Cannot bill on the free plan: once the daily Neurons are spent it stops
+  // answering, and the page falls back to the raw guide passages.
   "ai": {
     "binding": "AI"
   },
 
-  // Secrets, set with `wrangler secret put NAME`. None is ever committed and
-  // none ever reaches the browser.
-  //
-  //   STEAM_WEB_API_KEY     the Steam Web API key
-  //   TWITCH_CLIENT_ID      IGDB authenticates through Twitch: register an
-  //   TWITCH_CLIENT_SECRET  application at dev.twitch.tv/console/apps, with
-  //                         http://localhost as the redirect URL. Free.
-  //
-  // The Twitch pair is optional. Without it the completion time is simply
-  // absent and everything else works, which is what let that code ship before
-  // the credentials existed.
+  // Secrets, set with `wrangler secret put NAME` and never committed:
+  //   STEAM_WEB_API_KEY                        the Steam Web API key
+  //   TWITCH_CLIENT_ID, TWITCH_CLIENT_SECRET   optional, for IGDB (dev.twitch.tv)
   "vars": {
-    // Achievement text and icons effectively never change, and global unlock
-    // percentages move slowly. A day of edge caching keeps the page instant
-    // and keeps both the Worker and the Steam key far below their quotas.
     "CACHE_SECONDS": "86400",
-
-    // Guides are read once per game and reused for every achievement in it,
-    // so this window is what keeps the work off the hot path. A week is well
-    // inside how often a community guide changes.
+    // Guides are read once per game and reused for every achievement in it.
     "GUIDE_CACHE_SECONDS": "604800",
-
-    // How many of the game's best-rated achievement guides form the corpus.
-    // Six was measured to parse comfortably inside the free plan's 10ms of CPU.
+    // Measured to parse comfortably inside the free plan's 10ms of CPU.
     "GUIDE_COUNT": "6",
-
-    // Larger models translate Russian guides noticeably better, which is most
-    // of this feature's value. At roughly 139 Neurons per answer this one
-    // affords about 70 first-time lookups a day; answers are cached after that.
+    // Translates Russian guides noticeably better than smaller models, and
+    // affords about 70 first-time answers a day.
     "HOWTO_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
-
-    // Optional. Set a 17-digit SteamID64 to have the page show which
-    // achievements you already hold, turning the list into "what is left".
-    // Left empty the feature is simply absent, and every response stays
-    // cacheable and impersonal. A caller can also pass ?steamid= per request.
+    // Optional SteamID64 whose unlocks every page shows. Empty keeps every
+    // answer impersonal and cacheable.
     "DEFAULT_STEAM_ID": ""
   },
 
-  // The deployment's own id, so every cached answer is scoped to the version
-  // that produced it.
-  //
-  // Without it a route keeps serving what it returned before a fix, and there
-  // is no way to invalidate from outside: `cached` keys on a normalised path
-  // and deliberately ignores the query string, so a cache-busting parameter
-  // does nothing. That cost real time twice in two days - the completion time
-  // and the release list both looked broken after their fixes deployed, and
-  // both were serving pre-fix answers.
-  //
-  // The alternative was a constant somebody remembers to bump. Two routes were
-  // versioned that way, each after being caught by this; the third would have
-  // been caught the same way.
+  // Scopes every cache key to the deployment, so a publish invalidates by construction.
   "version_metadata": {
     "binding": "CF_VERSION"
   },

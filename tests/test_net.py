@@ -46,7 +46,7 @@ def slept() -> list[float]:
 
 @pytest.fixture
 def client(slept: list[float]) -> HttpClient:
-    return HttpClient(max_attempts=3, backoff_base=1.0, sleep=slept.append)
+    return HttpClient(max_attempts=3, sleep=slept.append)
 
 
 class TestRetryLadder:
@@ -153,11 +153,8 @@ class TestHelpers:
             == "https://api.isthereanydeal.com/games/lookup/v1"
         )
 
-    def test_build_url_appends_to_an_existing_query(self) -> None:
-        assert _build_url("https://x.test/p?a=1", {"b": "2"}) == "https://x.test/p?a=1&b=2"
-
-    def test_build_url_omits_none_values(self) -> None:
-        assert _build_url("https://x.test/p", {"a": "1", "b": None}) == "https://x.test/p?a=1"
+    def test_build_url_encodes_params(self) -> None:
+        assert _build_url("https://x.test/p", {"a": "1", "b": 2}) == "https://x.test/p?a=1&b=2"
 
     def test_build_url_without_params_is_unchanged(self) -> None:
         assert _build_url("https://x.test/p", None) == "https://x.test/p"

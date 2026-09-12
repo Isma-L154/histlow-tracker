@@ -1,12 +1,6 @@
-"""Logging configured to make secret leakage structurally difficult.
+"""Logging with a redaction filter seeded from the secrets loaded at startup.
 
-Every handler installed here carries a redaction filter seeded with the exact
-secret values loaded at startup. A stray f-string that interpolates a token
-therefore prints a mask rather than the token, including inside exception text
-and third-party log records.
-
-This is a safety net, not a licence to log secrets. The rule remains: never
-write a secret into a log statement.
+A safety net against a stray f-string, not a licence to log secrets.
 """
 
 from __future__ import annotations
@@ -17,8 +11,7 @@ from collections.abc import Iterable
 
 MASK = "***REDACTED***"
 
-#: Values shorter than this are ignored by the filter. Masking a 2-character
-#: string would corrupt unrelated output for no security benefit.
+#: Masking very short values would corrupt unrelated output for no benefit.
 _MIN_REDACTABLE_LENGTH = 8
 
 
@@ -27,8 +20,7 @@ class SecretRedactingFilter(logging.Filter):
 
     def __init__(self, secrets: Iterable[str]) -> None:
         super().__init__()
-        # Longest first, so that a secret containing another as a substring is
-        # masked as a whole rather than leaving a readable tail behind.
+        # Longest first, so a secret containing another is masked whole.
         self._secrets = sorted(
             {s for s in secrets if s and len(s) >= _MIN_REDACTABLE_LENGTH},
             key=len,
@@ -45,8 +37,7 @@ class SecretRedactingFilter(logging.Filter):
             redacted = redacted.replace(secret, MASK)
 
         if redacted != message:
-            # Collapsing args into the formatted message is required: leaving
-            # them in place would let the handler re-expand the original value.
+            # Clearing args stops the handler re-expanding the original value.
             record.msg = redacted
             record.args = ()
 
@@ -58,11 +49,7 @@ class SecretRedactingFilter(logging.Filter):
 
 
 def configure_logging(level: str = "INFO", secrets: Iterable[str] = ()) -> None:
-    """Install a single stderr handler with redaction enabled.
-
-    Output goes to stderr so that stdout stays clean for machine-readable
-    payloads, which keeps `--dry-run` pipeable.
-    """
+    """Installs one redacting handler on stderr, keeping stdout for `--dry-run` output."""
     handler = logging.StreamHandler(sys.stderr)
     handler.setFormatter(
         logging.Formatter(

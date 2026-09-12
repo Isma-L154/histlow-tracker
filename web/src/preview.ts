@@ -1,25 +1,14 @@
 /**
- * Per-game link previews.
- *
- * A shared link used to render as the site's generic card, because the game
- * id lived in the URL fragment and a fragment never reaches the server. On a
- * real path the Worker can look the game up and describe it before the HTML
- * leaves, which is the only moment that matters: preview bots do not run
- * JavaScript, so whatever the client would set afterwards is invisible to them.
+ * Per-game link previews. Preview bots do not run JavaScript, so the game's
+ * title and art have to be in the HTML as it leaves the Worker.
  */
 
 import type { GameAchievements } from "./steam.ts";
 import type { Art } from "./art.ts";
 
-
 /**
- * Escapes text for use inside a double-quoted HTML attribute.
- *
- * Game titles are written by developers and arrive from Steam, so they are
- * untrusted. This is the only place in the project that builds HTML by hand,
- * which makes it the only place that could be injected into - hence escaping
- * the quote and the angle brackets rather than trusting that no game is called
- * something hostile.
+ * Escapes text for a double-quoted attribute. Game titles come from Steam and are
+ * untrusted, and this is the only place the project builds HTML by hand.
  */
 function attribute(value: string): string {
   return value
@@ -30,53 +19,23 @@ function attribute(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-/** The document's own title element, which is text rather than an attribute. */
+/** The document's title element, which holds text rather than an attribute. */
 function text(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-/**
- * Replaces `pattern` with `tag`, taking the replacement literally.
- *
- * `String.replace` reads `$&`, `` $` ``, `$'` and `$1` in a *string*
- * replacement as instructions. Every tag below is built from a game name that
- * came from Steam, and `attribute()` cannot defend against this: it runs
- * before the replacement is assembled, and its own `&amp;` is what supplies
- * the ampersand that turns a bare `$` into `$&`. A game called `$&` used to
- * splice the matched tag - angle brackets, quotes and all - into the middle of
- * an attribute value, which is the precise escape `attribute()` exists to
- * prevent.
- *
- * A replacer function's return value is never scanned for those sequences, so
- * passing one closes the hole for all of them at once.
- */
 interface Rewrite {
   html: string;
-  /**
-   * Tags the shell no longer contains, named as they were looked for.
-   *
-   * A replacement that matches nothing returns its input and says nothing, so
-   * a shell edited into a shape these patterns no longer recognise would go on
-   * serving the site's own card for every game, indefinitely and silently.
-   * Collecting the misses lets the caller say so out loud.
-   */
+  /** Tags the shell no longer contains, so an edited shell cannot fall back silently. */
   missed: string[];
 }
 
 /**
  * Replaces `pattern` with `tag`, taking the replacement literally.
  *
- * `String.replace` reads `$&`, `` $` ``, `$'` and `$1` in a *string*
- * replacement as instructions. Every tag here is built from a game name that
- * came from Steam, and `attribute()` cannot defend against it: it runs before
- * the replacement is assembled, and its own `&amp;` is what supplies the
- * ampersand that turns a bare `$` into `$&`. A game called `$&` used to splice
- * the matched tag - angle brackets, quotes and all - into the middle of an
- * attribute value, which is the precise escape `attribute()` exists to
- * prevent.
- *
- * A replacer function's return value is never scanned for those sequences, so
- * passing one closes the hole for all of them at once.
+ * A string replacement reads `$&`, `` $` ``, `$'` and `$1` as instructions, and
+ * `attribute()` cannot prevent it: its own `&amp;` supplies the `&` that turns a
+ * `$` in a game title into `$&`. A replacer function's result is never scanned.
  */
 function put(into: Rewrite, name: string, pattern: RegExp, tag: string): Rewrite {
   if (!pattern.test(into.html)) {
@@ -88,10 +47,8 @@ function put(into: Rewrite, name: string, pattern: RegExp, tag: string): Rewrite
 }
 
 /**
- * Rewrites the shell's metadata to describe one game.
- *
- * Replaces rather than appends: duplicate `og:title` tags leave the choice of
- * which one wins up to whichever scraper is reading, and they do not agree.
+ * Rewrites the shell's metadata to describe one game. Replaces rather than
+ * appends, because scrapers disagree about which of two `og:title` tags wins.
  */
 export function describeGame(
   html: string,
@@ -101,17 +58,13 @@ export function describeGame(
 ): Rewrite {
   const out: Rewrite = { html, missed: [] };
 
-  // The address is known from the request, so it is rewritten whether or not
-  // Steam could describe the game. Leaving the shell's own values behind left
-  // every game page claiming, on a crawlable path cached for a day, to be the
-  // home page - which tells a search engine they are all duplicates of it.
+  // Known from the request, so rewritten even when Steam could not describe the
+  // game. Left alone, every game page would claim to be the home page.
   put(out, 'link rel="canonical"', /<link rel="canonical" href="[^"]*" \/>/,
     `<link rel="canonical" href="${attribute(url)}" />`);
   put(out, 'meta property="og:url"', /<meta property="og:url" content="[^"]*" \/>/,
     `<meta property="og:url" content="${attribute(url)}" />`);
 
-  // Without a game there is nothing truer than the site's own card to say, and
-  // saying it is better than saying nothing.
   if (!game) return out;
 
   const title = `${game.name} — achievements and how to earn them`;
@@ -125,25 +78,13 @@ export function describeGame(
   put(out, 'meta property="og:title"', /<meta property="og:title" content="[^"]*" \/>/,
     `<meta property="og:title" content="${attribute(title)}" />`);
 
-  // The description tag spans several lines in the shell, so it is matched
-  // separately rather than folded into the single-line patterns above.
+  // The shell spreads this tag over several lines.
   put(out, 'meta property="og:description"',
     /<meta\s+property="og:description"\s+content="[^"]*"\s*\/>/,
     `<meta property="og:description" content="${attribute(description)}" />`);
 
-  // The shell ships the site's own card, so the game's cover art replaces it
-  // rather than joining it: two `og:image` tags leave the choice of which one
-  // wins to whichever scraper is reading, and they do not agree. The declared
-  // dimensions have to travel with the image, or they describe a picture that
-  // is not there.
-  //
-  // A game with no artwork keeps the site's card, which is a worse preview
-  // than the cover and a better one than none.
-  //
-  // Which picture, and how big, is decided in `art.ts` and handed in: this
-  // function stays pure, and the size travels with the URL rather than being
-  // a constant here. Two sizes are possible now, and a constant that described
-  // only one of them would be wrong exactly when the card got better.
+  // The site's own card is replaced rather than joined, and the dimensions travel
+  // with the image. A game with no art keeps the site's card.
   if (art) {
     put(out, 'meta property="og:image"', /<meta property="og:image" content="[^"]*" \/>/,
       `<meta property="og:image" content="${attribute(art.url)}" />`);

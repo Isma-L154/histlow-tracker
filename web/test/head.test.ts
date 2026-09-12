@@ -1,16 +1,10 @@
 /**
- * That HEAD and GET agree about what lives at a URL.
+ * That HEAD answers like GET: the same status and headers, and the size a GET
+ * would send.
  *
- * `/game/<id>` was routed to `gamePage` only for GET, so a HEAD fell through
- * to the asset runtime and reported on the SPA shell instead: same URL,
- * different title, different description, different cover, and - before #58 -
- * a different set of security headers. `/api/*` answered HEAD with a 405.
- *
- * HTTP asks that HEAD return the headers GET would return. Beyond the letter
- * of it, this is actively misleading during diagnosis: `curl -I` is the reflex
- * for reading headers, and while fixing #58 it reported the game page as
- * already carrying the site's policy when a GET showed it carrying none. The
- * fix was very nearly aimed at the wrong thing.
+ * The two disagreed for months and nothing noticed, because every check used
+ * one or the other: a HEAD for a game page fell through to the asset runtime
+ * and described the generic shell instead.
  */
 
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";

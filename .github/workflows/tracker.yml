@@ -1,27 +1,14 @@
 ﻿name: tracker
 
-# The workflow fires twice a day, every day, with no seasonal calendar. No
-# official Steam API publishes the sale dates, hand-maintained ones rot, and a
-# discount appearing on an ordinary Tuesday is exactly what this exists to
-# catch - so a sale season gets no special treatment.
+# The workflow fires twice a day, twelve hours apart. Costa Rica is UTC-6 all
+# year with no DST, so 00:23 UTC is 18:23 local and 12:23 UTC is 06:23 local.
 #
-# Twice a day, twelve hours apart. Costa Rica is UTC-6 all year with no DST,
-# so 00:23 UTC is 18:23 local and 12:23 UTC is 06:23 local.
+# Twice rather than once, because a sale starting in the afternoon would
+# otherwise wait for the next morning, and GitHub adds one to eleven hours of
+# delivery delay on top. The odd minute keeps out of the queue on the hour.
 #
-# Once a day was not enough. Resident Evil Requiem hit a new all-time low at
-# 17:21 UTC, thirteen hours after that day's only run, and sat unpublished
-# until a manual dispatch. GitHub adds its own one-to-eleven-hour delivery
-# delay on top, so a single firing can leave a discount unseen for most of a
-# day. Two firings halve that, and with the typical four-hour delay one refresh
-# lands mid-morning and the other late evening - bracketing the polling times
-# the phone automation uses.
-#
-# Cost is not a constraint: this repository is public, so Actions minutes are
-# unmetered. The every-3-hours budget the scheduling module used to cite was
-# written against a private repo's free tier.
-#
-# The odd minute is deliberate: GitHub queues scheduled runs hardest on the
-# hour, and a job asking for 12:00 is routinely delayed further.
+# Sale seasons get no special treatment: no API publishes their dates, and a
+# discount on an ordinary Tuesday is what this exists to catch.
 on:
   schedule:
     - cron: "23 0 * * *"
@@ -37,14 +24,12 @@ on:
         type: boolean
         default: false
 
-# The job reads the repository and nothing else. Publishing uses a separate
-# gist-scoped token, so a compromised workflow cannot touch this repository.
+# Reads the repository and nothing else; publishing uses a gist-scoped token.
 permissions:
   contents: read
 
-# Two runs must never interleave: they would race on the shared state cache and
-# could double-notify. Queue rather than cancel, so a scheduled run already in
-# flight is allowed to finish.
+# Two runs would race on the shared state cache and could double-notify. Queue
+# rather than cancel, so a run already in flight finishes.
 concurrency:
   group: tracker
   cancel-in-progress: false
@@ -54,8 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
-    # Secrets are never exposed to a fork, and this makes that structural
-    # rather than incidental.
+    # Structural, not incidental: a fork never reaches the secrets.
     if: github.event_name == 'workflow_dispatch' || github.repository_owner == 'Isma-L154'
 
     steps:
@@ -67,9 +51,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Restores the identity cache and alert state from the previous run.
-      # A miss is harmless: the tracker rebuilds both, at the cost of one
-      # round of lookups and possibly one repeated notification.
+      # A miss is harmless: both are rebuilt, at the cost of one round of lookups.
       - name: Restore state
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -82,12 +64,8 @@ jobs:
         env:
           PYTHONPATH: src
           STEAM_ID64: ${{ secrets.STEAM_ID64 }}
-          # Repository variables, not secrets. They are not sensitive, and as
-          # secrets GitHub would redact the literals "CR" and "US" everywhere
-          # they appear in a log - including inside unrelated words, which
-          # mangles the output. Still overridable without a commit.
-          # COMPARISON_COUNTRY must name a region ITAD tracks; see
-          # .env.example for why it differs from STORE_COUNTRY.
+          # Variables, not secrets: as secrets GitHub would redact "CR" and
+          # "US" everywhere they appear in a log, including inside words.
           STORE_COUNTRY: ${{ vars.STORE_COUNTRY || 'CR' }}
           COMPARISON_COUNTRY: ${{ vars.COMPARISON_COUNTRY || 'US' }}
           ITAD_API_KEY: ${{ secrets.ITAD_API_KEY }}
@@ -98,8 +76,7 @@ jobs:
             ${{ inputs.force && '--force' || '' }} \
             ${{ inputs.dry_run && '--dry-run' || '' }}
 
-      # Runs even on failure so that identity lookups already paid for are not
-      # discarded. The key is unique per run; restore-keys picks the newest.
+      # Runs on failure too, so lookups already paid for are kept.
       - name: Save state
         if: always()
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
