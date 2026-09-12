@@ -1,13 +1,9 @@
-/**
- * Types for the completion-difficulty score.
- *
- * `difficulty.js` is plain JavaScript because the browser loads it directly.
- */
+/** Types for `difficulty.js`, which is plain JavaScript because the browser loads it directly. */
 
 export interface Difficulty {
   /** 1 (anyone finishes it) to 10 (almost nobody does). */
   score: number;
-  /** Which band the score falls in, as a key the interface translates. */
+  /** The band, as a key the interface translates. */
   tier: "straightforward" | "someWork" | "demanding" | "veryHard" | "brutal";
 }
 

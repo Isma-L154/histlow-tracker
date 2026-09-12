@@ -1,28 +1,13 @@
-# Response headers for the whole site.
+# Response headers for the whole site, and the only place they are written:
+# `src/headers.ts` copies this policy onto the responses the Worker builds.
 #
-# Read by the asset runtime, which applies these to every file it serves. It is
-# also the only place they are written: responses the Worker builds - the game
-# pages and everything under /api/ - get them by asking the asset binding for
-# this policy and copying it, in `src/headers.ts`. So adding a header here adds
-# it everywhere, and there is no second list in TypeScript to keep in step.
-#
-# The page loads nothing but its own two files plus images from Steam's CDNs,
-# so the policy can be an allowlist rather than a set of exceptions: anything
-# injected into this page has nowhere to send what it finds.
-#
-# Steam serves achievement art from several hostnames depending on the game's
-# age, so all four are listed: shared.cloudflare, shared.akamai and cdn.* under
-# steamstatic.com, plus the older steamcdn-a.akamaihd.net.
-#
-# The one script host that is not us is Cloudflare's analytics beacon, which
-# the edge injects into this page. It was being refused, which cost the
-# statistics it exists for and wrote an error in every visitor's console.
+# The CSP is an allowlist. The page loads its own files, images from Steam's and
+# IGDB's CDNs (Steam uses several hostnames depending on a game's age), and
+# Cloudflare's analytics beacon, which the edge injects.
 
 /*
   Content-Security-Policy: default-src 'none'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data: https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://media.steampowered.com https://images.igdb.com; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
-  # Two years, subdomains included, and preload-eligible. The site is HTTPS
-  # only; without this a browser's first visit still tries plain HTTP, which
-  # is the one request an attacker on the same network can rewrite.
+  # Two years and preload-eligible: without it, a first visit still tries plain HTTP.
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer

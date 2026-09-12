@@ -1,18 +1,10 @@
 /**
- * The interface, in two languages.
+ * The interface in two languages, imported by the Worker (which translates the
+ * HTML before it leaves) and by the client (which translates what it draws).
  *
- * One file, imported by both sides. The Worker substitutes the strings into the
- * HTML before it leaves, so a Spanish reader never sees a frame of English; the
- * client imports the same table to translate what it renders itself and to
- * redraw when the toggle is used. Two copies of these strings would drift, and
- * the drift would be invisible until someone complained.
- *
- * Only the interface is translated. The achievement steps are generated in
- * English and stay that way: the Workers AI free tier allows roughly seventy
- * first-time lookups a day, and a second language would halve that for both.
- *
- * Achievement names, game titles and guide text are data, not interface, and
- * are never translated.
+ * Only the interface is translated. Names, titles and guide text are data, and
+ * the generated steps stay in English: the Workers AI free tier covers about
+ * seventy first-time answers a day, and a second language would halve it.
  */
 
 /** The language used when nothing else applies, and the source of these keys. */
@@ -218,14 +210,7 @@ export const DICTIONARY = {
   },
 };
 
-/**
- * One string, with `{placeholders}` filled in.
- *
- * Falls back to English rather than to the key. A missing translation should
- * read as slightly wrong, not as `game.progress` - and CI fails on a missing
- * key anyway, so this only ever runs for a key added and deployed in the same
- * breath as its own bug.
- */
+/** One string, with `{placeholders}` filled in. Falls back to English, never to the raw key. */
 export function t(language, key, values) {
   const table = DICTIONARY[language] ?? DICTIONARY[DEFAULT_LANGUAGE];
   const template = table[key] ?? DICTIONARY[DEFAULT_LANGUAGE][key];
@@ -236,24 +221,15 @@ export function t(language, key, values) {
   );
 }
 
-/**
- * Which language to show, given what the browser asked for and what was chosen.
- *
- * An explicit choice always wins: someone who picked English on a Spanish
- * laptop meant it, and re-deciding for them on every visit would be a bug they
- * cannot work around.
- */
+/** An explicit choice always beats what the browser asks for. */
 export function pickLanguage(acceptLanguage, stored) {
   if (LANGUAGES.includes(stored)) return stored;
   return fromAcceptLanguage(acceptLanguage);
 }
 
 /**
- * The best supported language named by an `Accept-Language` header.
- *
- * Quality values are honoured, because `en;q=0.8, es` means Spanish however it
- * is ordered. Regional tags match on their base - `es-419` is Latin American
- * Spanish and this site has one Spanish.
+ * The best supported language in an `Accept-Language` header. Quality values
+ * are honoured, and regional tags match on their base (`es-419` is Spanish).
  */
 export function fromAcceptLanguage(header) {
   if (typeof header !== "string" || header === "") return DEFAULT_LANGUAGE;
@@ -277,13 +253,7 @@ export function fromAcceptLanguage(header) {
 /** The attributes a `data-i18n-*` marker can fill: text is not all a reader sees. */
 export const ATTRIBUTES = ["placeholder", "aria-label", "title", "alt"];
 
-/**
- * Translates a document, or any part of one, in place.
- *
- * Marked by attribute rather than by selector so that the markup says which
- * strings are translatable. A list of selectors in a script would go stale the
- * first time someone edited the HTML without reading it.
- */
+/** Translates a document, or part of one, in place, wherever the markup marks a string. */
 export function translate(root, language) {
   for (const element of root.querySelectorAll("[data-i18n]")) {
     element.textContent = t(language, element.dataset.i18n);

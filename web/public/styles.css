@@ -1,7 +1,4 @@
-/*
- * Dark only, on purpose: this page is a companion to Steam, which is dark, and
- * a light variant would be a second design to keep honest for no one's benefit.
- */
+/* Dark only: the page is a companion to Steam, which is dark. */
 
 :root {
   --bg: #0b0f14;
@@ -35,15 +32,9 @@
 }
 
 /*
- * `hidden` has to beat the stylesheet.
- *
- * The browser hides `[hidden]` with its own `display: none`, and any author
- * `display` declaration outranks it - so `.filters { display: flex }` left the
- * chips on screen with the property set, filtering against unlock data the
- * visitor did not have. The same trap caught `.achievement` earlier.
- *
- * `!important` here rather than a rule per element, because the next element to
- * grow a `display` is the one nobody will think to check.
+ * `hidden` must beat any author `display` rule, which otherwise outranks the
+ * browser's own. One global rule, because the next element to grow a
+ * `display` is the one nobody checks.
  */
 [hidden] {
   display: none !important;
@@ -55,8 +46,7 @@ body {
   min-height: 100vh;
   margin: 0;
   padding: 0 1.25rem 2rem;
-  /* Fixed, so a short page does not end the glow mid-screen with a visible
-     seam where the body box stops. */
+  /* Fixed, so a short page shows no seam where the body ends. */
   background:
     radial-gradient(90rem 40rem at 50% -18rem, var(--bg-glow), transparent 70%) fixed,
     var(--bg);
@@ -102,11 +92,7 @@ h3 {
 /* -- top bar ------------------------------------------------------------- */
 
 .topbar {
-  /*
-   * Sticky, because the search was gone after the first screen and a game runs
-   * to several. Also the anchor for the profile panel once the bar wraps; see
-   * the narrow query.
-   */
+  /* Sticky, so search stays in reach down a long list. */
   position: sticky;
   z-index: 20;
   top: 0;
@@ -118,8 +104,7 @@ h3 {
   max-width: var(--wide);
   margin: 0 auto;
   padding: 1rem 0 1.1rem;
-  /* The page background is a fixed gradient, so a solid colour here would band
-     against it. */
+  /* Translucent: a solid colour would band against the fixed gradient. */
   background: color-mix(in srgb, var(--bg) 82%, transparent);
   backdrop-filter: blur(10px);
 }
@@ -408,8 +393,7 @@ main {
 /* -- hero ---------------------------------------------------------------- */
 
 .hero {
-  /* Centres in whatever main has left, so the home page is not top-heavy
-     with a third of the screen empty underneath. */
+  /* Centres in the space main has left. */
   margin-block: auto;
   padding: 3.5rem 0 4rem;
   text-align: center;
@@ -533,7 +517,7 @@ main {
   margin: 0 0 0.5rem;
   font-size: 0.86rem;
   color: var(--muted);
-  /* Says there is more to know without shouting it. */
+  /* The tooltip explains where the score comes from. */
   cursor: help;
 }
 
@@ -546,10 +530,7 @@ main {
   font-variant-numeric: tabular-nums;
 }
 
-/*
- * The tier colours borrow the rarity ramp, because it is the same underlying
- * measure - how few people have these - read at the level of a whole game.
- */
+/* Tier colours borrow the rarity ramp: it is the same measure, read per game. */
 .difficulty-tier {
   font-weight: 600;
 }
@@ -583,10 +564,7 @@ main {
   text-transform: uppercase;
 }
 
-/*
- * A grid rather than a scroller: six cards fit a desktop row, and on a phone
- * they stack two across without the horizontal swipe that hides half of them.
- */
+/* A grid, not a scroller, so no card hides behind a swipe on a phone. */
 .upcoming-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
@@ -621,8 +599,7 @@ main {
   font-size: 0.82rem;
   font-weight: 600;
   line-height: 1.3;
-  /* Two lines, then an ellipsis: a long title must not make one card taller
-     than the rest of the row. */
+  /* Two lines, so a long title cannot make one card taller than its row. */
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -662,11 +639,7 @@ main {
   color: var(--text);
 }
 
-/*
- * The current language is marked with `aria-pressed`, so the styling keys off
- * that rather than off a class. One source of truth, and a state a screen
- * reader is told about instead of only a colour.
- */
+/* Keyed off `aria-pressed`, the state a screen reader is told about too. */
 .lang[aria-pressed="true"] {
   background: var(--panel-hover);
   color: var(--text);
@@ -717,11 +690,7 @@ main {
 
 /* -- toolbar ------------------------------------------------------------- */
 
-/*
- * Follows the top bar down the page. The offset is whatever that bar currently
- * measures - it wraps to two rows on a narrow screen - so it is published as a
- * custom property rather than guessed at here.
- */
+/* Sticks beneath the top bar, whose height app.js measures because it wraps. */
 .toolbar {
   position: sticky;
   z-index: 15;
@@ -781,14 +750,7 @@ main {
   border-color: var(--border-strong);
 }
 
-/*
- * The whole row is one control.
- *
- * It used to be three stacked lines - name, description, and a button - which
- * cost 118px each and made a sixty-three achievement game eight screens long.
- * Folding it into a single line roughly halves that; the description moves
- * into the panel the row opens, where there is space to read it.
- */
+/* The whole row is one control; the description lives in the panel it opens. */
 .achievement-summary {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) auto auto auto;
@@ -877,11 +839,7 @@ main {
   align-items: center;
 }
 
-/*
- * The bar is why this page exists. Sorted by rarity, the list is meant to be
- * scanned, and a column of numbers cannot be. The percentage beside it carries
- * the same information, so colour is never the only signal.
- */
+/* For scanning. The percentage beside it carries the same value, so colour is never the only signal. */
 .rarity-bar {
   width: 68px;
   height: 5px;
@@ -969,9 +927,7 @@ main {
 .footer {
   width: 100%;
   max-width: var(--wide);
-  /* `auto`, genuinely: the shorthand used to say 3rem while the comment
-     claimed auto, which stranded the footer mid-screen on a short page with a
-     third of the viewport empty beneath it. */
+  /* Pushed to the bottom of a short page. */
   margin: auto auto 0;
   padding-top: 2rem;
   border-top: 1px solid var(--border);
@@ -994,16 +950,7 @@ main {
     display: none;
   }
 
-  /*
-   * The bar wraps here and the trigger shrinks to its icon, so anchoring the
-   * panel to that trigger pushes it off the left edge. Anchoring it to the bar
-   * instead lets it span the screen.
-   */
-  /*
-   * The bar wraps to ~190px here, and sticking that to the top costs a third
-   * of a phone screen permanently. It scrolls away instead; the filters below
-   * stay pinned, which is what a long list actually needs within reach.
-   */
+  /* Wrapped, the bar is ~190px: pinned, it would cost a third of a phone screen. */
   .topbar {
     position: relative;
   }
@@ -1012,6 +959,7 @@ main {
     top: 0;
   }
 
+  /* The trigger shrinks to its icon, so the panel anchors to the bar instead. */
   .profile {
     position: static;
   }
@@ -1039,8 +987,7 @@ main {
     height: 32px;
   }
 
-  /* The bar is the first thing to go: at this width the row needs every pixel
-     for the name, and the percentage carries the same information. */
+  /* The name needs the room, and the percentage carries the same value. */
   .rarity-bar {
     display: none;
   }
@@ -1061,10 +1008,7 @@ main {
 
 /* -- motion -------------------------------------------------------------- */
 
-/*
- * Five transitions ran regardless of the system setting. None of them carries
- * meaning, so switching them off costs the page nothing.
- */
+/* None of the transitions carries meaning, so they all go. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1078,10 +1022,6 @@ main {
 
 /* -- rarity scale note ---------------------------------------------------- */
 
-/*
- * Sits where the percentages actually are. It used to be the footer's only
- * line, explaining a figure the home page never shows.
- */
 .scale-note {
   margin: 0;
   color: var(--muted);
@@ -1096,10 +1036,7 @@ main {
 
 /* -- documents ------------------------------------------------------------ */
 
-/*
- * Privacy and terms. Prose rather than an interface, so the column is narrow
- * enough to read comfortably rather than as wide as the achievement list.
- */
+/* Privacy and terms: a column narrow enough to read prose comfortably. */
 .doc {
   width: 100%;
   max-width: 44rem;
@@ -1132,7 +1069,6 @@ main {
 .doc p,
 .doc li {
   color: #c7d2dc;
-  /* 65-75 characters is the comfortable range; the column above lands there. */
   line-height: 1.7;
 }
 
@@ -1184,8 +1120,7 @@ main {
   color: var(--muted);
 }
 
-/* The bar is as wide as the prose here, so the wordmark starts on the same
-   line the text does rather than floating out to the left of it. */
+/* As wide as the prose, so the wordmark lines up with the text. */
 .doc-page .topbar,
 .doc-page .footer {
   max-width: 44rem;

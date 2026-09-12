@@ -1,12 +1,8 @@
 /**
- * Steam achievement browser - client.
+ * HowToAchieve's client. No framework and no build step.
  *
- * No framework and no build step: the page has one job, and every dependency
- * would be another thing to keep patched on a public URL.
- *
- * Nothing from the API is ever inserted as HTML. Achievement names and
- * descriptions are written by game developers, so they are untrusted text and
- * only ever reach the page through `textContent` or an attribute setter.
+ * Nothing from the API is ever inserted as HTML: achievement names and
+ * descriptions are written by game developers, so they only reach the page as text.
  */
 
 import { handledInPage } from "./nav.js";
@@ -19,7 +15,6 @@ const LANGUAGE_KEY = "histlow.language";
 const SEARCH_DEBOUNCE_MS = 250;
 const MAX_RESULTS = 12;
 
-/** Steam's own achievement-guide hub, already filtered to achievement guides. */
 const GUIDES_BASE = "https://steamcommunity.com/app";
 
 const el = {
@@ -57,10 +52,8 @@ const el = {
 };
 
 const state = {
-  // The Worker already resolved this from Accept-Language and wrote it into
-  // `lang`, so reading the document rather than re-deciding keeps the client
-  // from disagreeing with the HTML it was handed.
-  language: pickLanguage("", document.documentElement.lang) ,
+  // The Worker already decided this and wrote it into `lang`.
+  language: pickLanguage("", document.documentElement.lang),
   steamId: readStoredSteamId(),
   game: null,
   filter: "all",
@@ -73,13 +66,7 @@ let searchTimer = null;
 
 // -- api --------------------------------------------------------------------
 
-/**
- * What to tell the reader when the API says no.
- *
- * Translating by status rather than by message text keeps the page and the
- * API from having to agree on wording: the API states a condition, and this
- * decides how to say it to a reader.
- */
+/** Wording by status, for an error that carries no translatable `reason`. */
 const ERROR_KEYS = { 400: "error.400", 404: "error.404", 502: "error.502", 503: "error.503" };
 
 async function api(path, signal) {
@@ -98,9 +85,7 @@ async function api(path, signal) {
     // Falls through to the generic message below.
   }
   if (!response.ok) {
-    // A `reason` is specific and translatable, so it wins. The status table is
-    // the fallback, and it is written about games - a 404 from the profile
-    // route means something else entirely, which is why the reason exists.
+    // A `reason` is specific, so it wins; the status table is written about games.
     const key = body?.reason && DICTIONARY.en[body.reason] ? body.reason : ERROR_KEYS[response.status];
     throw new Error(key ? say(key) : (body?.error ?? say("error.api", { status: response.status })));
   }
@@ -168,9 +153,6 @@ function renderResults(results) {
     button.addEventListener("click", () => {
       hideResults();
       el.search.value = result.name;
-      // The path is the single source of truth for "which game", so a game
-      // can be bookmarked, the back button works without extra bookkeeping,
-      // and the server can describe it when the link is shared.
       goToGame(result.appId);
     });
 
@@ -255,8 +237,7 @@ function renderProgress(game) {
   el.progressLine.hidden = !known;
   el.progressBar.hidden = !known;
 
-  // Asking for progress and getting none is not the same as never asking. Say
-  // so, or an unowned game looks exactly like a broken SteamID.
+  // Asked for progress and got none: say so, or an unowned game looks like a broken SteamID.
   const unexplained = state.steamId !== null && !known;
   el.progressNotice.hidden = !unexplained;
   el.progressNotice.textContent = unexplained
@@ -273,13 +254,7 @@ function renderProgress(game) {
   el.progressFill.style.width = `${percent}%`;
 }
 
-/**
- * How hard the game is to finish, from percentages the page already holds.
- *
- * Absent rather than zero when there is too little to read. A game with four
- * achievements has a rarest one, and saying "10/10" about it would be a number
- * with nothing behind it.
- */
+/** How hard the game is to finish, or nothing when there is too little to read. */
 function renderDifficulty(game) {
   const difficulty = completionDifficulty(game.achievements.map((a) => a.globalPercent));
   el.difficulty.hidden = difficulty === null;
@@ -288,19 +263,13 @@ function renderDifficulty(game) {
   el.difficulty.dataset.tier = difficulty.tier;
   el.difficultyScore.textContent = say("difficulty.score", { score: difficulty.score });
   el.difficultyTier.textContent = say(`difficulty.${difficulty.tier}`);
-  // Where the number comes from, on the element rather than in a paragraph
-  // nobody reads. It matters: this is a rarity reading, and a bare score next
-  // to a game title reads as a community verdict.
+  // A rarity reading, not a community verdict, and the tooltip says so.
   el.difficulty.title = say("difficulty.basis");
 }
 
 /**
- * Roughly how long the game takes to finish, when IGDB knows.
- *
- * Fetched separately from the achievements so a slow or unreachable IGDB
- * cannot hold up the page: the list renders, and this fills in behind it or
- * never appears. Failure is silent here on purpose - the Worker logs it, and
- * a reader has nothing to do about IGDB being down.
+ * Roughly how long the game takes, when IGDB knows. Fetched apart, so a slow
+ * IGDB never holds up the list; a failure is logged by the Worker, not shown.
  */
 async function renderCompletionTime(appId) {
   el.completionTime.hidden = true;
@@ -313,15 +282,13 @@ async function renderCompletionTime(appId) {
     return;
   }
 
-  // The reader may have moved on while this was in flight, and filling in a
-  // time for the previous game would be worse than showing none.
+  // The reader may have moved on to another game while this was in flight.
   if (state.game?.appId !== requested) return;
 
   const seconds = data?.completionTime?.completely ?? data?.completionTime?.normally;
   if (!seconds) return;
 
-  // A short game rounds to zero, and "about 0 hours" reads as a bug rather
-  // than as a fast game.
+  // "About 0 hours" would read as a bug rather than as a short game.
   const hours = Math.round(seconds / 3600);
   el.completionHours.textContent = hours < 1 ? say("time.underAnHour") : say("time.hours", { hours });
   el.completionTime.title = say("time.source");
@@ -365,17 +332,14 @@ function icon(path) {
 function renderAchievement(appId, achievement) {
   const item = document.createElement("li");
   item.className = "achievement";
-  // `unlocked` is null when no player was resolved: then nothing is claimed
-  // either way, and the row is styled as neutral rather than as missing.
+  // `unlocked` is null when no player was resolved, so the row claims nothing.
   if (achievement.unlocked === true) item.classList.add("is-unlocked");
   if (achievement.unlocked === false) item.classList.add("is-locked");
   item.dataset.unlocked = String(achievement.unlocked);
 
   const tier = rarityTier(achievement.globalPercent);
 
-  // The whole row is the control. A separate button per achievement meant
-  // sixty-three identical buttons down the page, and a row tall enough to
-  // hold one - which is what made a single game eight screens long.
+  // The whole row is the control, which keeps a long game to a few screens.
   const summary = document.createElement("button");
   summary.type = "button";
   summary.className = "achievement-summary";
@@ -390,8 +354,7 @@ function renderAchievement(appId, achievement) {
   icon.alt = "";
   icon.loading = "lazy";
   icon.referrerPolicy = "no-referrer";
-  // A few achievements point at art Steam no longer serves. An empty tile reads
-  // as a missing icon; a broken-image box reads as a broken page.
+  // Some art is no longer served, and an empty tile beats a broken-image box.
   icon.addEventListener("error", () => icon.removeAttribute("src"), { once: true });
 
   const name = document.createElement("span");
@@ -433,8 +396,7 @@ function renderAchievement(appId, achievement) {
   reveal.setAttribute("aria-expanded", "false");
   reveal.addEventListener("click", () => toggleHowTo(reveal, panel, appId, achievement));
 
-  // Reading the guides costs a model call, so it stays a deliberate second
-  // action rather than firing on every row somebody opens out of curiosity.
+  // A model call, so it stays a deliberate second action.
   detail.append(reveal, panel);
 
   summary.addEventListener("click", () => {
@@ -448,12 +410,8 @@ function renderAchievement(appId, achievement) {
 }
 
 /**
- * The rarity figure, plus a bar that can be compared without reading it.
- *
- * The bar is the reason this page exists: sorted by rarity, the list is meant
- * to be scanned, and a column of numbers cannot be. It is decorative in the
- * accessibility sense - the percentage next to it carries the same value, and
- * colour is never the only signal.
+ * The rarity figure, with a bar for scanning. The bar is decorative: the
+ * percentage carries the same value, so colour is never the only signal.
  */
 function rarityMeter(percent, tier) {
   const wrap = document.createElement("span");
@@ -477,11 +435,7 @@ function rarityMeter(percent, tier) {
 
 /**
  * How full the bar is, from 0 (everyone has it) to 1 (almost nobody does).
- *
- * Logarithmic, because a linear scale wastes itself where the interest is:
- * Hollow Knight's rarest six sit between 3.9% and 5.5%, which on a linear bar
- * are indistinguishable. On this one they separate visibly, while a 24%
- * achievement still reads as obviously easier.
+ * Logarithmic, so achievements a few percent apart near the bottom separate.
  */
 function rarityWeight(percent) {
   if (percent === null || percent <= 0) return 0;
@@ -524,8 +478,7 @@ async function toggleHowTo(button, panel, appId, achievement) {
     renderHowTo(panel, data, appId, achievement);
   } catch (error) {
     if (error.name === "AbortError") return;
-    // Deliberately not marked as loaded: a failure here is usually transient,
-    // so collapsing and reopening should try again rather than replay the error.
+    // Not marked as loaded, so reopening retries what was usually a transient failure.
     panel.replaceChildren(note(error.message));
   }
 }
@@ -569,11 +522,7 @@ function renderHowTo(panel, data, appId, achievement) {
   panel.append(disclaimer);
 }
 
-/**
- * The model is asked for a sentence followed by dashed steps, so that is what
- * gets rendered. Anything that does not match falls back to a paragraph rather
- * than being dropped.
- */
+/** The model's lead sentence and dashed steps; anything else becomes a paragraph. */
 function renderSteps(text) {
   const fragment = document.createDocumentFragment();
   let list = null;
@@ -624,12 +573,7 @@ function note(message) {
   return paragraph;
 }
 
-/**
- * Turns a raw unlock percentage into something a person can act on.
- *
- * The thresholds are the ones the completionist community already uses, so the
- * labels line up with how these achievements get talked about elsewhere.
- */
+/** Rarity bands, at the thresholds the completionist community already uses. */
 function rarityTier(percent) {
   if (percent === null) return { label: say("rarity.unknown"), className: "rarity-unknown" };
   if (percent < 5) return { label: say("rarity.legendary"), className: "rarity-legendary" };
@@ -638,13 +582,7 @@ function rarityTier(percent) {
   return { label: say("rarity.common"), className: "rarity-common" };
 }
 
-/*
- * Publishes the top bar's height so the toolbar can stick directly beneath it.
- *
- * The bar wraps to two rows on a narrow screen, so the offset is measured
- * rather than hard-coded: a guessed value leaves either a gap or an overlap at
- * exactly the widths nobody tests.
- */
+/** Publishes the top bar's height, which wraps on narrow screens, so the toolbar can stick beneath it. */
 function trackTopbarHeight() {
   const bar = document.querySelector(".topbar");
   if (!bar) return;
@@ -704,21 +642,17 @@ el.steamIdSave.addEventListener("click", async () => {
 
   let resolved;
   try {
-    // The Worker does the resolving: it holds the Steam key, and the id it
-    // returns has been confirmed to exist rather than merely to look right.
+    // The Worker resolves it with the Steam key, so the id is known to exist.
     resolved = await api(`/api/steamid?q=${encodeURIComponent(typed)}`);
   } catch (error) {
-    // The message is the Worker's, which distinguishes a mistyped id from a
-    // name Steam has never heard of. Repeating a generic one here would throw
-    // that away.
+    // The Worker's message says which way the input was wrong.
     setProfileStatus(error.message, true);
     return;
   } finally {
     el.steamIdSave.disabled = false;
   }
 
-  // A 200 whose body is not what this expects would otherwise throw here,
-  // outside the catch above, leaving the status stuck on "Looking up…".
+  // An unexpected 200 body would otherwise leave the status stuck on "Looking up…".
   if (!resolved?.steamId) {
     setProfileStatus(say("profile.default"), true);
     return;
@@ -726,15 +660,13 @@ el.steamIdSave.addEventListener("click", async () => {
 
   state.steamId = resolved.steamId;
   store(STORAGE_KEY, resolved.steamId);
-  // Confirm who was found, not just that something was. Echoing seventeen
-  // digits back tells the reader nothing they can check.
+  // Name who was found: seventeen digits tell the reader nothing they can check.
   setProfileStatus(
     resolved.profileName
       ? say("profile.found", { name: resolved.profileName })
       : say("profile.foundNameless"),
   );
-  // Deliberately left open. The status line now names who was found, and
-  // closing the panel on success would hide the one thing worth reading.
+  // Left open, so the reader sees who was found.
   if (state.game) loadGame(state.game.appId);
 });
 
@@ -772,24 +704,12 @@ function setProfileStatus(message, isError = false) {
 
 // -- shared helpers ---------------------------------------------------------
 
-/**
- * One interface string, in whatever language is showing.
- *
- * Wrapped rather than importing `t` directly so the language is read at the
- * moment of use. Reading it once into a constant would leave every string
- * rendered before a toggle stuck in the old language.
- */
+/** One interface string, in the language showing at the moment of use. */
 function say(key, values) {
   return t(state.language, key, values);
 }
 
-/**
- * Switches language without reloading or losing the game on screen.
- *
- * A reload would work and would throw away the achievement list, the open
- * how-to panels and the scroll position - for a change that is purely
- * presentational.
- */
+/** Switches language in place, keeping the game, the open panels and the scroll position. */
 function setLanguage(language) {
   if (!(language in DICTIONARY) || language === state.language) return;
 
@@ -798,8 +718,7 @@ function setLanguage(language) {
   translate(document, language);
   markLanguage();
 
-  // Anything the client drew itself is not marked up with `data-i18n`, so it
-  // has to be drawn again from the state that produced it.
+  // What the client drew itself carries no `data-i18n`, so it is redrawn.
   if (state.game) renderGame(state.game);
   if (upcomingReleases.length > 0) renderUpcoming();
   if (state.steamId) setProfileStatus(say("profile.saved"));
@@ -807,8 +726,7 @@ function setLanguage(language) {
   try {
     localStorage.setItem(LANGUAGE_KEY, language);
   } catch {
-    // Same as the SteamID: a browser refusing storage is allowed to, and the
-    // choice simply lasts for this visit.
+    // No storage: the choice lasts for this visit.
   }
 }
 
@@ -818,7 +736,6 @@ function markLanguage() {
     button.setAttribute("aria-pressed", String(button.dataset.language === state.language));
   }
 }
-
 
 function setStatus(message) {
   el.status.textContent = message;
@@ -831,8 +748,7 @@ function showError(message) {
   el.status.classList.add("is-error");
   el.status.hidden = false;
   el.game.hidden = true;
-  // Bringing the hero back leaves somewhere to go from a dead link, instead of
-  // an error on an otherwise empty page.
+  // The hero gives a dead link somewhere to go.
   el.hero.hidden = false;
 }
 
@@ -847,14 +763,8 @@ function link(text, href) {
 }
 
 /**
- * A usable image URL, or null.
- *
- * Two things go wrong with Steam's artwork. Some older schemas still hand out
- * `http://` URLs, which a browser blocks as mixed content on an HTTPS page.
- * And some achievements carry an empty icon field, which leaves a directory
- * URL ending in a slash: requesting it returns a listing rather than an image,
- * which the browser blocks and logs. Not asking is cleaner than handling the
- * failure afterwards.
+ * A usable image URL, or null. Old schemas hand out `http://`, which would be
+ * blocked as mixed content, and an empty icon field leaves a URL with no file.
  */
 function artwork(url) {
   if (typeof url !== "string" || url === "") return null;
@@ -877,13 +787,7 @@ const COUNTDOWN_REFRESH_MS = 60_000;
 /** What the API last returned, so a language switch can redraw without refetching. */
 let upcomingReleases = [];
 
-/**
- * How far off a date is, in words.
- *
- * Days rather than a ticking clock. A second-by-second counter on six cards is
- * a lot of motion on a page whose job is a search box, and nobody plans around
- * the minutes of a release two months away.
- */
+/** How far off a date is, in days rather than a ticking clock. */
 function countdown(releasedAt, now) {
   const days = Math.ceil((releasedAt * 1000 - now) / 86_400_000);
   if (days <= 0) return say("upcoming.today");
@@ -891,13 +795,7 @@ function countdown(releasedAt, now) {
   return say("upcoming.days", { days });
 }
 
-/**
- * The most anticipated releases, or nothing at all.
- *
- * Absent rather than empty when IGDB has nothing: a heading over no cards is
- * worse than no heading. The home page is fully usable without this, which is
- * the standard every IGDB-backed piece here is held to.
- */
+/** The most anticipated releases, or nothing at all: a heading over no cards is worse than none. */
 async function loadUpcoming() {
   try {
     const data = await api("/api/upcoming");
@@ -911,8 +809,7 @@ async function loadUpcoming() {
 
 function renderUpcoming() {
   const now = Date.now();
-  // A release whose date has passed while the tab was open drops out, rather
-  // than counting down past zero.
+  // A release that passed while the tab was open drops out rather than counting past zero.
   const live = upcomingReleases.filter((release) => release.releasedAt * 1000 > now - 86_400_000);
 
   el.upcoming.hidden = live.length === 0;
@@ -929,7 +826,7 @@ function renderUpcoming() {
       cover.src = release.coverUrl;
       cover.alt = "";
       cover.loading = "lazy";
-      // IGDB is a third party: deny it the referrer, as Steam is denied it.
+      // A third party, like Steam: no referrer.
       cover.referrerPolicy = "no-referrer";
       card.append(cover);
     }
@@ -950,38 +847,22 @@ function renderUpcoming() {
 
 // -- routing ----------------------------------------------------------------
 
-/**
- * Sends the browser to a game without reloading the page.
- *
- * A real path rather than a fragment, because a fragment never reaches the
- * server and the server is what writes the preview card a chat app shows.
- */
+/** Goes to a game in place. A real path, not a fragment, so the server can describe it when shared. */
 function goToGame(appId) {
   history.pushState({ appId }, "", `/game/${appId}`);
   route();
 }
 
-/**
- * The same, back to the home page.
- *
- * No second history entry when the reader is already home: the brand sits in
- * the header of every page and gets clicked idly, and three idle clicks used
- * to mean three presses of Back before anything appeared to happen.
- */
+/** Back to the home page, without stacking history entries when already there. */
 function goHome() {
   if (location.pathname !== "/") history.pushState({}, "", "/");
-  // `href="#"` sent the reader to the top of the document, and a full
-  // navigation to "/" still does. Cancelling the navigation has to keep that,
-  // or arriving from deep in a long achievement list lands them halfway down
-  // a page that just got much shorter.
+  // A real navigation would scroll to the top, so this does too.
   scrollTo(0, 0);
   route();
 }
 
 function route() {
-  // Links shared before the move still arrive as #/game/123. Rewriting them
-  // in place keeps every bookmark and pasted message working, and leaves the
-  // reader on a URL that will preview properly if they share it onward.
+  // Links shared before the move arrive as #/game/123; rewrite them to the real path.
   const legacy = /^#\/game\/(\d{1,10})$/.exec(location.hash);
   if (legacy) {
     history.replaceState({ appId: Number(legacy[1]) }, "", `/game/${legacy[1]}`);
@@ -999,7 +880,6 @@ function route() {
   setStatus("");
 }
 
-// Back and forward now move between real paths.
 window.addEventListener("popstate", route);
 window.addEventListener("hashchange", route);
 
@@ -1008,23 +888,19 @@ el.hero.addEventListener("click", (event) => {
   if (example) goToGame(Number(example.dataset.appid));
 });
 
-// The brand is a plain link to "/", so it opens in a new tab, works from the
-// keyboard, and still goes home with scripting off. Once the page is running
-// there is no reason to reload the whole document for it: the router already
-// knows how to draw the home page.
 el.language.addEventListener("click", (event) => {
   const button = event.target.closest("[data-language]");
   if (button) setLanguage(button.dataset.language);
 });
 
+// A real link to "/", so a modified click still opens a tab; a plain one is routed in place.
 el.brand.addEventListener("click", (event) => {
   if (!handledInPage(event)) return;
   event.preventDefault();
   goHome();
 });
 
-// The Worker wrote `lang` from Accept-Language, which is right for a first
-// visit and wrong for someone who has chosen. An explicit choice wins.
+// An explicit choice beats the Worker's Accept-Language guess.
 try {
   const chosen = localStorage.getItem(LANGUAGE_KEY);
   if (chosen && chosen !== state.language) setLanguage(chosen);
@@ -1032,15 +908,8 @@ try {
   // No storage, so no stored choice to honour.
 }
 
-// Then translate anyway, against whatever language is now showing.
-//
-// Normally this changes nothing: the Worker already substituted, so every
-// string is replaced with the one it already holds. It costs one pass over
-// twenty elements and buys the difference between two failure modes. If the
-// server-side rewrite ever misses - a pattern that stops matching after an
-// edit to the markup - a reader would otherwise be left with English text
-// under `lang="es"`, permanently and with nothing to indicate it. This way
-// they get a brief flicker instead, which is recoverable and visible.
+// Translate anyway. Normally a no-op, since the Worker already did; if its
+// rewrite ever misses, this turns permanently wrong text into a brief flicker.
 translate(document, state.language);
 markLanguage();
 
@@ -1050,7 +919,6 @@ if (state.steamId) {
 }
 route();
 
-// The home page is the only place these appear, and it is where most visits
-// start. Fired after routing so a direct link to a game does not wait for it.
+// After routing, so a direct link to a game does not wait for it.
 loadUpcoming();
 setInterval(renderUpcoming, COUNTDOWN_REFRESH_MS);
