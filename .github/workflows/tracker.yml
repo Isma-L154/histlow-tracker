@@ -1,4 +1,4 @@
-﻿name: tracker
+name: tracker
 
 # The workflow fires twice a day, twelve hours apart. Costa Rica is UTC-6 all
 # year with no DST, so 00:23 UTC is 18:23 local and 12:23 UTC is 06:23 local.
