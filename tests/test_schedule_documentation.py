@@ -59,8 +59,9 @@ CRON = re.compile(r'^\s*-\s*cron:\s*"(\d{1,2})\s+(\d{1,2})\s+\*\s+\*\s+\*"\s*$',
 
 
 def _read(path: Path) -> str:
-    # utf-8-sig: tracker.yml carries a BOM.
-    return path.read_text(encoding="utf-8-sig")
+    # Plain utf-8: tracker.yml carried a BOM until #107 stripped it, and
+    # test_repository_hygiene is what now keeps every tracked file free of one.
+    return path.read_text(encoding="utf-8")
 
 
 def _scheduled_utc() -> list[time]:
