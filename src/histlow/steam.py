@@ -43,9 +43,21 @@ class SteamClient:
 
         Steam answers a private profile with HTTP 200 and an empty object, so that
         is raised rather than read as an empty wishlist and a silent tracker.
+
+        The decoded body is checked for shape like every other upstream payload:
+        anything but an object reaches the same error, rather than an
+        `AttributeError` the caller does not catch.
         """
-        document = self._http.get_json(WISHLIST_URL, params={"steamid": steam_id64})
-        response = _as_mapping(document.get("response"))
+        payload = self._http.get_json(WISHLIST_URL, params={"steamid": steam_id64})
+        if not isinstance(payload, dict):
+            # Named before degrading, as the other shape checks here and in
+            # `itad` do. The error below tells the reader to check their privacy
+            # setting, which is the wrong thing to act on when Steam sent a list.
+            log.warning(
+                "wishlist returned an unexpected payload shape (%s)", type(payload).__name__
+            )
+
+        response = _as_mapping(_as_mapping(payload).get("response"))
 
         if "items" not in response:
             raise WishlistUnavailableError(

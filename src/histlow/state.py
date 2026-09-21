@@ -46,8 +46,18 @@ class TrackerState:
             # layout could suppress a real one.
             return cls(path)
 
+        # `or {}` rescued a falsy value only, so a non-empty list reached
+        # `.items()` and raised. The file returns from the Actions cache between
+        # runs, which is why `read_json` treats it as untrusted in the first place.
+        records = document.get("alerts")
+        if not isinstance(records, dict):
+            if records is not None:
+                log.warning("state file has an unexpected alerts shape (%s); ignoring it",
+                            type(records).__name__)
+            records = {}
+
         alerts: dict[int, AlertRecord] = {}
-        for key, value in (document.get("alerts") or {}).items():
+        for key, value in records.items():
             record = _parse_record(value)
             if record is None:
                 continue

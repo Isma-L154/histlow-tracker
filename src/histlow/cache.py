@@ -45,8 +45,17 @@ class IdentityCache:
             # An unknown layout is discarded; rebuilding costs one round of lookups.
             return cls(path)
 
+        # As in `state.load`: `or {}` let a non-empty list of the wrong shape
+        # through to `.items()`. Costing one round of lookups beats aborting.
+        stored = document.get("entries")
+        if not isinstance(stored, dict):
+            if stored is not None:
+                log.warning("identity cache has an unexpected entries shape (%s); ignoring it",
+                            type(stored).__name__)
+            stored = {}
+
         entries: dict[int, _Entry] = {}
-        for key, value in (document.get("entries") or {}).items():
+        for key, value in stored.items():
             entry = _parse_entry(value)
             if entry is None:
                 continue

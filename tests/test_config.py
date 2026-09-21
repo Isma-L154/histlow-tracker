@@ -72,6 +72,22 @@ class TestLoadSettings:
         with pytest.raises(ConfigError, match="not valid JSON"):
             load_settings(VALID_ENV, path)
 
+    @pytest.mark.parametrize("section", [[], "not-an-object", 42], ids=["list", "string", "number"])
+    def test_a_section_that_is_not_an_object_is_reported_clearly(
+        self, tmp_path: Path, section: object
+    ) -> None:
+        """A bad configuration must fail loudly, which a raw `AttributeError` is not.
+
+        `_read_config_file` checked the top level and not each section, so this
+        escaped `__main__`'s `except ConfigError` as a traceback instead of the
+        curated list of problems every other invalid setting produces.
+        """
+        path = tmp_path / "config.json"
+        path.write_text(json.dumps({**CONFIG_DOCUMENT, "alerts": section}), encoding="utf-8")
+
+        with pytest.raises(ConfigError, match="alerts must be a JSON object"):
+            load_settings(VALID_ENV, path)
+
     def test_a_byte_order_mark_is_tolerated(self, tmp_path: Path) -> None:
         # Windows editors and PowerShell's Set-Content add one silently, and
         # json.loads rejects it outright.
