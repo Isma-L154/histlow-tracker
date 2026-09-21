@@ -43,8 +43,12 @@ class SteamClient:
 
         Steam answers a private profile with HTTP 200 and an empty object, so that
         is raised rather than read as an empty wishlist and a silent tracker.
+
+        The decoded body is checked for shape like every other upstream payload:
+        anything but an object reaches the same error, rather than an
+        `AttributeError` the caller does not catch.
         """
-        document = self._http.get_json(WISHLIST_URL, params={"steamid": steam_id64})
+        document = _as_mapping(self._http.get_json(WISHLIST_URL, params={"steamid": steam_id64}))
         response = _as_mapping(document.get("response"))
 
         if "items" not in response:

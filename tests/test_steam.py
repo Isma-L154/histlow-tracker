@@ -72,6 +72,23 @@ class TestFetchWishlist:
         client, _ = make_client({"response": {"items": []}})
         assert client.fetch_wishlist("76561198028121353") == []
 
+    @pytest.mark.parametrize(
+        "document",
+        [[], ["items"], "not-an-object", 42, None],
+        ids=["empty list", "list", "string", "number", "null"],
+    )
+    def test_a_payload_that_is_not_an_object_is_a_steam_error(self, document: Any) -> None:
+        """The decoded body is upstream data, so its shape is checked like any other.
+
+        Without the guard these raise `AttributeError`, which `__main__` does not
+        catch: the run would exit 1 - the code reserved for a bad configuration -
+        with a traceback blaming the operator for something Steam sent.
+        """
+        client, _ = make_client(document)
+
+        with pytest.raises(WishlistUnavailableError, match="Public"):
+            client.fetch_wishlist("76561198028121353")
+
     def test_malformed_entries_are_skipped_without_aborting(self) -> None:
         client, _ = make_client(
             {
