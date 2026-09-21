@@ -50,6 +50,22 @@ class TestIdentityCache:
     def test_missing_file_starts_empty(self, tmp_path: Path) -> None:
         assert not IdentityCache.load(tmp_path / "identities.json").knows(730, now=NOW)
 
+    def test_an_entries_value_that_is_not_an_object_degrades_to_empty(
+        self, tmp_path: Path
+    ) -> None:
+        """`or {}` rescued only a falsy value, so a non-empty list reached `.items()`.
+
+        The file comes back from the Actions cache between runs, so a well-formed
+        document of the wrong shape must cost one round of lookups, not the run.
+        """
+        path = tmp_path / "identities.json"
+        path.write_text(
+            json.dumps({"version": CACHE_VERSION, "entries": ["unexpected"]}),
+            encoding="utf-8",
+        )
+
+        assert not IdentityCache.load(path).knows(730, now=NOW)
+
     def test_remembers_across_a_save_and_reload(self, tmp_path: Path) -> None:
         path = tmp_path / "identities.json"
         cache = IdentityCache.load(path)

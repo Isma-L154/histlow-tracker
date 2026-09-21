@@ -209,6 +209,12 @@ def _read_config_file(path: Path) -> dict:
 def _parse_section(cls: type[_Section], document: Mapping[str, Any], name: str) -> _Section:
     """Builds one section, coercing each value to the type of its default."""
     section = document.get(name, {})
+    if not isinstance(section, Mapping):
+        # The top level is checked when the file is read; each section was not,
+        # so this escaped as an `AttributeError` rather than the curated list of
+        # problems every other invalid setting produces.
+        raise ConfigError(f"{name} must be a JSON object, got {type(section).__name__}")
+
     defaults = cls()
     values = {}
     for spec in fields(cls):

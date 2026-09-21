@@ -87,6 +87,26 @@ class TestPersistence:
         assert state.last_run_at is None
         assert state.should_alert(1, Money(999, "EUR"), threshold_minor=1)
 
+    def test_an_alerts_value_that_is_not_an_object_degrades_to_empty(
+        self, tmp_path: Path
+    ) -> None:
+        """`or {}` rescued only a falsy value, so a non-empty list reached `.items()`.
+
+        The file round-trips through the Actions cache between runs, which is why
+        `storage.read_json` treats it as untrusted: degrading costs one noisier
+        run, while raising would leave the tracker broken until someone looked.
+        """
+        path = tmp_path / "state.json"
+        path.write_text(
+            json.dumps({"version": STATE_VERSION, "alerts": ["unexpected"]}),
+            encoding="utf-8",
+        )
+
+        state = TrackerState.load(path)
+
+        assert state.last_run_at is None
+        assert state.should_alert(1, Money(999, "EUR"), threshold_minor=1)
+
     def test_malformed_records_are_dropped_individually(self, tmp_path: Path) -> None:
         path = tmp_path / "state.json"
         path.write_text(

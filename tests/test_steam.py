@@ -86,8 +86,45 @@ class TestFetchWishlist:
         """
         client, _ = make_client(document)
 
-        with pytest.raises(WishlistUnavailableError, match="Public"):
+        with pytest.raises(WishlistUnavailableError):
             client.fetch_wishlist("76561198028121353")
+
+    @pytest.mark.parametrize(
+        ("document", "reported"),
+        [([], "list"), ("not-an-object", "str"), (42, "int")],
+        ids=["list", "string", "number"],
+    )
+    def test_an_unexpected_shape_is_named_in_the_log(
+        self, document: Any, reported: str, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The privacy message is the wrong thing to act on when Steam sent a list.
+
+        It is reused because the failure is the same to the caller, so the log is
+        the only place the difference can be recorded - as the sibling guards in
+        this module and in `itad` already do for their own payloads.
+        """
+        client, _ = make_client(document)
+
+        with caplog.at_level("WARNING", logger="histlow.steam"), pytest.raises(
+            WishlistUnavailableError
+        ):
+            client.fetch_wishlist("76561198028121353")
+
+        assert "unexpected payload shape" in caplog.text
+        assert reported in caplog.text
+
+    def test_a_private_profile_is_not_reported_as_a_shape_problem(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """`{"response": {}}` is the documented private-profile answer, not an anomaly."""
+        client, _ = make_client({"response": {}})
+
+        with caplog.at_level("WARNING", logger="histlow.steam"), pytest.raises(
+            WishlistUnavailableError, match="Public"
+        ):
+            client.fetch_wishlist("76561198028121353")
+
+        assert "unexpected payload shape" not in caplog.text
 
     def test_malformed_entries_are_skipped_without_aborting(self) -> None:
         client, _ = make_client(
