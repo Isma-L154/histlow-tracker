@@ -19,11 +19,14 @@ updates:
       # help - the pool is already at its latest release, so there is nothing to
       # raise alongside it.
       #
-      # Remove this entry as soon as the pool accepts vitest 5. Nothing else
-      # will: it is the one rule here that has to be taken out by hand.
+      # Remove this entry as soon as the pool accepts vitest 5. It is the one
+      # rule here that has to be taken out by hand.
       #
-      # 4.x minor and patch updates still arrive, which is where a fix this
-      # project could actually apply would land.
+      # Security updates are unaffected, and that is the load-bearing detail:
+      # `update-types` is documented as filtering version updates only, so an
+      # advisory-driven bump still opens even if it is a major. Do not rewrite
+      # this as the apparently equivalent `versions: [">=5"]` - that form
+      # carries no such carve-out and could silence those alerts.
       - dependency-name: "vitest"
         update-types: ["version-update:semver-major"]
 
