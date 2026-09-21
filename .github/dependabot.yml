@@ -12,6 +12,20 @@ updates:
     groups:
       toolchain:
         patterns: ["*"]
+    ignore:
+      # `@cloudflare/vitest-pool-workers` peer-depends on `vitest@^4.1.0`, so a
+      # major bump cannot install at all: `npm ci` fails with ERESOLVE and the
+      # pull request is unmergeable the moment it is opened. Grouping does not
+      # help - the pool is already at its latest release, so there is nothing to
+      # raise alongside it.
+      #
+      # Remove this entry as soon as the pool accepts vitest 5. Nothing else
+      # will: it is the one rule here that has to be taken out by hand.
+      #
+      # 4.x minor and patch updates still arrive, which is where a fix this
+      # project could actually apply would land.
+      - dependency-name: "vitest"
+        update-types: ["version-update:semver-major"]
 
   # Actions are pinned by digest, so a moved tag cannot swap in unreviewed code
   # near the secrets. A digest never picks up a fix on its own; this is what does.
