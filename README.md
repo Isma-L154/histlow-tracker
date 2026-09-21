@@ -184,7 +184,7 @@ Layering is one-directional: `domain` depends on nothing, adapters depend on `do
 ### Running it locally
 
 ```bash
-python -m venv .venv && . .venv/bin/activate   # .venv\Scriptsctivate on Windows
+python -m venv .venv && . .venv/bin/activate   # .venv\Scripts\activate on Windows
 python -m pip install -e ".[dev]"              # the package, plus pytest and ruff
 
 python -m pytest                               # unit tests, no network
