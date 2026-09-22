@@ -1112,14 +1112,6 @@ main {
   margin-bottom: 0;
 }
 
-/* Marks text that is a placeholder, so it cannot be mistaken for finished. */
-.doc-todo {
-  padding: 0.8rem 1rem;
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-  color: var(--muted);
-}
-
 /* As wide as the prose, so the wordmark lines up with the text. */
 .doc-page .topbar,
 .doc-page .footer {

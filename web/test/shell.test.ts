@@ -41,3 +41,27 @@ describe("the brand is a link home", () => {
     expect(brand(html)).toMatch(/>\s*HowToAchieve\s*</);
   });
 });
+
+describe("the contact address is published", () => {
+  const MAILTO = 'href="mailto:info@cloudils.com"';
+
+  function footer(html: string): string {
+    const match = /<footer[^>]*>[\s\S]*?<\/footer>/.exec(html);
+    expect(match, "no footer").not.toBeNull();
+    return match![0];
+  }
+
+  it.each(PAGES)("%s links the address from its footer", (_name, html) => {
+    expect(footer(html)).toContain(MAILTO);
+  });
+
+  it.each([
+    ["privacy.html", privacy],
+    ["terms.html", terms],
+  ])("%s names the address under Contact, with no placeholder left", (_name, html) => {
+    const contact = /<h2>Contact<\/h2>[\s\S]*?<\/p>/.exec(html);
+    expect(contact, "no Contact section").not.toBeNull();
+    expect(contact![0]).toContain(MAILTO);
+    expect(html).not.toContain("doc-todo");
+  });
+});
