@@ -191,38 +191,72 @@ jobs:
               sort
           }
 
+          # A deploy swaps assets across the edge colo by colo, so for a few seconds
+          # after `wrangler deploy` returns, two requests a moment apart can be
+          # answered from either side of the swap. Until this retried, that surfaced
+          # as a `content-length` disagreement that was an artefact of the step's own
+          # timing: in run 35672516986, `/privacy` had the new body on GET and the old
+          # one on HEAD, while `/game/367520` had them the other way round in the same
+          # execution. A genuine defect is directional; both directions at once can
+          # only be a race. The very same commit passed on redeploy once the edge had
+          # settled, which is the whole diagnosis in one observation.
+          #
+          # Retrying is what tells the two apart, rather than a fixed wait guessed at
+          # once and wrong later. A disagreement from propagation stops happening; one
+          # from the Worker answering HEAD differently survives every attempt and still
+          # fails the deploy. Nothing is excused to get there - `content-length` stays
+          # compared, for the reason given above the `describe` helper.
+          attempts=6
+          pause=10
+
           status=0
           for path in /game/367520 /api/health /privacy; do
-            # Captured into variables rather than compared inside process substitutions.
-            # A process substitution's exit status is invisible to `set -e`, so when curl
-            # failed - DNS, TLS, a timeout, a 5xx with no headers - both sides came back
-            # empty, `diff` called them identical, and this printed "agrees" and exited
-            # 0. A deploy check that goes green against an unreachable site is worse than
-            # no check, because it is the one you would trust.
-            # `|| true` so a failed curl reaches the check below instead of killing
-            # the script silently: the exit code would be right and the log would not
-            # say which path could not be read, or that reachability was the problem.
-            got="$(describe "$site$path" || true)"
-            head="$(describe -I "$site$path" || true)"
-            if [ -z "$got" ] || [ -z "$head" ]; then
-              echo "::error::$path returned no headers at all - production is unreachable."
-              exit 1
-            fi
+            difference=""
+            for attempt in $(seq 1 "$attempts"); do
+              # Captured into variables rather than compared inside process substitutions.
+              # A process substitution's exit status is invisible to `set -e`, so when curl
+              # failed - DNS, TLS, a timeout, a 5xx with no headers - both sides came back
+              # empty, `diff` called them identical, and this printed "agrees" and exited
+              # 0. A deploy check that goes green against an unreachable site is worse than
+              # no check, because it is the one you would trust.
+              # `|| true` so a failed curl reaches the check below instead of killing
+              # the script silently: the exit code would be right and the log would not
+              # say which path could not be read, or that reachability was the problem.
+              got="$(describe "$site$path" || true)"
+              head="$(describe -I "$site$path" || true)"
+              if [ -z "$got" ] || [ -z "$head" ]; then
+                echo "::error::$path returned no headers at all - production is unreachable."
+                exit 1
+              fi
 
-            # And a 2xx, because agreement is not health. A site answering 502 or a
-            # Worker throwing 1101 on every request returns a status line and a
-            # content-type to both methods, so the comparison succeeds and this would
-            # have reported the whole site agreeing while none of it worked.
-            case "$got" in
-              *' 200'*) ;;
-              *) echo "::error::$path is not answering 200:"; printf '%s
-          ' "$got" | sed 's/^/    /'; exit 1 ;;
-            esac
+              # And a 2xx, because agreement is not health. A site answering 502 or a
+              # Worker throwing 1101 on every request returns a status line and a
+              # content-type to both methods, so the comparison succeeds and this would
+              # have reported the whole site agreeing while none of it worked.
+              #
+              # Not retried, unlike the comparison below. A deploy that leaves the site
+              # answering 502 is the failure this step exists to report, and waiting
+              # politely to see whether it recovers is how that gets mistaken for noise.
+              case "$got" in
+                *' 200'*) ;;
+                *) echo "::error::$path is not answering 200:"; printf '%s\n' "$got" | sed 's/^/    /'; exit 1 ;;
+              esac
 
-            if difference="$(diff <(printf '%s\n' "$got") <(printf '%s\n' "$head"))"; then
-              echo "$path agrees"
-            else
-              echo "::error::$path answers HEAD differently from GET:"
+              if difference="$(diff <(printf '%s\n' "$got") <(printf '%s\n' "$head"))"; then
+                echo "$path agrees (attempt $attempt)"
+                break
+              fi
+
+              if [ "$attempt" -lt "$attempts" ]; then
+                echo "$path disagrees on attempt $attempt of $attempts - the edge may still be settling, retrying in ${pause}s"
+                sleep "$pause"
+              fi
+            done
+
+            # Empty only if the last `diff` found nothing, which the `break` above
+            # guarantees is the attempt that succeeded.
+            if [ -n "$difference" ]; then
+              echo "::error::$path answers HEAD differently from GET, on all $attempts attempts:"
               printf '%s\n' "$difference" | sed 's/^/    /'
               status=1
             fi
