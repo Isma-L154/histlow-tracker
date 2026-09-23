@@ -10,6 +10,7 @@
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it, vi, afterEach } from "vitest";
 import worker from "../src/index.ts";
+import { APP_ID, GAME_NAME, expectBuilt, stubSteam } from "./steam-stub.ts";
 
 const BASE = "https://howtoachieve.cloudils.com";
 
@@ -86,8 +87,11 @@ describe("HEAD", () => {
     // fixed for - `curl -I` reporting something the GET does not.
     // `/game/<id>` included deliberately: it is the biggest body and the
     // route this whole feature exists for, and adding `content-length` to
-    // VOLATILE removed it from every other comparison.
-    for (const path of ["/api/health", "/privacy", "/game/367520"]) {
+    // VOLATILE removed it from every other comparison. Stubbed for the same
+    // reason it is included: unstubbed, the page is built from the real Steam
+    // API, and the pool's 5s limit expires before the client's own 8s one.
+    stubSteam();
+    for (const path of ["/api/health", "/privacy", `/game/${APP_ID}`]) {
       const get = await ask("GET", path);
       const head = await ask("HEAD", path);
 
@@ -120,43 +124,22 @@ describe("HEAD", () => {
   it("reports on the game, not on the shell", async () => {
     // The fault this exists for. A HEAD fell through to the asset runtime, so
     // it described the generic page while GET described Hollow Knight.
-    const steam = () =>
-      vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
-        const url = String(input instanceof Request ? input.url : input);
-        if (init?.method === "HEAD") return new Response(null, { status: 200 });
-        if (url.includes("GetSchemaForGame")) {
-          return Response.json({
-            game: { availableGameStats: { achievements: [{ name: "a", displayName: "An achievement" }] } },
-          });
-        }
-        if (url.includes("GetGlobalAchievementPercentages")) {
-          return Response.json({ achievementpercentages: { achievements: [{ name: "a", percent: 1.5 }] } });
-        }
-        if (url.includes("appdetails")) {
-          return Response.json({
-            367520: { success: true, data: { name: "Hollow Knight", header_image: `https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/367520/header.jpg` } },
-          });
-        }
-        throw new Error(`unexpected request: ${url}`);
-      });
-
-    steam();
+    stubSteam();
     const get = await ask("GET", "/game/367520");
     const body = await get.text();
     vi.restoreAllMocks();
 
-    const asked = steam();
+    const asked = stubSteam();
     const head = await ask("HEAD", "/game/367520");
 
-    expect(body, "the GET itself stopped describing the game").toContain("Hollow Knight");
+    // The title tag, not the bare name: the shipped shell offers Hollow Knight
+    // as an example button, so `toContain(GAME_NAME)` was satisfied by a page
+    // that never reached Steam at all, and this assertion could not fail.
+    expect(body, "the GET itself stopped describing the game").toContain(`<title>${GAME_NAME}`);
     expect(head.status).toBe(get.status);
     expect(comparable(head)).toEqual(comparable(get));
 
-    // The GET above warms `caches.default` for this id and language, so
-    // without this the HEAD may be answered from that entry and never build
-    // the page at all - leaving the stub's "unexpected request" net unarmed
-    // and the test narrower than it reads.
-    expect(asked.mock.calls.length, "the HEAD was served from cache, so it built nothing").toBeGreaterThan(0);
+    expectBuilt(asked, "the HEAD");
   });
 
   it("still refuses a method that changes things", async () => {
