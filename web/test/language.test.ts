@@ -8,13 +8,14 @@
  */
 
 import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import worker from "../src/index.ts";
 import shell from "../public/index.html?raw";
 import { localise, pageCacheKey } from "../src/language.ts";
 import { describeGame } from "../src/preview.ts";
 import { HEADER } from "../src/art.ts";
 import { DICTIONARY } from "../public/i18n.js";
+import { APP_ID, stubSteam } from "./steam-stub.ts";
 
 /** Every `data-i18n` key the shipped shell asks for. */
 const KEYS = [...new Set([...shell.matchAll(/data-i18n="([^"]+)"/g)].map((m) => m[1]!))];
@@ -113,6 +114,20 @@ describe("localise", () => {
  * be marked so that no cache outside it can pool the two.
  */
 describe("two languages, one URL", () => {
+  // Every case here that names a game page builds one, and an unstubbed build
+  // calls the real Steam API - which is how two of them came to time out in
+  // CI whenever Steam was slow, having passed on the branch minutes earlier.
+  // Stubbed for the whole block rather than per case: the shell-only cases
+  // make no outbound call, so the stub costs them nothing and the next case
+  // added here is covered without anyone remembering to.
+  // Discarding the spy is not tidiness: a mock is callable, and `beforeEach`
+  // reads a returned function as its teardown, so passing `stubSteam` directly
+  // makes vitest call the spy with no arguments after every case.
+  beforeEach(() => {
+    stubSteam();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
   async function fetchIn(language: string, path: string) {
     const ctx = createExecutionContext();
     const response = await worker.fetch(
@@ -126,7 +141,7 @@ describe("two languages, one URL", () => {
     return response;
   }
 
-  it.each(["/", "/game/367520"])("serves %s in the language each caller asked for", async (path) => {
+  it.each(["/", `/game/${APP_ID}`])("serves %s in the language each caller asked for", async (path) => {
     // Spanish first, so that if anything pools the two, English gets the
     // Spanish copy - which is the direction the bug actually takes.
     const spanish = await (await fetchIn("es-ES,es;q=0.9", path)).text();
@@ -148,7 +163,7 @@ describe("two languages, one URL", () => {
     expect(spanish).not.toBe(english);
   });
 
-  it.each(["/", "/game/367520"])("does not let a shared cache pool the two for %s", async (path) => {
+  it.each(["/", `/game/${APP_ID}`])("does not let a shared cache pool the two for %s", async (path) => {
     const response = await fetchIn("es-ES", path);
     const control = response.headers.get("Cache-Control") ?? "";
     expect(control, `${path} is publicly cacheable in one language`).toMatch(/private|no-store/);
