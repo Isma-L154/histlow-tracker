@@ -133,7 +133,10 @@ leaving **force** checked.
 
 ## 6. The iOS Shortcut
 
-In the **Shortcuts** app, create a new shortcut named **HistLow**.
+First, in the **Files** app, open **Browse → On My iPhone** and create a folder
+named **HistLow**. The shortcut keeps its memory there.
+
+Then, in the **Shortcuts** app, create a new shortcut named **HistLow**.
 
 Add these actions in order:
 
@@ -148,19 +151,20 @@ Add these actions in order:
 | 7 | **Set Variable** | name `body` |
 | 8 | **Get Dictionary Value** | get `Value` for key `alert_id` in `payload` |
 | 9 | **Set Variable** | name `newid` |
-| 10 | **Get File** | path `Shortcuts/histlow-seen.txt`, **Error If Not Found off** |
-| 11 | **Set Variable** | name `seen` |
-| 12 | **If** | `newid` **has any value** |
-| 13 | ↳ **If** | `seen` **is not** `newid` |
-| 14 | ↳ ↳ **Show Notification** | Title: `title`, Body: `body` |
-| 15 | ↳ ↳ **Text** | `newid` |
-| 16 | ↳ ↳ **Save File** | path `Shortcuts/histlow-seen.txt`, **Overwrite on**, *Ask Where To Save* off |
-| 17 | ↳ **End If** | — |
-| 18 | **End If** | — |
+| 10 | **Get File from Folder** | folder **On My iPhone → HistLow**, path `histlow-seen.txt`, **Error If Not Found off** |
+| 11 | **Get Text from Input** | input: the *File* from step 10 |
+| 12 | **Set Variable** | name `seen`, value: *Text* |
+| 13 | **If** | `newid` **has any value** |
+| 14 | ↳ **If** | `seen` **is not** `newid` |
+| 15 | ↳ ↳ **Show Notification** | Title: `title`, Body: `body` |
+| 16 | ↳ ↳ **Text** | `newid` |
+| 17 | ↳ ↳ **Save File** | folder **On My iPhone → HistLow**, subpath `histlow-seen.txt`, **Overwrite If File Exists on**, *Ask Where To Save* off |
+| 18 | ↳ **End If** | — |
+| 19 | **End If** | — |
 
 ### Why the shortcut remembers
 
-Steps 8-17 are what stop one deal producing one notification per poll. A deal
+Steps 8-18 are what stop one deal producing one notification per poll. A deal
 stays in the payload for `alerts.repeat_for_days` and the phone polls several
 times a day, so without a memory the same alert is announced every time it is
 read.
@@ -173,7 +177,17 @@ shortcut stores the last one it acted on and compares.
 **Turn "Error If Not Found" off** on step 10. The file does not exist until the
 first notification is shown, and the default is to abort the whole shortcut.
 
-The outer `If` on step 12 is not redundant. When there is nothing to report the
+**Keep the file on the iPhone, not in iCloud Drive.** With iCloud storage full,
+**Save File** fails, the memory never exists, and every poll looks new. The
+file holds twelve characters and never needs to sync. Steps 10 and 17 must name
+the same folder and file, or one writes where the other never reads. Both
+paths are relative to the chosen folder, so they are the bare file name.
+
+**Step 11 is not optional either.** Get File hands back a file, and **If**
+offers only *has any value* for a file, so step 14 could not compare it with
+`newid`. Converted to text, *is not* becomes available.
+
+The outer `If` on step 13 is not redundant. When there is nothing to report the
 payload carries no `alert_id`, so `newid` is empty — and an empty value differs
 from whatever was stored, which without that guard would show an empty
 notification every time a sale ended.
@@ -197,6 +211,11 @@ means the key is misspelled.
 Run it once with the play button. If the tracker found a new record, a
 notification appears naming the games and their prices. If not, nothing
 happens, which is the intended quiet path.
+
+To check the memory while a deal is published, run it a second time. The
+first run notifies and creates `histlow-seen.txt` in **On My iPhone →
+HistLow**; the second stays silent. A second notification means steps 10 and
+17 disagree on the folder or the name.
 
 Raw gist responses carry `Cache-Control: max-age=300`, so a change can take up
 to five minutes to become visible. That is far below the polling interval and
@@ -315,6 +334,6 @@ active month adds nothing to the history. It is the only workflow with
 | `The gist was not found` | wrong `GIST_ID`, or the token belongs to another account |
 | `GitHub rejected the gist token` | the token lacks the `gist` scope |
 | Notification never arrives | run the Shortcut manually; if that works, the automation is the problem |
-| Same game alerts repeatedly | expected only when the price drops further; otherwise check that the state cache is being restored |
+| Same game alerts repeatedly | expected only when the price drops further; otherwise check that `histlow-seen.txt` exists in **On My iPhone → HistLow**, then that the state cache is being restored |
 
 Add `--log-level DEBUG` for per-app detail. Secrets are masked at every level.
