@@ -11,7 +11,6 @@ Nothing needs to be installed on the phone: Shortcuts ships with iOS.
 ```bash
 git clone https://github.com/Isma-L154/histlow-tracker.git
 cd histlow-tracker
-git checkout dev
 
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
@@ -113,9 +112,9 @@ Open the gist's raw URL in a browser to confirm the document is there.
 
 ---
 
-## 5. Repository secrets
+## 5. Repository secrets and variables
 
-At **Settings → Secrets and variables → Actions**, add:
+At **Settings → Secrets and variables → Actions**, on the **Secrets** tab, add:
 
 | Secret | Value |
 | --- | --- |
@@ -123,8 +122,18 @@ At **Settings → Secrets and variables → Actions**, add:
 | `ITAD_API_KEY` | the ITAD key |
 | `GIST_ID` | from step 3 |
 | `GIST_TOKEN` | the `gist`-scoped token |
-| `STORE_COUNTRY` | optional, defaults to `CR` |
-| `COMPARISON_COUNTRY` | optional, defaults to `US` |
+
+On the **Variables** tab, optionally add:
+
+| Variable | Value |
+| --- | --- |
+| `STORE_COUNTRY` | defaults to `CR` |
+| `COMPARISON_COUNTRY` | defaults to `US` |
+
+These two must be variables. `tracker.yml` reads them from `vars`, so a secret
+with either name is ignored and the default applies without a warning. They
+are not secrets anyway: stored as one, GitHub would mask `CR` and `US`
+everywhere they appear in a log, inside words too.
 
 Then run the workflow once by hand: **Actions → tracker → Run workflow**,
 leaving **force** checked.
@@ -249,8 +258,8 @@ so several are needed for several checks.
 
 Suggested: `09:00`, `14:00`, `20:00`.
 
-More often adds nothing. The workflow itself only refreshes the payload once a
-day.
+More often adds nothing. The workflow refreshes the payload less often than
+that; see [Cadence](#cadence).
 
 ---
 
