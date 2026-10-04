@@ -86,3 +86,48 @@ describe("every custom property it reads is defined", () => {
     expect(defined.size).toBeGreaterThan(5);
   });
 });
+
+/** Every rule as selector and body. A rule nested in an at-rule comes out on its own. */
+function rules(): { selector: string; body: string }[] {
+  return [...declarations().matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((m) => ({
+    selector: m[1]!.trim(),
+    body: m[2]!,
+  }));
+}
+
+/** The last layer of a rule's `background`, which is the one everything else sits on. */
+function baseLayer(body: string): string | undefined {
+  const value = /background:([^;]+)/.exec(body)?.[1];
+  if (value === undefined) return undefined;
+  // Layers part at top-level commas only; `color-mix()` has commas of its own.
+  let depth = 0;
+  let start = 0;
+  for (const [i, char] of [...value].entries()) {
+    if (char === "(") depth++;
+    else if (char === ")") depth--;
+    else if (char === "," && depth === 0) start = i + 1;
+  }
+  return value.slice(start).trim();
+}
+
+describe("the sticky bars show no edge against the page", () => {
+  // The page sat on a glow fixed to the viewport, and both sticky bars painted
+  // an 82% tint of the page colour over it, across the content column only. A
+  // tint over a background that varies shows its outline: at rest the top bar
+  // read as a darker box against the glow beside it, and scrolled, the cards
+  // beneath bled through and the bars turned lighter than the gutters. Painting
+  // the glow into the bars with `background-attachment: fixed` would not do:
+  // iOS ignores it. So these assert the arrangement that leaves nothing to differ.
+
+  it("keeps the page itself flat", () => {
+    const body = rules().find((r) => r.selector === "body");
+    expect(body && /background:([^;]+)/.exec(body.body)?.[1]!.trim()).toBe("var(--bg)");
+  });
+
+  it("paints every sticky bar on the page colour", () => {
+    const sticky = rules().filter((r) => /position:\s*sticky/.test(r.body));
+    // Guards the guard: a selector regex that drifted would find nothing to check.
+    expect(sticky.map((r) => r.selector)).toEqual(expect.arrayContaining([".topbar", ".toolbar"]));
+    expect(sticky.filter((r) => baseLayer(r.body) !== "var(--bg)").map((r) => r.selector)).toEqual([]);
+  });
+});
