@@ -398,7 +398,7 @@ Every change starts as an issue and is closed by a pull request carrying `Closes
 
 Write the failing test first, and check that it fails when you break the thing it guards
 — a green test that never reaches the code path proves nothing. The rest, with the
-measurements behind each decision, is in [`CLAUDE.md`](CLAUDE.md) and
+measurements behind each decision, is in [`AGENTS.md`](AGENTS.md) and
 [`docs/superpowers/specs/`](docs/superpowers/specs/).
 
 ## Licence
