@@ -25,6 +25,7 @@
   --radius-sm: 8px;
   --shadow: 0 10px 30px rgb(0 0 0 / 50%);
   --wide: 62rem;
+  --gutter: 1.25rem;
 }
 
 * {
@@ -45,11 +46,8 @@ body {
   flex-direction: column;
   min-height: 100vh;
   margin: 0;
-  padding: 0 1.25rem 2rem;
-  /* Fixed, so a short page shows no seam where the body ends. */
-  background:
-    radial-gradient(90rem 40rem at 50% -18rem, var(--bg-glow), transparent 70%) fixed,
-    var(--bg);
+  padding: 0 var(--gutter) 2rem;
+  background: var(--bg);
   color: var(--text);
   font:
     16px/1.6 system-ui,
@@ -92,6 +90,8 @@ h3 {
 /* -- top bar ------------------------------------------------------------- */
 
 .topbar {
+  --column: var(--wide);
+
   /* Sticky, so search stays in reach down a long list. */
   position: sticky;
   z-index: 20;
@@ -100,13 +100,16 @@ h3 {
   flex-wrap: wrap;
   gap: 0.85rem 1.25rem;
   align-items: center;
-  width: 100%;
-  max-width: var(--wide);
-  margin: 0 auto;
-  padding: 1rem 0 1.1rem;
-  /* Translucent: a solid colour would band against the fixed gradient. */
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(10px);
+  /*
+   * Full-bleed and opaque, with the glow spent before the bottom edge: a bar
+   * narrower than the page, or one that lets it through, shows its outline
+   * wherever the two differ. Only the contents keep to the column.
+   */
+  margin-inline: calc(-1 * var(--gutter));
+  padding: 1rem calc(var(--gutter) + max(0px, (100% - var(--column)) / 2)) 1.1rem;
+  background:
+    radial-gradient(50rem 100% at 50% 0, color-mix(in srgb, var(--bg-glow) 36%, transparent), transparent),
+    var(--bg);
 }
 
 .brand {
@@ -696,8 +699,7 @@ main {
   z-index: 15;
   top: var(--topbar-height, 4.5rem);
   padding: 0.6rem 0;
-  background: color-mix(in srgb, var(--bg) 82%, transparent);
-  backdrop-filter: blur(10px);
+  background: var(--bg);
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
@@ -939,7 +941,7 @@ main {
 
 @media (width <= 40rem) {
   .topbar {
-    padding: 1.1rem 0 1.25rem;
+    padding-block: 1.1rem 1.25rem;
   }
 
   .brand-text span {
@@ -965,8 +967,8 @@ main {
   }
 
   .profile-body {
-    right: 0;
-    left: 0;
+    right: var(--gutter);
+    left: var(--gutter);
     width: auto;
   }
 
@@ -1113,12 +1115,13 @@ main {
 }
 
 /* As wide as the prose, so the wordmark lines up with the text. */
-.doc-page .topbar,
 .doc-page .footer {
   max-width: 44rem;
 }
 
 .doc-page .topbar {
+  --column: 44rem;
+
   padding-bottom: 2rem;
 }
 
