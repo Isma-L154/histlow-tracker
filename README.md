@@ -326,10 +326,9 @@ cp .env.example .env                  # then fill it in
 python -m histlow --dry-run --force   # the full pipeline, publishing nothing
 ```
 
-On Windows, set `PYTHONUTF8=1` first. [`docs/SETUP.md`](docs/SETUP.md) walks through
-the whole thing end to end, including the iOS Shortcut and
-[`scripts/bootstrap_gist.py`](scripts/bootstrap_gist.py), which creates the secret gist
-that `GIST_ID` refers to.
+[`docs/SETUP.md`](docs/SETUP.md) walks through the whole thing end to end, including
+the iOS Shortcut and [`scripts/bootstrap_gist.py`](scripts/bootstrap_gist.py), which
+creates the secret gist that `GIST_ID` refers to.
 
 Settings live in three places, and which is which matters.
 
