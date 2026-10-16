@@ -109,7 +109,7 @@ async function answer(
   }
 
   if (!url.pathname.startsWith("/api/")) {
-    // A static file, or the SPA fallback. Rebuilt as a GET because the asset
+    // A static file, or the not-found page. Rebuilt as a GET because the asset
     // runtime answers a HEAD with no body to translate or measure, and with
     // `redirect: "manual"` because following its 307s to canonical paths would
     // serve one page under three URLs.

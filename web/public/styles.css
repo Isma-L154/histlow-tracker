@@ -1114,6 +1114,25 @@ main {
   margin-bottom: 0;
 }
 
+/* The way out of the not-found page, styled as the primary button. */
+.doc-action {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 44px;
+  margin-top: 1rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
+  color: #06131d;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.doc-action:hover {
+  filter: brightness(1.08);
+}
+
 /* As wide as the prose, so the wordmark lines up with the text. */
 .doc-page .footer {
   max-width: 44rem;

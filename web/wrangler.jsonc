@@ -29,7 +29,9 @@
     // file - while static files never do. A catch-all with extensions negated,
     // because a list of routes silently missed exactly those fall-through paths.
     "run_worker_first": ["/*", "!/*.css", "!/*.js", "!/*.png", "!/*.svg", "!/*.ico", "!/*.txt", "!/*.xml"],
-    "not_found_handling": "single-page-application"
+    // The client routes only `/` and `/game/<id>`, both of which exist, so a
+    // single-page fallback would only answer a mistyped address with a 200.
+    "not_found_handling": "404-page"
   },
 
   // Per caller. The cache covers repeated questions but not first ones, and a

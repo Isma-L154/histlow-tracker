@@ -44,7 +44,7 @@ export const ENTITY = new Set([
  */
 const REQUIRED = ["content-security-policy", "x-content-type-options"];
 
-/** The file the policy is read from: always present, since the SPA fallback is built on it. */
+/** The file the policy is read from: always present, since the home and game pages are built on it. */
 const REFERENCE = "/index.html";
 
 /** The site-wide headers in a response, or null when it carries no policy. */
