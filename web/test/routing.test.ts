@@ -24,7 +24,7 @@ function runWorkerFirst(): string[] {
 
 describe("run_worker_first", () => {
   it("routes every document to the Worker, including paths that match no file", () => {
-    // The SPA fallback serves unmatched paths without Worker code, which is
+    // The not-found fallback serves unmatched paths without Worker code, which is
     // exactly where the redirect from the former address is most needed.
     expect(runWorkerFirst()).toContain("/*");
   });

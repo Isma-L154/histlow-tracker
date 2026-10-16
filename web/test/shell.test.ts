@@ -10,11 +10,13 @@ import { describe, expect, it } from "vitest";
 import index from "../public/index.html?raw";
 import privacy from "../public/privacy.html?raw";
 import terms from "../public/terms.html?raw";
+import notFound from "../public/404.html?raw";
 
 const PAGES: ReadonlyArray<[name: string, html: string]> = [
   ["index.html", index],
   ["privacy.html", privacy],
   ["terms.html", terms],
+  ["404.html", notFound],
 ];
 
 /**
