@@ -119,7 +119,7 @@ all-time Steam low — a new record, not a return to an old one.
 - **Prices in your currency**, decided in a region IsThereAnyDeal tracks.
 - **One notification per deal, no app to install** — an iOS Shortcut polls a secret gist and remembers
   the last `alert_id` it showed.
-- **Runs itself** twice a day on GitHub Actions, standard library only.
+- **Runs itself** — a GitHub Actions cron that fires twice a day, standard library only.
 
 ## How it works
 
