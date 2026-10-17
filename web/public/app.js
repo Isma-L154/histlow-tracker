@@ -678,6 +678,11 @@ el.steamIdClear.addEventListener("click", () => {
   if (state.game) loadGame(state.game.appId);
 });
 
+// A <details> closes only from its own summary; a click anywhere else should close it too.
+document.addEventListener("click", (event) => {
+  if (!el.profile.contains(event.target)) el.profile.open = false;
+});
+
 function readStoredSteamId() {
   try {
     const value = localStorage.getItem(STORAGE_KEY);
