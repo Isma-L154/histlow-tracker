@@ -112,27 +112,49 @@
       <p class="status" id="status" role="status" aria-live="polite" hidden></p>
 
       <section class="game" id="game" hidden>
-        <div class="game-head">
-          <img class="game-cover" id="game-cover" alt="" loading="lazy" referrerpolicy="no-referrer" hidden />
-          <div class="game-meta">
-            <h2 id="game-name"></h2>
-            <p class="progress-line" id="progress-line" hidden>
-              <strong id="progress-text"></strong>
-            </p>
-            <div class="progress-bar" id="progress-bar" hidden>
-              <div class="progress-fill" id="progress-fill"></div>
+        <div class="banner window" id="banner">
+          <img class="banner-art" id="banner-art" alt="" referrerpolicy="no-referrer" />
+          <!-- The logo carries the name visually; the heading carries it for everyone else. -->
+          <img class="banner-logo" id="banner-logo" alt="" referrerpolicy="no-referrer" hidden />
+          <h2 class="banner-title" id="game-name"></h2>
+        </div>
+
+        <div class="game-panels">
+          <div class="window game-panel">
+            <h3 class="pixel-label" data-i18n="game.panel">Game</h3>
+            <dl class="stats">
+              <div class="stat">
+                <dt class="pixel-label" data-i18n="game.achievements">Achievements</dt>
+                <dd id="game-total"></dd>
+              </div>
+              <div class="stat" id="difficulty" hidden>
+                <dt class="pixel-label" data-i18n="difficulty.label">Completion difficulty</dt>
+                <dd>
+                  <span class="skulls" id="difficulty-skulls" aria-hidden="true"></span>
+                  <span class="visually-hidden" id="difficulty-score"></span>
+                  <span class="difficulty-tier" id="difficulty-tier"></span>
+                </dd>
+              </div>
+              <div class="stat" id="completion-time" hidden>
+                <dt class="pixel-label" data-i18n="time.label">Time to 100%</dt>
+                <dd id="completion-hours"></dd>
+              </div>
+            </dl>
+            <p class="links" id="game-links"></p>
+          </div>
+
+          <div class="window game-panel">
+            <h3 class="pixel-label" data-i18n="progress.title">Your progress</h3>
+            <div id="progress-known" hidden>
+              <p class="progress-count"><strong id="progress-text"></strong> <span id="progress-percent"></span></p>
+              <div class="cells progress-cells" id="progress-cells" aria-hidden="true"></div>
+              <p class="progress-rarest" id="progress-rarest" hidden></p>
             </div>
             <p class="notice" id="progress-notice" hidden></p>
-            <p class="difficulty" id="difficulty" hidden>
-              <span class="difficulty-label" data-i18n="difficulty.label">Completion difficulty</span>
-              <strong class="difficulty-score" id="difficulty-score"></strong>
-              <span class="difficulty-tier" id="difficulty-tier"></span>
-            </p>
-            <p class="difficulty" id="completion-time" hidden>
-              <span class="difficulty-label" data-i18n="time.label">Time to 100%</span>
-              <strong class="difficulty-score" id="completion-hours"></strong>
-            </p>
-            <p class="links" id="game-links"></p>
+            <div class="progress-invite" id="progress-invite" hidden>
+              <p class="pixel-label" data-i18n="progress.invite.title">Which ones do you have?</p>
+              <p data-i18n="progress.invite.body">Save your Steam profile and this page marks the achievements you already hold, and shows your progress.</p>
+            </div>
           </div>
         </div>
 

@@ -573,104 +573,183 @@ html {
 
 /* -- game header --------------------------------------------------------- */
 
-.game-head {
-  display: flex;
-  flex-wrap: wrap;
+/* Steam's large art, with the game's own logo over its left side. */
+.banner {
+  position: relative;
+  height: clamp(180px, 26vw, 320px);
+  margin: 1rem 0 1.5rem;
+  overflow: hidden;
+}
+
+.banner-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 30%;
+}
+
+/* A scrim behind the logo or the name, so either reads on any art. */
+.banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgb(0 0 0 / 80%) 0%, rgb(0 0 0 / 45%) 45%, transparent 75%);
+}
+
+.banner-logo {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  left: 1.5rem;
+  width: min(22rem, 45%);
+  transform: translateY(-50%);
+  filter: drop-shadow(0 4px 0 #000);
+}
+
+.banner-title {
+  position: absolute;
+  z-index: 1;
+  bottom: 1.25rem;
+  left: 1.5rem;
+  max-width: 60%;
+  margin: 0;
+  color: var(--bright);
+  font-size: clamp(1rem, 3.5vw, 1.8rem);
+  text-shadow: 3px 3px 0 #000;
+}
+
+/* With a logo showing, the heading stays for screen readers only. */
+.banner.has-logo .banner-title {
+  bottom: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.game-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
   gap: 1.5rem;
-  align-items: flex-start;
   margin-bottom: 1.75rem;
 }
 
-.game-cover {
-  width: 280px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
+.game-panel {
+  padding: 1rem 1.25rem;
 }
 
-.game-meta {
-  flex: 1 1 18rem;
-}
-
-.game-meta h2 {
-  margin: 0 0 0.6rem;
-  font-size: clamp(1.4rem, 3.5vw, 1.85rem);
-}
-
-.progress-line {
-  margin: 0 0 0.5rem;
+.game-panel h3 {
+  margin: 0 0 0.9rem;
   color: var(--muted);
-  font-size: 0.95rem;
 }
 
-.progress-line strong {
+.stats {
+  margin: 0;
+}
+
+.stat {
+  display: grid;
+  grid-template-columns: 11rem 1fr;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.3rem 0;
+}
+
+.stat dt {
+  color: var(--muted);
+}
+
+/* Too narrow for a label column beside ten skulls: the label goes above. */
+@media (width <= 40rem) {
+  .stat {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+    padding: 0.5rem 0;
+  }
+}
+
+.stat dd {
+  margin: 0;
+}
+
+.progress-count {
+  margin: 0 0 0.5rem;
+}
+
+.progress-count strong {
+  color: var(--bright);
+  font-family: var(--pixel);
+  font-size: 1.1rem;
+  font-weight: 400;
+}
+
+.progress-count span {
+  margin-left: 0.4rem;
+  color: var(--muted);
+}
+
+.progress-cells {
+  gap: 2px;
+  color: var(--edge);
+}
+
+.progress-cells i {
+  height: 14px;
+  border-width: 1px;
+}
+
+.progress-rarest {
+  margin: 0.75rem 0 0;
   color: var(--text);
 }
 
-.progress-bar {
-  height: 9px;
-  margin-bottom: 1.1rem;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--panel-hover);
-}
-
-.progress-fill {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--accent), var(--unlocked));
-  transition: width 0.35s ease;
+.progress-invite p {
+  margin: 0 0 0.5rem;
 }
 
 .notice {
-  margin: 0 0 1rem;
-  padding: 0.6rem 0.8rem;
-  border-left: 3px solid var(--rarity-legendary);
-  border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--rarity-legendary) 9%, transparent);
+  margin: 0;
   color: var(--muted);
-  font-size: 0.86rem;
 }
 
 /* -- completion difficulty ----------------------------------------------- */
 
 .difficulty {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 0 0 0.5rem;
-  font-size: 0.86rem;
-  color: var(--muted);
   /* The tooltip explains where the score comes from. */
   cursor: help;
 }
 
-.difficulty-score {
-  padding: 0.1rem 0.45rem;
-  border-radius: var(--radius-sm);
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: 0.95rem;
-  font-variant-numeric: tabular-nums;
+.skulls {
+  display: inline-flex;
+  gap: 3px;
+  margin-right: 0.5rem;
+  vertical-align: middle;
 }
 
-/* Tier colours borrow the rarity ramp: it is the same measure, read per game. */
-.difficulty-tier {
-  font-weight: 600;
+.skulls svg {
+  width: 16px;
+  height: 16px;
+  fill: var(--bright);
 }
 
+.skulls svg.is-off {
+  opacity: 0.25;
+}
+
+/* Tier colours borrow the loot ramp: it is the same measure, read per game. */
 .difficulty[data-tier="veryHard"] .difficulty-tier,
 .difficulty[data-tier="brutal"] .difficulty-tier {
-  color: var(--rarity-legendary);
+  color: var(--tier-legendary);
 }
 
 .difficulty[data-tier="demanding"] .difficulty-tier {
-  color: var(--rarity-rare);
+  color: var(--tier-epic);
 }
 
 .difficulty[data-tier="someWork"] .difficulty-tier,
 .difficulty[data-tier="straightforward"] .difficulty-tier {
-  color: var(--rarity-uncommon);
+  color: var(--tier-rare);
 }
 
 /* -- language toggle ----------------------------------------------------- */
@@ -709,42 +788,33 @@ html {
 .links {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin: 0;
+  gap: 0.5rem 1.5rem;
+  margin: 1rem 0 0;
 }
 
+/* Menu items: a cursor appears on the one under the pointer or the keyboard. */
 .steam-link {
   display: inline-flex;
-  gap: 0.45rem;
+  gap: 0.5rem;
   align-items: center;
-  padding: 0.45rem 0.85rem;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--panel);
-  color: var(--text);
-  font-size: 0.86rem;
+  min-height: 44px;
+  color: var(--bright);
+  font-family: var(--pixel);
+  font-size: 0.6rem;
   text-decoration: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
+  text-transform: uppercase;
 }
 
-.steam-link:hover {
-  border-color: var(--accent);
-  background: var(--panel-hover);
+.steam-link::before {
+  content: "";
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 9px solid transparent;
 }
 
-.steam-link svg {
-  width: 14px;
-  height: 14px;
-  flex: none;
-  fill: none;
-  stroke: var(--muted);
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.steam-link:hover svg {
-  stroke: var(--accent);
+.steam-link:hover::before,
+.steam-link:focus-visible::before {
+  border-left-color: var(--bright);
 }
 
 /* -- toolbar ------------------------------------------------------------- */
@@ -1055,10 +1125,6 @@ html {
 
   .achievement-detail {
     padding-left: calc(32px + 1.2rem);
-  }
-
-  .game-cover {
-    width: 100%;
   }
 }
 

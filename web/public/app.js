@@ -10,6 +10,7 @@ import { DICTIONARY, pickLanguage, t, translate } from "./i18n.js";
 import { completionDifficulty } from "./difficulty.js";
 import { mountWorld } from "./world/engine.js";
 import { lootTier } from "./tiers.js";
+import { bannerSources, rarestHeld } from "./art.js";
 
 const SITE_TITLE = "HowToAchieve";
 const STORAGE_KEY = "histlow.steamid";
@@ -36,14 +37,20 @@ const el = {
   worldDots: document.getElementById("world-dots"),
   status: document.getElementById("status"),
   game: document.getElementById("game"),
-  cover: document.getElementById("game-cover"),
+  banner: document.getElementById("banner"),
+  bannerArt: document.getElementById("banner-art"),
+  bannerLogo: document.getElementById("banner-logo"),
   name: document.getElementById("game-name"),
-  progressLine: document.getElementById("progress-line"),
+  total: document.getElementById("game-total"),
+  progressKnown: document.getElementById("progress-known"),
   progressText: document.getElementById("progress-text"),
-  progressBar: document.getElementById("progress-bar"),
-  progressFill: document.getElementById("progress-fill"),
+  progressPercent: document.getElementById("progress-percent"),
+  progressCells: document.getElementById("progress-cells"),
+  progressRarest: document.getElementById("progress-rarest"),
   progressNotice: document.getElementById("progress-notice"),
+  progressInvite: document.getElementById("progress-invite"),
   difficulty: document.getElementById("difficulty"),
+  difficultySkulls: document.getElementById("difficulty-skulls"),
   completionTime: document.getElementById("completion-time"),
   completionHours: document.getElementById("completion-hours"),
   difficultyScore: document.getElementById("difficulty-score"),
@@ -206,17 +213,9 @@ async function loadGame(appId) {
 function renderGame(game) {
   el.name.textContent = game.name;
   document.title = `${game.name} · ${SITE_TITLE}`;
+  el.total.textContent = String(game.total);
 
-  const cover = artwork(game.headerImage);
-  if (cover) {
-    el.cover.src = cover;
-    el.cover.alt = say("game.cover", { name: game.name });
-    el.cover.hidden = false;
-  } else {
-    el.cover.hidden = true;
-    el.cover.removeAttribute("src");
-  }
-
+  renderBanner(game);
   renderProgress(game);
   renderDifficulty(game);
   renderLinks(game);
@@ -235,17 +234,43 @@ function renderGame(game) {
   el.game.hidden = false;
 }
 
+/**
+ * Steam's large art behind the game's own transparent logo. Not every game has
+ * either: the art falls back to the store header, and without a logo the
+ * heading shows the name instead.
+ */
+function renderBanner(game) {
+  const { hero, logo } = bannerSources(game.appId, artwork(game.headerImage));
+  const queue = [...hero];
+
+  el.bannerArt.hidden = false;
+  el.bannerArt.onerror = () => {
+    const next = queue.shift();
+    if (next) el.bannerArt.src = next;
+    else el.bannerArt.hidden = true;
+  };
+  el.bannerArt.src = queue.shift();
+
+  el.banner.classList.remove("has-logo");
+  el.bannerLogo.hidden = true;
+  el.bannerLogo.onload = () => {
+    el.bannerLogo.hidden = false;
+    el.banner.classList.add("has-logo");
+  };
+  el.bannerLogo.onerror = () => el.bannerLogo.removeAttribute("src");
+  el.bannerLogo.src = logo;
+}
+
+/** The player's progress, a notice when it could not be read, or an invitation to save a profile. */
 function renderProgress(game) {
   const known = game.unlockedCount !== null;
-  el.progressLine.hidden = !known;
-  el.progressBar.hidden = !known;
+  el.progressKnown.hidden = !known;
 
   // Asked for progress and got none: say so, or an unowned game looks like a broken SteamID.
   const unexplained = state.steamId !== null && !known;
   el.progressNotice.hidden = !unexplained;
-  el.progressNotice.textContent = unexplained
-    ? say("game.noProgress")
-    : "";
+  el.progressNotice.textContent = unexplained ? say("game.noProgress") : "";
+  el.progressInvite.hidden = known || unexplained;
 
   if (!known) {
     el.visibleCount.textContent = say("game.count", { total: game.total });
@@ -253,8 +278,39 @@ function renderProgress(game) {
   }
 
   const percent = game.total > 0 ? Math.round((game.unlockedCount / game.total) * 100) : 0;
-  el.progressText.textContent = `${say("game.progress", { unlocked: game.unlockedCount, total: game.total })} · ${percent}%`;
-  el.progressFill.style.width = `${percent}%`;
+  el.progressText.textContent = `${game.unlockedCount} / ${game.total}`;
+  el.progressPercent.textContent = say("progress.percent", { percent });
+
+  // One cell per achievement, up to a hundred, so a bar stays readable on a long list.
+  const cells = Math.min(Math.max(game.total, 1), 100);
+  const filled = game.total > 0 ? Math.round((game.unlockedCount / game.total) * cells) : 0;
+  el.progressCells.style.setProperty("--cells", String(cells));
+  el.progressCells.replaceChildren(
+    ...Array.from({ length: cells }, (_, i) => {
+      const cell = document.createElement("i");
+      if (i < filled) cell.className = "is-on";
+      return cell;
+    }),
+  );
+
+  const best = rarestHeld(game.achievements);
+  el.progressRarest.hidden = best === null;
+  if (best) {
+    el.progressRarest.textContent = say("progress.rarest", { name: best.name, percent: best.globalPercent.toFixed(1) });
+  }
+}
+
+/** A pixel skull, inline because the CSP allows no image file the page did not ship. */
+function skull(lit) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 7 7");
+  svg.setAttribute("shape-rendering", "crispEdges");
+  if (!lit) svg.classList.add("is-off");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  // Crown, cheeks and jaw, with the eyes and teeth left as holes.
+  path.setAttribute("d", "M1 0h5v1H1zM0 1h7v1H0zM0 2h1v1H0zM3 2h1v1H3zM6 2h1v1H6zM0 3h7v1H0zM1 4h5v1H1zM1 5h1v1H1zM3 5h1v1H3zM5 5h1v1H5z");
+  svg.append(path);
+  return svg;
 }
 
 /** How hard the game is to finish, or nothing when there is too little to read. */
@@ -264,6 +320,7 @@ function renderDifficulty(game) {
   if (!difficulty) return;
 
   el.difficulty.dataset.tier = difficulty.tier;
+  el.difficultySkulls.replaceChildren(...Array.from({ length: 10 }, (_, i) => skull(i < difficulty.score)));
   el.difficultyScore.textContent = say("difficulty.score", { score: difficulty.score });
   el.difficultyTier.textContent = say(`difficulty.${difficulty.tier}`);
   // A rarity reading, not a community verdict, and the tooltip says so.
@@ -301,21 +358,12 @@ async function renderCompletionTime(appId) {
 function renderLinks(game) {
   el.links.replaceChildren();
   const targets = [
-    [
-      say("game.guides"),
-      `${GUIDES_BASE}/${game.appId}/guides/?browsefilter=toprated&requiredtags%5B%5D=Achievements&l=english`,
-      "M4 5h16M4 12h16M4 19h10",
-    ],
-    [
-      say("game.store"),
-      `https://store.steampowered.com/app/${game.appId}/`,
-      "M5 7h14l-1 12H6zM9 7V5a3 3 0 0 1 6 0v2",
-    ],
+    [say("game.guides"), `${GUIDES_BASE}/${game.appId}/guides/?browsefilter=toprated&requiredtags%5B%5D=Achievements&l=english`],
+    [say("game.store"), `https://store.steampowered.com/app/${game.appId}/`],
   ];
-  for (const [label, href, path] of targets) {
+  for (const [label, href] of targets) {
     const anchor = link(label, href);
     anchor.className = "steam-link";
-    anchor.prepend(icon(path));
     el.links.append(anchor);
   }
 }
