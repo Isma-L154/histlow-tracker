@@ -1,29 +1,60 @@
 /* Dark only: the page is a companion to Steam, which is dark. */
 
+/* Self-hosted, Latin subset: the CSP allows fonts from this origin only. */
+@font-face {
+  font-family: "Press Start 2P";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/fonts/press-start-2p.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Pixelify Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("/fonts/pixelify-sans.woff2") format("woff2");
+}
+
+/*
+ * Neutral on purpose: black, off-white edges and white text. Colour comes from
+ * the game's own art and from the rarity tiers, nowhere else.
+ */
 :root {
-  --bg: #0b0f14;
-  --bg-glow: #10202e;
-  --panel: #151b23;
-  --panel-2: #1b232d;
-  --panel-hover: #222c38;
-  --border: #26313d;
-  --border-strong: #34424f;
-  --text: #e9eff5;
-  --muted: #8a97a6;
-  --accent: #66c0f4;
-  --accent-deep: #2a7fb8;
-  --unlocked: #7bc95a;
+  --bg: #000;
+  --bg-glow: #000;
+  --panel: #000;
+  --panel-2: #0d0d0d;
+  --panel-hover: #1a1a1a;
+  --border: #3a3a3a;
+  --border-strong: #f2ece2;
+  --edge: #f2ece2;
+  --text: #f2ece2;
+  --bright: #fff;
+  --muted: #bdbdbd;
+  --accent: #fff;
+  --accent-deep: #bdbdbd;
+  --unlocked: #5fd06a;
   --danger: #ff8a80;
 
-  /* Rarity ramp: the rarer the achievement, the warmer the colour. */
-  --rarity-legendary: #f3b53f;
-  --rarity-rare: #b478f7;
-  --rarity-uncommon: #66c0f4;
-  --rarity-common: #8a97a6;
+  /* Loot tiers, by the share of players who hold an achievement. */
+  --tier-legendary: #f2b33d;
+  --tier-epic: #b06ef0;
+  --tier-rare: #4fa3f7;
+  --tier-uncommon: #5fd06a;
+  --tier-common: #a8a8a8;
+  --rarity-legendary: var(--tier-legendary);
+  --rarity-rare: var(--tier-epic);
+  --rarity-uncommon: var(--tier-rare);
+  --rarity-common: var(--tier-common);
 
-  --radius: 12px;
-  --radius-sm: 8px;
-  --shadow: 0 10px 30px rgb(0 0 0 / 50%);
+  --pixel: "Press Start 2P", ui-monospace, monospace;
+  --read: "Pixelify Sans", system-ui, sans-serif;
+
+  --radius: 6px;
+  --radius-sm: 4px;
+  --shadow: 0 0 0 4px var(--bg);
   --wide: 62rem;
   --gutter: 1.25rem;
 }
@@ -49,12 +80,10 @@ body {
   padding: 0 var(--gutter) 2rem;
   background: var(--bg);
   color: var(--text);
-  font:
-    16px/1.6 system-ui,
-    -apple-system,
-    "Segoe UI",
-    sans-serif;
-  -webkit-font-smoothing: antialiased;
+  font: 18px/1.5 var(--read);
+  /* Pixelify's `fi` ligature reads as a stray glyph. */
+  font-variant-ligatures: none;
+  -webkit-font-smoothing: none;
 }
 
 img {
@@ -69,8 +98,66 @@ a {
 h1,
 h2,
 h3 {
-  letter-spacing: -0.02em;
-  line-height: 1.25;
+  font-family: var(--pixel);
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+/* -- pieces -------------------------------------------------------------- */
+
+/* A menu window: off-white edge, black ring outside it. */
+.window {
+  border: 4px solid var(--edge);
+  border-radius: var(--radius);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+/* The menu cursor: a triangle that nudges on the active item. */
+.cursor {
+  display: inline-block;
+  flex: none;
+  width: 0;
+  height: 0;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 11px solid var(--bright);
+}
+
+.cursor.is-active {
+  animation: cursor-nudge 0.8s steps(2) infinite;
+}
+
+@keyframes cursor-nudge {
+  50% {
+    transform: translateX(4px);
+  }
+}
+
+/* A segmented bar; `--cells` sets how many segments. */
+.cells {
+  display: grid;
+  grid-template-columns: repeat(var(--cells, 20), 1fr);
+  gap: 3px;
+}
+
+.cells i {
+  height: 12px;
+  border: 2px solid #333;
+  background: #161616;
+}
+
+.cells i.is-on {
+  border-color: currentcolor;
+  background: currentcolor;
+}
+
+.pixel-label {
+  font-family: var(--pixel);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  line-height: 1.6;
+  text-transform: uppercase;
 }
 
 .visually-hidden {
@@ -101,62 +188,22 @@ h3 {
   gap: 0.85rem 1.25rem;
   align-items: center;
   /*
-   * Full-bleed and opaque, with the glow spent before the bottom edge: a bar
-   * narrower than the page, or one that lets it through, shows its outline
-   * wherever the two differ. Only the contents keep to the column.
+   * Full-bleed and opaque: a bar narrower than the page, or one that lets it
+   * through, shows its outline wherever the two differ. Only the contents keep
+   * to the column.
    */
   margin-inline: calc(-1 * var(--gutter));
   padding: 1rem calc(var(--gutter) + max(0px, (100% - var(--column)) / 2)) 1.1rem;
-  background:
-    radial-gradient(50rem 100% at 50% 0, color-mix(in srgb, var(--bg-glow) 36%, transparent), transparent),
-    var(--bg);
+  background: var(--bg);
 }
 
 .brand {
-  display: flex;
-  gap: 0.6rem;
-  align-items: center;
-  color: inherit;
+  color: var(--bright);
+  font-family: var(--pixel);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
   text-decoration: none;
-}
-
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  flex: none;
-}
-
-.brand-badge {
-  fill: color-mix(in srgb, var(--accent) 10%, transparent);
-  stroke: var(--accent);
-  stroke-width: 2;
-  stroke-linejoin: round;
-}
-
-.brand-check {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.brand-text {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.15;
-}
-
-.brand-text strong {
-  font-size: 1.05rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-.brand-text span {
-  color: var(--muted);
-  font-size: 0.72rem;
-  letter-spacing: 0.01em;
+  text-transform: uppercase;
 }
 
 /* -- search -------------------------------------------------------------- */
@@ -183,24 +230,20 @@ h3 {
 input[type="search"],
 input[type="text"] {
   width: 100%;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid var(--border);
+  padding: 0.6rem 0.9rem;
+  border: 4px solid var(--edge);
   border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--text);
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  color: var(--bright);
   font: inherit;
-  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-input[type="search"]:hover,
-input[type="text"]:hover {
-  border-color: var(--border-strong);
-}
-
-input[type="search"]:focus {
-  border-color: var(--accent);
-  background: var(--panel-2);
-  outline: none;
+input[type="search"]:focus,
+input[type="text"]:focus {
+  border-color: var(--bright);
+  outline: 2px solid var(--bright);
+  outline-offset: 4px;
 }
 
 input::placeholder {
@@ -222,9 +265,9 @@ input::placeholder {
   margin: 0;
   padding: 0.3rem;
   overflow-y: auto;
-  border: 1px solid var(--border-strong);
+  border: 4px solid var(--edge);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--bg);
   box-shadow: var(--shadow);
   list-style: none;
 }
@@ -253,7 +296,7 @@ input::placeholder {
   flex: none;
   width: 34px;
   height: 34px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   object-fit: cover;
   background: var(--panel-hover);
 }
@@ -262,34 +305,31 @@ input::placeholder {
 
 button {
   padding: 0.6rem 0.85rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--panel-2);
+  border: 3px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
   color: var(--text);
   font: inherit;
   cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 button:hover {
-  border-color: var(--border-strong);
-  background: var(--panel-hover);
+  border-color: var(--edge);
 }
 
 button.primary {
-  border-color: transparent;
-  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
-  color: #06131d;
-  font-weight: 600;
-}
-
-button.primary:hover {
-  filter: brightness(1.08);
+  border-color: var(--edge);
+  color: var(--bright);
+  font-family: var(--pixel);
+  font-size: 0.65rem;
+  text-transform: uppercase;
 }
 
 button.ghost {
-  background: none;
   color: var(--muted);
+  font-family: var(--pixel);
+  font-size: 0.65rem;
+  text-transform: uppercase;
 }
 
 /* -- profile ------------------------------------------------------------- */
@@ -618,34 +658,31 @@ main {
 
 .language {
   display: flex;
-  gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: var(--panel);
+  gap: 0.25rem;
+  align-items: center;
 }
 
 .lang {
-  padding: 0.3rem 0.6rem;
+  min-height: 44px;
+  padding: 0.3rem 0.35rem;
   border: 0;
-  border-radius: 999px;
   background: none;
   color: var(--muted);
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.03em;
+  font-family: var(--pixel);
+  font-size: 0.65rem;
   cursor: pointer;
 }
 
 .lang:hover {
-  color: var(--text);
+  color: var(--bright);
 }
 
 /* Keyed off `aria-pressed`, the state a screen reader is told about too. */
 .lang[aria-pressed="true"] {
-  background: var(--panel-hover);
-  color: var(--text);
+  color: var(--bright);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 5px;
 }
 
 /* -- steam links --------------------------------------------------------- */
@@ -932,9 +969,13 @@ main {
   /* Pushed to the bottom of a short page. */
   margin: auto auto 0;
   padding-top: 2rem;
-  border-top: 1px solid var(--border);
+  border-top: 4px dotted var(--border);
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
+}
+
+.footer a {
+  color: var(--text);
 }
 
 /* -- narrow -------------------------------------------------------------- */
@@ -942,10 +983,6 @@ main {
 @media (width <= 40rem) {
   .topbar {
     padding-block: 1.1rem 1.25rem;
-  }
-
-  .brand-text span {
-    display: none;
   }
 
   .profile summary span {
@@ -1047,8 +1084,8 @@ main {
 }
 
 .doc h1 {
-  margin: 0 0 0.35rem;
-  font-size: clamp(1.9rem, 4vw, 2.5rem);
+  margin: 0 0 0.75rem;
+  font-size: clamp(1.2rem, 4vw, 1.6rem);
 }
 
 .doc-date {
@@ -1059,7 +1096,7 @@ main {
 
 .doc h2 {
   margin: 2.4rem 0 0.75rem;
-  font-size: 1.15rem;
+  font-size: 0.85rem;
 }
 
 .doc h3 {
@@ -1070,8 +1107,8 @@ main {
 
 .doc p,
 .doc li {
-  color: #c7d2dc;
-  line-height: 1.7;
+  color: var(--text);
+  line-height: 1.6;
 }
 
 .doc ul {
@@ -1099,15 +1136,15 @@ main {
 .doc-summary {
   margin: 0 0 1rem;
   padding: 1.1rem 1.3rem;
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--accent);
+  border: 4px solid var(--edge);
   border-radius: var(--radius);
-  background: var(--panel);
+  background: var(--bg);
+  box-shadow: var(--shadow);
 }
 
 .doc-summary h2 {
   margin-top: 0;
-  font-size: 1rem;
+  font-size: 0.8rem;
 }
 
 .doc-summary p:last-child {
@@ -1122,15 +1159,19 @@ main {
   min-height: 44px;
   margin-top: 1rem;
   padding: 0.6rem 1.1rem;
+  border: 4px solid var(--edge);
   border-radius: var(--radius);
-  background: linear-gradient(180deg, var(--accent), var(--accent-deep));
-  color: #06131d;
-  font-weight: 600;
+  background: var(--bg);
+  color: var(--bright);
+  font-family: var(--pixel);
+  font-size: 0.7rem;
   text-decoration: none;
+  text-transform: uppercase;
 }
 
 .doc-action:hover {
-  filter: brightness(1.08);
+  outline: 2px solid var(--bright);
+  outline-offset: 4px;
 }
 
 /* As wide as the prose, so the wordmark lines up with the text. */

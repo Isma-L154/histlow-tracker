@@ -14,7 +14,6 @@ export const LANGUAGES = ["en", "es"];
 
 export const DICTIONARY = {
   en: {
-    "brand.tagline": "every Steam achievement, explained",
     "search.label": "Search for a game",
     "search.placeholder": "Search for a game…",
     "search.results": "Results",
@@ -116,7 +115,6 @@ export const DICTIONARY = {
     "howto.searchSteam": "Search Steam yourself",
   },
   es: {
-    "brand.tagline": "los logros de Steam, explicados",
     "search.label": "Buscar un juego",
     "search.placeholder": "Buscar un juego…",
     "search.results": "Resultados",

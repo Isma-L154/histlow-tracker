@@ -6,7 +6,7 @@
 # Cloudflare's analytics beacon, which the edge injects.
 
 /*
-  Content-Security-Policy: default-src 'none'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; img-src 'self' data: https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://media.steampowered.com https://images.igdb.com; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
+  Content-Security-Policy: default-src 'none'; object-src 'none'; script-src 'self' https://static.cloudflareinsights.com; style-src 'self'; font-src 'self'; img-src 'self' data: https://*.steamstatic.com https://steamcdn-a.akamaihd.net https://media.steampowered.com https://images.igdb.com; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'
   # Two years and preload-eligible: without it, a first visit still tries plain HTTP.
   Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
   X-Content-Type-Options: nosniff
