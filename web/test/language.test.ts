@@ -91,7 +91,7 @@ describe("localise", () => {
 
   it.each(["", "fr", "xx-YY"])("falls back to English for %s rather than emptying the page", (language) => {
     const out = localise(shell, language);
-    expect(out).toContain(DICTIONARY.en["hero.title"]!);
+    expect(out).toContain(DICTIONARY.en["hero.tagline"]!);
   });
 
   it("leaves a document with no markers completely alone, lang included", () => {
@@ -147,9 +147,9 @@ describe("two languages, one URL", () => {
     const spanish = await (await fetchIn("es-ES,es;q=0.9", path)).text();
     const english = await (await fetchIn("en-US,en;q=0.9", path)).text();
 
-    expect(spanish).toContain(DICTIONARY.es["hero.title"]!);
-    expect(english).toContain(DICTIONARY.en["hero.title"]!);
-    expect(english).not.toContain(DICTIONARY.es["hero.title"]!);
+    expect(spanish).toContain(DICTIONARY.es["hero.tagline"]!);
+    expect(english).toContain(DICTIONARY.en["hero.tagline"]!);
+    expect(english).not.toContain(DICTIONARY.es["hero.tagline"]!);
   });
 
   it("does not hand the two languages the same ETag", async () => {
@@ -219,7 +219,7 @@ describe("localise then describeGame", () => {
 
   it("keeps the translation after the second pass", () => {
     const { html } = describeGame(localise(shell, "es"), GAME, PAGE, ART);
-    expect(html).toContain(DICTIONARY.es["hero.title"]!);
+    expect(html).toContain(DICTIONARY.es["hero.tagline"]!);
     expect(html).toMatch(/<html[^>]*\slang="es"/);
   });
 

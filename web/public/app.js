@@ -8,6 +8,7 @@
 import { handledInPage } from "./nav.js";
 import { DICTIONARY, pickLanguage, t, translate } from "./i18n.js";
 import { completionDifficulty } from "./difficulty.js";
+import { mountWorld } from "./world/engine.js";
 
 const SITE_TITLE = "HowToAchieve";
 const STORAGE_KEY = "histlow.steamid";
@@ -29,8 +30,9 @@ const el = {
   steamIdClear: document.getElementById("steamid-clear"),
   profileStatus: document.getElementById("profile-status"),
   hero: document.getElementById("hero"),
-  upcoming: document.getElementById("upcoming"),
-  upcomingList: document.getElementById("upcoming-list"),
+  heroSearch: document.getElementById("hero-search"),
+  world: document.getElementById("world"),
+  worldDots: document.getElementById("world-dots"),
   status: document.getElementById("status"),
   game: document.getElementById("game"),
   cover: document.getElementById("game-cover"),
@@ -184,7 +186,7 @@ async function loadGame(appId) {
 
   setStatus(say("status.loading"));
   el.game.hidden = true;
-  el.hero.hidden = true;
+  showHero(false);
 
   const query = state.steamId ? `?steamid=${encodeURIComponent(state.steamId)}` : "";
   try {
@@ -733,7 +735,6 @@ function setLanguage(language) {
 
   // What the client drew itself carries no `data-i18n`, so it is redrawn.
   if (state.game) renderGame(state.game);
-  if (upcomingReleases.length > 0) renderUpcoming();
   if (state.steamId) setProfileStatus(say("profile.saved"));
 
   try {
@@ -762,7 +763,7 @@ function showError(message) {
   el.status.hidden = false;
   el.game.hidden = true;
   // The hero gives a dead link somewhere to go.
-  el.hero.hidden = false;
+  showHero(true);
 }
 
 function link(text, href) {
@@ -792,73 +793,22 @@ function formatDate(iso) {
     : date.toLocaleDateString(state.language, { year: "numeric", month: "short", day: "numeric" });
 }
 
-// -- upcoming releases ------------------------------------------------------
-
-/** Redrawn on this interval so a countdown does not go stale on an open tab. */
-const COUNTDOWN_REFRESH_MS = 60_000;
-
-/** What the API last returned, so a language switch can redraw without refetching. */
-let upcomingReleases = [];
-
-/** How far off a date is, in days rather than a ticking clock. */
-function countdown(releasedAt, now) {
-  const days = Math.ceil((releasedAt * 1000 - now) / 86_400_000);
-  if (days <= 0) return say("upcoming.today");
-  if (days === 1) return say("upcoming.tomorrow");
-  return say("upcoming.days", { days });
-}
-
-/** The most anticipated releases, or nothing at all: a heading over no cards is worse than none. */
-async function loadUpcoming() {
-  try {
-    const data = await api("/api/upcoming");
-    upcomingReleases = Array.isArray(data?.releases) ? data.releases : [];
-  } catch {
-    // The Worker logged it. A reader can do nothing about IGDB being down.
-    upcomingReleases = [];
-  }
-  renderUpcoming();
-}
-
-function renderUpcoming() {
-  const now = Date.now();
-  // A release that passed while the tab was open drops out rather than counting past zero.
-  const live = upcomingReleases.filter((release) => release.releasedAt * 1000 > now - 86_400_000);
-
-  el.upcoming.hidden = live.length === 0;
-  if (live.length === 0) return;
-
-  el.upcomingList.replaceChildren();
-  for (const release of live) {
-    const card = document.createElement("li");
-    card.className = "upcoming-card";
-
-    if (release.coverUrl) {
-      const cover = document.createElement("img");
-      cover.className = "upcoming-cover";
-      cover.src = release.coverUrl;
-      cover.alt = "";
-      cover.loading = "lazy";
-      // A third party, like Steam: no referrer.
-      cover.referrerPolicy = "no-referrer";
-      card.append(cover);
-    }
-
-    const name = document.createElement("p");
-    name.className = "upcoming-name";
-    // Titles come from IGDB and are untrusted, like everything else here.
-    name.textContent = release.name;
-
-    const when = document.createElement("p");
-    when.className = "upcoming-when";
-    when.textContent = countdown(release.releasedAt, now);
-
-    card.append(name, when);
-    el.upcomingList.append(card);
-  }
-}
-
 // -- routing ----------------------------------------------------------------
+
+/** Where the search form sits in the top bar, so it can go back after the home page borrows it. */
+const searchHome = { parent: el.form.parentElement, next: el.form.nextElementSibling };
+
+/**
+ * Shows or hides the home scene. The one search form moves with it: over the
+ * scene on the home page, in the top bar everywhere else. Moving the node keeps
+ * its listeners and whatever the reader has typed.
+ */
+function showHero(visible) {
+  el.hero.hidden = !visible;
+  document.body.classList.toggle("is-home", visible);
+  if (visible) el.heroSearch.append(el.form);
+  else searchHome.parent.insertBefore(el.form, searchHome.next);
+}
 
 /** Goes to a game in place. A real path, not a fragment, so the server can describe it when shared. */
 function goToGame(appId) {
@@ -888,7 +838,7 @@ function route() {
   }
   state.game = null;
   el.game.hidden = true;
-  el.hero.hidden = false;
+  showHero(true);
   document.title = SITE_TITLE;
   setStatus("");
 }
@@ -931,7 +881,4 @@ if (state.steamId) {
   setProfileStatus(say("profile.saved"));
 }
 route();
-
-// After routing, so a direct link to a game does not wait for it.
-loadUpcoming();
-setInterval(renderUpcoming, COUNTDOWN_REFRESH_MS);
+mountWorld(el.world, el.worldDots);
