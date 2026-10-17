@@ -34,7 +34,7 @@ DELETE_BYTE = 0x7F
 #: `LICENSE` have no suffix at all - and the files it forgets are exactly the
 #: ones nobody opens. Excluding instead means a new file type is covered by
 #: default, and a genuinely binary one announces itself as a failure here.
-BINARY_SUFFIXES = frozenset({".png", ".jpg", ".ico"})
+BINARY_SUFFIXES = frozenset({".png", ".jpg", ".ico", ".woff2"})
 
 
 def _tracked_text_files() -> list[Path]:

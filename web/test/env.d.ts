@@ -33,6 +33,11 @@ declare module "*.html?raw" {
   export default contents;
 }
 
+declare module "*/_headers?raw" {
+  const contents: string;
+  export default contents;
+}
+
 /**
  * `import.meta.glob`, which Vite provides and TypeScript does not know about.
  * Declared rather than silenced, since a `@ts-ignore` would hide a real
