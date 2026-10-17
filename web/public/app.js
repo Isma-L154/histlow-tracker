@@ -9,6 +9,7 @@ import { handledInPage } from "./nav.js";
 import { DICTIONARY, pickLanguage, t, translate } from "./i18n.js";
 import { completionDifficulty } from "./difficulty.js";
 import { mountWorld } from "./world/engine.js";
+import { lootTier } from "./tiers.js";
 
 const SITE_TITLE = "HowToAchieve";
 const STORAGE_KEY = "histlow.steamid";
@@ -575,13 +576,10 @@ function note(message) {
   return paragraph;
 }
 
-/** Rarity bands, at the thresholds the completionist community already uses. */
+/** The loot tier of a share of players, named in the reader's language. */
 function rarityTier(percent) {
-  if (percent === null) return { label: say("rarity.unknown"), className: "rarity-unknown" };
-  if (percent < 5) return { label: say("rarity.legendary"), className: "rarity-legendary" };
-  if (percent < 15) return { label: say("rarity.rare"), className: "rarity-rare" };
-  if (percent < 40) return { label: say("rarity.uncommon"), className: "rarity-uncommon" };
-  return { label: say("rarity.common"), className: "rarity-common" };
+  const tier = lootTier(percent);
+  return { tier, label: say(`rarity.${tier}`), className: `rarity-${tier}` };
 }
 
 /** Publishes the top bar's height, which wraps on narrow screens, so the toolbar can stick beneath it. */

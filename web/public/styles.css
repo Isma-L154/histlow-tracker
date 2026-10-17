@@ -921,10 +921,11 @@ html {
   text-align: right;
 }
 
-.rarity-legendary { color: var(--rarity-legendary); }
-.rarity-rare      { color: var(--rarity-rare); }
-.rarity-uncommon  { color: var(--rarity-uncommon); }
-.rarity-common    { color: var(--rarity-common); }
+.rarity-legendary { color: var(--tier-legendary); }
+.rarity-epic      { color: var(--tier-epic); }
+.rarity-rare      { color: var(--tier-rare); }
+.rarity-uncommon  { color: var(--tier-uncommon); }
+.rarity-common    { color: var(--tier-common); }
 .rarity-unknown   { color: var(--muted); }
 
 /* -- how-to panel -------------------------------------------------------- */

@@ -41,7 +41,7 @@ export const DICTIONARY = {
     "profile.remove": "Remove",
     "profile.saved": "Saved in this browser.",
     "profile.removed": "Removed. No achievement is marked as unlocked any more.",
-    "profile.noStorage": "This browser will not store data, so this will be forgotten when you leave.",
+    "profile.noStorage": "This browser will not store data, so this will be forgotten when you leave.",
     "hero.tagline": "Every Steam achievement, from the rarest to the most common, and how to earn it.",
     "hero.try": "Try",
     "language.label": "Language",
@@ -68,7 +68,7 @@ export const DICTIONARY = {
     "error.502": "Steam is not responding right now. Try again in a moment.",
     "error.503": "The Steam key is not configured on the server.",
     "error.offline": "Could not connect. Check your connection and try again.",
-    "error.api": "The API answered {status}.",
+    "error.api": "The API answered {status}.",
     "time.label": "Time to 100%",
     "time.hours": "about {hours} hours",
     "time.underAnHour": "under an hour",
@@ -94,10 +94,17 @@ export const DICTIONARY = {
     "achievement.reveal": "How is it earned?",
     "rarity.unknown": "No data",
     "rarity.legendary": "Legendary",
+    "rarity.epic": "Epic",
     "rarity.rare": "Rare",
     "rarity.uncommon": "Uncommon",
     "rarity.common": "Common",
     "rarity.players": "{percent}% of players",
+    "rarity.range.legendary": "held by under 5%",
+    "rarity.range.epic": "5 to 10%",
+    "rarity.range.rare": "10 to 25%",
+    "rarity.range.uncommon": "25 to 50%",
+    "rarity.range.common": "over 50%",
+    "rarity.range.unknown": "Steam reports no share",
     "time.tooMany": "Too many completion-time lookups. Wait a minute and try again.",
     "howto.tooMany": "Too many how-to lookups. Wait a minute and try again.",
     "howto.searching": "Searching community guides… the first lookup for each game takes a few seconds.",
@@ -136,7 +143,7 @@ export const DICTIONARY = {
     "profile.remove": "Quitar",
     "profile.saved": "Guardado en este navegador.",
     "profile.removed": "Quitado. Ya no se marca ningún logro como conseguido.",
-    "profile.noStorage": "Este navegador no permite guardar datos, así que se olvidará al salir.",
+    "profile.noStorage": "Este navegador no permite guardar datos, así que se olvidará al salir.",
     "hero.tagline": "Todos los logros de Steam, del más raro al más común, y cómo conseguirlos.",
     "hero.try": "Prueba con",
     "language.label": "Idioma",
@@ -163,7 +170,7 @@ export const DICTIONARY = {
     "error.502": "Steam no está respondiendo ahora mismo. Prueba otra vez en un momento.",
     "error.503": "Falta configurar la clave de Steam en el servidor.",
     "error.offline": "No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.",
-    "error.api": "La API respondió {status}.",
+    "error.api": "La API respondió {status}.",
     "time.label": "Tiempo para el 100%",
     "time.hours": "unas {hours} horas",
     "time.underAnHour": "menos de una hora",
@@ -189,10 +196,17 @@ export const DICTIONARY = {
     "achievement.reveal": "¿Cómo se consigue?",
     "rarity.unknown": "Sin datos",
     "rarity.legendary": "Legendario",
+    "rarity.epic": "Épico",
     "rarity.rare": "Raro",
     "rarity.uncommon": "Poco común",
     "rarity.common": "Común",
     "rarity.players": "{percent}% de los jugadores",
+    "rarity.range.legendary": "en manos de menos del 5%",
+    "rarity.range.epic": "del 5 al 10%",
+    "rarity.range.rare": "del 10 al 25%",
+    "rarity.range.uncommon": "del 25 al 50%",
+    "rarity.range.common": "más del 50%",
+    "rarity.range.unknown": "Steam no informa el porcentaje",
     "time.tooMany": "Demasiadas consultas de duración. Espera un minuto y vuelve a intentarlo.",
     "howto.tooMany": "Demasiadas consultas de guía. Espera un minuto y vuelve a intentarlo.",
     "howto.searching": "Buscando en las guías de la comunidad… la primera consulta de cada juego tarda unos segundos.",
