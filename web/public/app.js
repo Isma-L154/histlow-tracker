@@ -683,6 +683,14 @@ document.addEventListener("click", (event) => {
   if (!el.profile.contains(event.target)) el.profile.open = false;
 });
 
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape" || !el.profile.open) return;
+  // Focus left on a field that just closed would strand a keyboard user.
+  const hadFocus = el.profile.contains(document.activeElement);
+  el.profile.open = false;
+  if (hadFocus) el.profile.querySelector("summary").focus();
+});
+
 function readStoredSteamId() {
   try {
     const value = localStorage.getItem(STORAGE_KEY);
