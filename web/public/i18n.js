@@ -41,7 +41,7 @@ export const DICTIONARY = {
     "profile.remove": "Remove",
     "profile.saved": "Saved in this browser.",
     "profile.removed": "Removed. No achievement is marked as unlocked any more.",
-    "profile.noStorage": "This browser will not store data, so this will be forgotten when you leave.",
+    "profile.noStorage": "This browser will not store data, so this will be forgotten when you leave.",
     "hero.tagline": "Every Steam achievement, from the rarest to the most common, and how to earn it.",
     "hero.try": "Try",
     "language.label": "Language",
@@ -68,7 +68,7 @@ export const DICTIONARY = {
     "error.502": "Steam is not responding right now. Try again in a moment.",
     "error.503": "The Steam key is not configured on the server.",
     "error.offline": "Could not connect. Check your connection and try again.",
-    "error.api": "The API answered {status}.",
+    "error.api": "The API answered {status}.",
     "time.label": "Time to 100%",
     "time.hours": "about {hours} hours",
     "time.underAnHour": "under an hour",
@@ -143,7 +143,7 @@ export const DICTIONARY = {
     "profile.remove": "Quitar",
     "profile.saved": "Guardado en este navegador.",
     "profile.removed": "Quitado. Ya no se marca ningún logro como conseguido.",
-    "profile.noStorage": "Este navegador no permite guardar datos, así que se olvidará al salir.",
+    "profile.noStorage": "Este navegador no permite guardar datos, así que se olvidará al salir.",
     "hero.tagline": "Todos los logros de Steam, del más raro al más común, y cómo conseguirlos.",
     "hero.try": "Prueba con",
     "language.label": "Idioma",
@@ -170,7 +170,7 @@ export const DICTIONARY = {
     "error.502": "Steam no está respondiendo ahora mismo. Prueba otra vez en un momento.",
     "error.503": "Falta configurar la clave de Steam en el servidor.",
     "error.offline": "No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.",
-    "error.api": "La API respondió {status}.",
+    "error.api": "La API respondió {status}.",
     "time.label": "Tiempo para el 100%",
     "time.hours": "unas {hours} horas",
     "time.underAnHour": "menos de una hora",
