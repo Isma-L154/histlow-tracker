@@ -50,3 +50,6 @@ static_analysis_semgrep_*/
 # cmd syntax that nothing expanded once created a directory of this literal
 # name, and `git add -A` committed a megabyte of Windows icon caches with it.
 %SystemDrive%/
+
+# Design mockups from brainstorming sessions
+.superpowers/
