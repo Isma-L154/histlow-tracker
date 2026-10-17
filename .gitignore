@@ -53,3 +53,5 @@ static_analysis_semgrep_*/
 
 # Design mockups from brainstorming sessions
 .superpowers/
+# Worktrees for isolated feature work
+.claude/worktrees/

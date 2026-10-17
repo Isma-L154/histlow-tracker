@@ -184,9 +184,9 @@ project and removal would be acceptable. Two consequences:
 These were not discussed with the owner; each is the simplest reasonable choice.
 
 - **Scaling:** the canvas keeps a fixed internal height of 150 px and an internal
-  width of the container width divided by the scale. The scale is a whole
-  number from 2 to 5, picked so the hero is roughly 300–600 px tall. Scenes are
-  generated for that width.
+  width of the container width divided by the scale. The scale is
+  `floor(container width / 300)` kept between 2 and 4, so the hero is 300–600 px
+  tall. Scenes are generated for that width.
 - **Narrow screens:** at 2× on a 375 px phone the hero is 300 px tall; the logo
   shrinks, the search box spans the width, and all five heroes still fit.
 - **Animation:** `requestAnimationFrame` with an IntersectionObserver that stops
