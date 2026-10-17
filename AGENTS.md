@@ -78,7 +78,7 @@ This project uses the `superpowers` plugin as its default engineering discipline
 4. **Debug systematically** (`superpowers:systematic-debugging`) — on any bug or unexpected behavior, diagnose root cause before proposing a fix. No speculative patches.
 5. **Isolate risky work** (`superpowers:using-git-worktrees`) — for exploratory or large feature work, use a worktree instead of the main working copy. Never link `node_modules` into a worktree: removing the worktree deletes the real one.
 6. **Verify before claiming done** (`superpowers:verification-before-completion`) — never say "this works" without having actually run it and shown the output. Evidence before assertions.
-7. **Request review** — before merging, review the change in the session against the `pr-review-toolkit` criteria, never by dispatching its agents, and actually engage with the findings (not blind acceptance, not dismissal). Run `semgrep` on changed code.
+7. **Request review** — before merging, review the change against the `pr-review-toolkit` criteria and actually engage with the findings (not blind acceptance, not dismissal). Run `semgrep` on changed code.
 8. **Close out** (`superpowers:finishing-a-development-branch`) — once tests are green and reviewed, decide how to integrate (merge, PR, rebase) explicitly rather than leaving branches dangling.
 
 ---
@@ -134,11 +134,9 @@ Security tooling is mandatory for this project, not optional nice-to-have. Apply
 | `supply-chain-risk-auditor` | Whenever a new dependency is added or an existing one is upgraded. |
 | `semgrep-rule-creator` | When a bug pattern shows up more than once — turn it into a reusable rule instead of relying on memory. |
 | `second-opinion` | For security-sensitive or high-risk changes (auth, payments, data access) — get an independent LLM review before merging. |
-| `security-scan` | After any change to an exposed surface, and before every release — runs the scanners and verifies the baseline controls with evidence. |
-| `threat-model` | Before building auth, payments, personal-data or upload features — STRIDE on the design, with a verification test per mitigation. |
 
 **Non-negotiables:**
-- Never hardcode secrets, API keys, or credentials. `.env` (tracker) and `web/.dev.vars` (Worker) locally; repository secrets and Worker secrets (`wrangler secret put`) in production. Never committed, never logged, never sent to the browser.
+- Secrets live in `.env` (tracker) and `web/.dev.vars` (Worker) locally, and in repository secrets and Worker secrets (`wrangler secret put`) in production. Never logged.
 - `logFailure` in `web/src/http.ts` redacts every query value not on its allowlist, and the tracker's logging filter masks every loaded secret; keep both that way.
 - Any new auth/crypto/payment code path requires a `differential-review` pass before merge, no exceptions.
 
@@ -198,32 +196,22 @@ The seven controls are defined in global rule 10. In this project:
 | `mutation-testing` | Periodically on critical modules, to check whether the existing test suite actually catches regressions (not just covers lines). |
 | `testing-handbook-skills` | If/when this project needs fuzzing (parsers, binary formats, untrusted input) — pick the right fuzzer per language from this skill set. |
 
-QA gate before merge: `code-review` + `differential-review` + (playwright e2e if the change touches user-facing flows).
-
----
-
-# UI/UX
-
-- Use `ui-ux-pro-max` for anything touching layout, components, color, typography, or design system decisions. Don't invent styling ad hoc — check it against the skill's guidance first (styles, palettes, accessibility, responsive patterns).
+QA gate before merge: tests green, `code-review` and `differential-review` run with their findings triaged. There is no e2e suite: for user-facing changes to `web/`, check the page in a browser and rely on `deploy-web.yml`'s production checks after the merge.
 
 ---
 
 # Git & Commit Discipline
 
-- Every change starts as a GitHub issue and is closed by a pull request carrying `Closes #N`. Work on a branch named for the kind of change and its issue, such as `docs/128-readme-standard`; never commit directly to `main`.
+- Branches are named for the kind of change and its issue, such as `docs/128-readme-standard`.
 - `main` is protected by the `main-protection` ruleset: a pull request and the `check (3.11)`, `check (3.12)` and `web` checks are required. Merge your own pull request once CI is green — the checks are what make that safe.
 - Never deploy by hand: a push to `main` that touches `web/` deploys it.
-- No tool attribution anywhere: no `Co-Authored-By`, no generated-with footer, no robot emoji — not in commits, branch names, PRs, issues or comments. Third-party text (a Dependabot changelog) is left alone.
+- The no-attribution rule leaves third-party text alone, such as a Dependabot changelog.
 - Commit at logical checkpoints with a clear semantic message — don't let changes pile up uncommitted.
-- Before merging: tests green, `differential-review` clean (or findings triaged), `code-review` run.
 
 ---
 
 # Notes for Claude
 
-- **Single session, no subagents.** All work happens in the one interactive session. Never dispatch subagents, parallel agents, background agents or worktree-isolated agents, and do not suggest them — including for work that looks parallelizable. If a task is large, sequence it or split it, in this session.
 - All the skills referenced above are installed globally (`user` scope) — they're available in this project automatically, no per-project setup needed.
 - Don't force a skill that doesn't fit the task just because it's listed here — this file sets *default* discipline and *when* to reach for each tool, not a mandatory checklist for every single change.
-- Project-specific overrides always win over the general defaults above — if a section below contradicts something above, follow the section below.
 - The tracker stays standard library only: a runtime dependency there is a design change, not a convenience, and CI fails if a module needs one.
-- There is no e2e suite to run before merging; for user-facing changes to `web/`, check the page in a browser and rely on `deploy-web.yml`'s production checks after the merge.
