@@ -90,22 +90,23 @@
 
     <main id="main">
       <section class="hero" id="hero">
-        <h1 data-i18n="hero.title">Find out how every achievement is earned</h1>
-        <p class="hero-lead" data-i18n="hero.lead">
-          Search for a game and see every achievement ordered from the rarest to the most common.
-          The steps come from guides the community wrote, summarised here.
-        </p>
+        <div class="world-stage">
+          <canvas class="world" id="world" aria-hidden="true"></canvas>
+          <div class="world-overlay">
+            <h1 class="logo">HowToAchieve</h1>
+            <p class="tagline" data-i18n="hero.tagline">Every Steam achievement, from the rarest to the most common, and how to earn it.</p>
+            <!-- The search form moves here on the home page and back to the top bar on a game. -->
+            <div class="hero-search" id="hero-search"></div>
+          </div>
+          <div class="world-dots" id="world-dots" aria-hidden="true"></div>
+        </div>
         <div class="hero-examples">
-          <span class="hero-examples-label" data-i18n="hero.try">Try</span>
+          <span class="pixel-label" data-i18n="hero.try">Try</span>
           <button type="button" class="example" data-appid="367520">Hollow Knight</button>
           <button type="button" class="example" data-appid="1245620">ELDEN RING</button>
           <button type="button" class="example" data-appid="782330">DOOM Eternal</button>
           <button type="button" class="example" data-appid="1145360">Hades</button>
         </div>
-        <section class="upcoming" id="upcoming" hidden>
-          <h2 data-i18n="upcoming.title">Most anticipated</h2>
-          <ul class="upcoming-list" id="upcoming-list"></ul>
-        </section>
       </section>
 
       <p class="status" id="status" role="status" aria-live="polite" hidden></p>

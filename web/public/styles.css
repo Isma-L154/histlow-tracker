@@ -435,44 +435,125 @@ main {
 
 /* -- hero ---------------------------------------------------------------- */
 
+/* Clip the full-bleed scene's overhang rather than scroll the page sideways. */
+html {
+  overflow-x: clip;
+}
+
 .hero {
-  /* Centres in the space main has left. */
-  margin-block: auto;
-  padding: 3.5rem 0 4rem;
+  margin-block: 0 auto;
+}
+
+/* Full-bleed: as wide as the window, whatever the column. */
+.world-stage {
+  position: relative;
+  margin-inline: calc(50% - 50vw);
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.world {
+  display: block;
+  image-rendering: pixelated;
+}
+
+.world-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  align-items: center;
+  padding: clamp(2rem, 8vw, 4.5rem) var(--gutter) 0;
   text-align: center;
+  pointer-events: none;
 }
 
-.hero h1 {
-  max-width: 22ch;
-  margin: 0 auto 1rem;
-  font-size: clamp(1.9rem, 5vw, 2.9rem);
-  font-weight: 680;
+.logo {
+  margin: 0;
+  color: var(--bright);
+  font-size: clamp(1.1rem, 5vw, 2.6rem);
+  letter-spacing: 0.04em;
+  text-shadow:
+    4px 4px 0 #000,
+    -2px -2px 0 #000,
+    2px -2px 0 #000,
+    -2px 2px 0 #000;
+  text-transform: uppercase;
 }
 
-.hero-lead {
-  max-width: 46ch;
-  margin: 0 auto 2.25rem;
-  color: var(--muted);
-  font-size: 1.02rem;
+.tagline {
+  max-width: 44ch;
+  margin: 0;
+  padding: 0.2rem 0.7rem;
+  background: rgb(0 0 0 / 80%);
+  color: var(--bright);
+}
+
+.hero-search {
+  width: min(38rem, 100%);
+  pointer-events: auto;
+}
+
+.world-dots {
+  position: absolute;
+  right: 1rem;
+  bottom: 1rem;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.world-dots i {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--bright);
+  background: var(--bg);
+}
+
+.world-dots i.is-on {
+  background: var(--bright);
+}
+
+/* The wordmark would repeat the scene's own title. */
+.is-home .topbar .brand {
+  visibility: hidden;
+}
+
+/* On a phone the scene is about 300px tall: the text must clear the party's heads. */
+@media (width <= 40rem) {
+  .world-overlay {
+    gap: 0.5rem;
+    padding-top: 1rem;
+  }
+
+  .tagline {
+    font-size: 0.8rem;
+  }
+}
+
+/* With the search over the scene, the language and profile keep to the right. */
+.is-home .topbar .language {
+  margin-left: auto;
 }
 
 .hero-examples {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.75rem;
   align-items: center;
   justify-content: center;
-}
-
-.hero-examples-label {
-  color: var(--muted);
-  font-size: 0.85rem;
+  padding: 1.5rem 0 2rem;
 }
 
 .example {
-  padding: 0.4rem 0.85rem;
-  border-radius: 999px;
-  font-size: 0.88rem;
+  border: 3px solid var(--edge);
+  color: var(--bright);
+}
+
+.example:hover,
+.example:focus-visible {
+  outline: 2px solid var(--bright);
+  outline-offset: 3px;
 }
 
 /* -- status -------------------------------------------------------------- */
@@ -590,68 +671,6 @@ main {
 .difficulty[data-tier="someWork"] .difficulty-tier,
 .difficulty[data-tier="straightforward"] .difficulty-tier {
   color: var(--rarity-uncommon);
-}
-
-/* -- upcoming releases --------------------------------------------------- */
-
-.upcoming {
-  margin-top: 2.5rem;
-}
-
-.upcoming h2 {
-  margin: 0 0 0.9rem;
-  color: var(--muted);
-  font-size: 0.9rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-/* A grid, not a scroller, so no card hides behind a swipe on a phone. */
-.upcoming-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr));
-  gap: 0.8rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.upcoming-card {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  overflow: hidden;
-  padding: 0.55rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--panel);
-}
-
-.upcoming-cover {
-  aspect-ratio: 3 / 4;
-  width: 100%;
-  border-radius: var(--radius-sm);
-  background: var(--panel-2);
-  object-fit: cover;
-}
-
-.upcoming-name {
-  overflow: hidden;
-  color: var(--text);
-  font-size: 0.82rem;
-  font-weight: 600;
-  line-height: 1.3;
-  /* Two lines, so a long title cannot make one card taller than its row. */
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.upcoming-when {
-  color: var(--accent);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
 }
 
 /* -- language toggle ----------------------------------------------------- */
@@ -1009,9 +1028,6 @@ main {
     width: auto;
   }
 
-  .hero {
-    padding: 2.25rem 0 2.75rem;
-  }
 }
 
 @media (width <= 34rem) {

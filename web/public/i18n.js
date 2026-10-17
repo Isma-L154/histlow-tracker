@@ -41,10 +41,8 @@ export const DICTIONARY = {
     "profile.remove": "Remove",
     "profile.saved": "Saved in this browser.",
     "profile.removed": "Removed. No achievement is marked as unlocked any more.",
-    "profile.noStorage": "This browser will not store data, so this will be forgotten when you leave.",
-    "hero.title": "Find out how every achievement is earned",
-    "hero.lead":
-      "Search for a game and see every achievement ordered from the rarest to the most common. The steps come from guides the community wrote, summarised here.",
+    "profile.noStorage": "This browser will not store data, so this will be forgotten when you leave.",
+    "hero.tagline": "Every Steam achievement, from the rarest to the most common, and how to earn it.",
     "hero.try": "Try",
     "language.label": "Language",
     "filters.label": "Filter achievements",
@@ -70,11 +68,7 @@ export const DICTIONARY = {
     "error.502": "Steam is not responding right now. Try again in a moment.",
     "error.503": "The Steam key is not configured on the server.",
     "error.offline": "Could not connect. Check your connection and try again.",
-    "error.api": "The API answered {status}.",
-    "upcoming.title": "Most anticipated",
-    "upcoming.days": "{days} days",
-    "upcoming.tomorrow": "tomorrow",
-    "upcoming.today": "today",
+    "error.api": "The API answered {status}.",
     "time.label": "Time to 100%",
     "time.hours": "about {hours} hours",
     "time.underAnHour": "under an hour",
@@ -142,10 +136,8 @@ export const DICTIONARY = {
     "profile.remove": "Quitar",
     "profile.saved": "Guardado en este navegador.",
     "profile.removed": "Quitado. Ya no se marca ningún logro como conseguido.",
-    "profile.noStorage": "Este navegador no permite guardar datos, así que se olvidará al salir.",
-    "hero.title": "Descubre cómo se consigue cada logro",
-    "hero.lead":
-      "Busca un juego y verás todos sus logros ordenados del más raro al más común. Los pasos salen de las guías que escribió la comunidad, resumidos aquí.",
+    "profile.noStorage": "Este navegador no permite guardar datos, así que se olvidará al salir.",
+    "hero.tagline": "Todos los logros de Steam, del más raro al más común, y cómo conseguirlos.",
     "hero.try": "Prueba con",
     "language.label": "Idioma",
     "filters.label": "Filtrar logros",
@@ -171,11 +163,7 @@ export const DICTIONARY = {
     "error.502": "Steam no está respondiendo ahora mismo. Prueba otra vez en un momento.",
     "error.503": "Falta configurar la clave de Steam en el servidor.",
     "error.offline": "No se pudo conectar. Revisa tu conexión e inténtalo de nuevo.",
-    "error.api": "La API respondió {status}.",
-    "upcoming.title": "Los más esperados",
-    "upcoming.days": "{days} días",
-    "upcoming.tomorrow": "mañana",
-    "upcoming.today": "hoy",
+    "error.api": "La API respondió {status}.",
     "time.label": "Tiempo para el 100%",
     "time.hours": "unas {hours} horas",
     "time.underAnHour": "menos de una hora",
