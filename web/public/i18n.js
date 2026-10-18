@@ -83,7 +83,6 @@ export const DICTIONARY = {
     "difficulty.veryHard": "Very hard",
     "difficulty.brutal": "Brutal",
     "difficulty.basis": "Worked out from how few players on Steam hold these achievements. It is a reading of rarity, not a community vote.",
-    "game.progress": "{unlocked} of {total} achievements",
     "game.count": "{total} achievements",
     "game.countFiltered": "{visible} of {total} achievements",
     "game.noProgress":
@@ -97,7 +96,6 @@ export const DICTIONARY = {
     "progress.invite.body": "Save your Steam profile and this page marks the achievements you already hold, and shows your progress.",
     "game.guides": "Achievement guides",
     "game.store": "Store page",
-    "game.cover": "{name} cover art",
     "achievement.unlocked": "Unlocked",
     "achievement.hidden": "Hidden achievement: Steam does not publish the description.",
     "achievement.reveal": "How is it earned?",
@@ -199,7 +197,6 @@ export const DICTIONARY = {
     "difficulty.veryHard": "Muy difícil",
     "difficulty.brutal": "Brutal",
     "difficulty.basis": "Calculado a partir de cuán poca gente tiene estos logros en Steam. Es una medida de rareza, no el voto de la comunidad.",
-    "game.progress": "{unlocked} de {total} logros",
     "game.count": "{total} logros",
     "game.countFiltered": "{visible} de {total} logros",
     "game.noProgress":
@@ -213,7 +210,6 @@ export const DICTIONARY = {
     "progress.invite.body": "Guarda tu perfil de Steam y esta página marcará los logros que ya tienes y mostrará tu progreso.",
     "game.guides": "Guías de logros",
     "game.store": "Ficha de la tienda",
-    "game.cover": "Portada de {name}",
     "achievement.unlocked": "Conseguido",
     "achievement.hidden": "Logro oculto: Steam no publica la descripción.",
     "achievement.reveal": "¿Cómo se consigue?",

@@ -66,17 +66,17 @@ describe("the markup and the dictionary agree", () => {
 
 describe("t", () => {
   it("fills placeholders", () => {
-    expect(t("en", "game.progress", { unlocked: 3, total: 7 })).toBe("3 of 7 achievements");
-    expect(t("es", "game.progress", { unlocked: 3, total: 7 })).toBe("3 de 7 logros");
+    expect(t("en", "game.countFiltered", { visible: 3, total: 7 })).toBe("3 of 7 achievements");
+    expect(t("es", "game.countFiltered", { visible: 3, total: 7 })).toBe("3 de 7 logros");
   });
 
   it("leaves a placeholder alone when nothing was given for it", () => {
-    expect(t("en", "game.progress", { unlocked: 3 })).toContain("{total}");
+    expect(t("en", "game.countFiltered", { visible: 3 })).toContain("{total}");
   });
 
   it("falls back to English rather than to the key", () => {
     // A reader seeing a slightly wrong language is recoverable. A reader seeing
-    // `game.progress` is not.
+    // `game.countFiltered` is not.
     expect(t("de" as "en", "filters.all")).toBe("All");
   });
 
