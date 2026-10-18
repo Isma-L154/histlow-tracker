@@ -15,6 +15,9 @@ import { bannerSources, rarestHeld } from "./art.js";
 
 const SITE_TITLE = "HowToAchieve";
 const STORAGE_KEY = "histlow.steamid";
+const NAME_KEY = "histlow.profileName";
+/** Steam caps a display name at 32 characters; anything longer did not come from Steam. */
+const NAME_MAX = 64;
 const LANGUAGE_KEY = "histlow.language";
 const SEARCH_DEBOUNCE_MS = 250;
 const MAX_RESULTS = 12;
@@ -28,6 +31,9 @@ const el = {
   search: document.getElementById("search-input"),
   results: document.getElementById("results"),
   profile: document.getElementById("profile"),
+  profileAnon: document.getElementById("profile-anon"),
+  profilePlayer: document.getElementById("profile-player"),
+  profileName: document.getElementById("profile-name"),
   steamId: document.getElementById("steamid-input"),
   steamIdSave: document.getElementById("steamid-save"),
   steamIdClear: document.getElementById("steamid-clear"),
@@ -69,6 +75,7 @@ const state = {
   // The Worker already decided this and wrote it into `lang`.
   language: pickLanguage("", document.documentElement.lang),
   steamId: readStoredSteamId(),
+  profileName: readStoredName(),
   game: null,
   filter: "all",
 };
@@ -773,6 +780,9 @@ el.steamIdSave.addEventListener("click", async () => {
 
   state.steamId = resolved.steamId;
   store(STORAGE_KEY, resolved.steamId);
+  state.profileName = resolved.profileName ? String(resolved.profileName).slice(0, NAME_MAX) : null;
+  store(NAME_KEY, state.profileName);
+  renderProfileLabel();
   // Name who was found: seventeen digits tell the reader nothing they can check.
   setProfileStatus(
     resolved.profileName
@@ -785,8 +795,11 @@ el.steamIdSave.addEventListener("click", async () => {
 
 el.steamIdClear.addEventListener("click", () => {
   state.steamId = null;
+  state.profileName = null;
   el.steamId.value = "";
   store(STORAGE_KEY, null);
+  store(NAME_KEY, null);
+  renderProfileLabel();
   setProfileStatus(say("profile.removed"));
   if (state.game) loadGame(state.game.appId);
 });
@@ -812,6 +825,25 @@ function readStoredSteamId() {
     // Private browsing, or storage disabled. The page works without it.
     return null;
   }
+}
+
+/** The display name saved with the profile, or null; only meaningful while an id is stored. */
+function readStoredName() {
+  try {
+    const value = localStorage.getItem(NAME_KEY)?.trim();
+    return value ? value.slice(0, NAME_MAX) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The top bar names the player when it can, says PLAYER when it only has the id, and PROFILE otherwise. */
+function renderProfileLabel() {
+  const named = state.steamId !== null && state.profileName !== null;
+  el.profileAnon.hidden = state.steamId !== null;
+  el.profilePlayer.hidden = state.steamId === null || named;
+  el.profileName.hidden = !named;
+  el.profileName.textContent = named ? state.profileName : "";
 }
 
 function store(key, value) {
@@ -991,5 +1023,6 @@ if (state.steamId) {
   el.steamId.value = state.steamId;
   setProfileStatus(say("profile.saved"));
 }
+renderProfileLabel();
 route();
 mountWorld(el.world, el.worldDots);
