@@ -11,9 +11,9 @@
  * static side is read at run time and the Worker is required to match it.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 import { ENTITY, secured } from "../src/headers.ts";
 
 const BASE = "https://howtoachieve.cloudils.com";
@@ -29,9 +29,7 @@ async function siteWide(): Promise<Map<string, string>> {
 }
 
 async function get(path: string): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(`${BASE}${path}`), env, ctx);
-  await waitOnExecutionContext(ctx);
+  const response = await serve(new Request(`${BASE}${path}`));
   return response;
 }
 
@@ -116,13 +114,9 @@ describe("security headers", () => {
     // `Response.redirect` returns a response whose headers cannot be written,
     // so this path fails differently from the others: not by omission but by
     // throwing, and only for readers arriving on an old link.
-    const ctx = createExecutionContext();
-    const response = await worker.fetch(
+    const response = await serve(
       new Request("https://cazalogros.cloudils.com/game/413150", { redirect: "manual" }),
-      env,
-      ctx,
     );
-    await waitOnExecutionContext(ctx);
 
     expect(response.status).toBe(301);
     expect(response.headers.get("Location")).toBe(`${BASE}/game/413150`);

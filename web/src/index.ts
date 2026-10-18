@@ -136,144 +136,173 @@ async function route(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<Response> {
-  if (url.pathname === "/api/health") {
-    // Tells an operator why the IGDB sections are missing: two booleans named for
-    // what a reader would miss, and nothing about the credentials themselves.
-    const igdb = credentials(env) !== null;
-    return json({ ok: true, version: VERSION, features: { completionTime: igdb } });
-  }
-
-  if (url.pathname === "/api/steamid") {
-    const parsed = parseProfile(url.searchParams.get("q") ?? "");
-    if (parsed.kind === "invalid") {
-      const reason = `profile.${parsed.reason}`;
-      return known(400, reason in DICTIONARY[DEFAULT_LANGUAGE] ? reason : "profile.default");
-    }
-
-    // Spends the Steam key, and an unknown name cannot be answered from cache the
-    // first time, so walking names is limited. A profile is set up once.
-    if (!(await withinRate(request, env, "PROFILE"))) {
-      return known(429, "profile.tooMany");
-    }
-
-    // Keyed on what was parsed, so one profile pasted five ways is one entry.
-    return cached(key(url, `/api/steamid/${parsed.kind}/${parsed.value}`, env), false, env, ctx, async () => {
-      try {
-        if (parsed.kind === "id") {
-          return json({ steamId: parsed.value, profileName: await steamClient(env).profileName(parsed.value) });
-        }
-        return json(await steamClient(env).resolveVanity(parsed.value));
-      } catch (error) {
-        // A name Steam does not know is a stable answer, so it is cached too.
-        if (error instanceof SteamError && error.reason === "profile.unknown") {
-          return known(404, error.reason, { "Cache-Control": "public, max-age=3600" });
-        }
-        throw error;
-      }
-    });
-  }
-
-  if (url.pathname === "/api/search") {
-    const query = (url.searchParams.get("q") ?? "").trim();
-    if (query.length < 2) {
-      return problem(400, "Search for at least two characters.");
-    }
-    if (query.length > MAX_QUERY_LENGTH) {
-      return problem(400, `Search for at most ${MAX_QUERY_LENGTH} characters.`);
-    }
-    return cached(key(url, `/api/search?q=${encodeURIComponent(query.toLowerCase())}`, env), false, env, ctx, async () => {
-      const results = await steamClient(env).search(query);
-      return json({ results });
-    });
-  }
+  if (url.pathname === "/api/health") return health(env);
+  if (url.pathname === "/api/steamid") return steamIdLookup(request, url, env, ctx);
+  if (url.pathname === "/api/search") return search(url, env, ctx);
 
   const time = COMPLETION_TIME_ROUTE.exec(url.pathname);
-  if (time) {
-    // Enumerable, and every unseen id spends the IGDB credential.
-    if (!(await withinRate(request, env, "PROFILE"))) {
-      return known(429, "time.tooMany");
-    }
-
-    return cached(key(url, `/api/time/${time[1]}`, env), false, env, ctx, async () => {
-      const creds = credentials(env);
-      // Inside the producer, so a cache hit skips it. Keys are scoped to the
-      // deployment, so each deploy starts cold and the line is written again.
-      if (!creds) {
-        announceUnconfigured();
-        return json({ completionTime: null });
-      }
-
-      try {
-        const token = await cachedToken(creds, ctx);
-        const lookup = await new IgdbClient(creds.clientId, token).completionTime(Number(time[1]));
-        // Three different things produce no time; the stage says which.
-        if (lookup.stoppedAt) console.log("igdb completion time", time[1], lookup.stoppedAt);
-        return json({ completionTime: lookup.time });
-      } catch (error) {
-        // Not cached, or one failure would hide the game's time for a day.
-        logFailure("igdb completion time failed", error);
-        return json({ completionTime: null }, { headers: { "Cache-Control": "no-store" } });
-      }
-    });
-  }
+  if (time) return completionTime(time[1] ?? "", request, url, env, ctx);
 
   const game = GAME_ROUTE.exec(url.pathname);
-  if (game) {
-    const appId = Number(game[1]);
-    const steamId = resolveSteamId(url.searchParams.get("steamid"), env.DEFAULT_STEAM_ID);
-
-    // A personal answer bypasses the cache, so `?steamid=` would otherwise turn
-    // the cache off for four Steam calls a time. Limited on that path only, and
-    // before Steam is reached. A throttle is about the caller, so it is never cached.
-    if (steamId !== null && !(await withinRate(request, env, "PROFILE"))) {
-      return known(429, "profile.tooMany", {
-        "Retry-After": "60",
-        "Cache-Control": "no-store",
-      });
-    }
-
-    return cached(key(url, `/api/game/${appId}`, env), steamId !== null, env, ctx, async () => {
-      try {
-        return json(await steamClient(env).gameAchievements(appId, steamId));
-      } catch (error) {
-        // "Nothing under that id" is stable, so it is cached like an answer.
-        if (unknownGame(error)) {
-          return problem(404, error.message, {
-            "Cache-Control": `public, max-age=${env.CACHE_SECONDS}`,
-          });
-        }
-        throw error;
-      }
-    });
-  }
+  if (game) return gameAchievements(Number(game[1]), request, url, env, ctx);
 
   const howto = HOWTO_ROUTE.exec(url.pathname);
-  if (howto) {
-    // Before validation, so a flooder costs as little as possible.
-    if (!(await withinRate(request, env))) {
-      return known(429, "howto.tooMany", {
-        "Retry-After": "60",
-        "Cache-Control": "no-store",
-      });
-    }
-
-    const appId = Number(howto[1]);
-    // The pattern admits `%`, so the key can hold an escape that is not valid UTF-8.
-    let achievementKey: string;
-    try {
-      achievementKey = decodeURIComponent(howto[2] ?? "");
-    } catch {
-      return problem(400, "That achievement identifier is not valid.");
-    }
-    return cached(
-      key(url, `/api/howto/v${HOWTO_LOGIC_VERSION}/${appId}/${encodeURIComponent(achievementKey)}`, env),
-      false,
-      env,
-      ctx,
-      () => explain(appId, achievementKey, env, ctx),
-    );
-  }
+  if (howto) return howTo(Number(howto[1]), howto[2] ?? "", request, url, env, ctx);
 
   // Not `error.404`, which tells the reader their game has no achievements.
   return known(404, "error.noRoute");
+}
+
+/**
+ * Tells an operator why the completion time is missing: a boolean named for what
+ * a reader would miss, and nothing about the credentials themselves.
+ */
+function health(env: Env): Response {
+  const igdb = credentials(env) !== null;
+  return json({ ok: true, version: VERSION, features: { completionTime: igdb } });
+}
+
+async function steamIdLookup(request: Request, url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const parsed = parseProfile(url.searchParams.get("q") ?? "");
+  if (parsed.kind === "invalid") {
+    const reason = `profile.${parsed.reason}`;
+    return known(400, reason in DICTIONARY[DEFAULT_LANGUAGE] ? reason : "profile.default");
+  }
+
+  // Spends the Steam key, and an unknown name cannot be answered from cache the
+  // first time, so walking names is limited. A profile is set up once.
+  if (!(await withinRate(request, env, "PROFILE"))) {
+    return known(429, "profile.tooMany");
+  }
+
+  // Keyed on what was parsed, so one profile pasted five ways is one entry.
+  return cached(key(url, `/api/steamid/${parsed.kind}/${parsed.value}`, env), false, env, ctx, async () => {
+    try {
+      if (parsed.kind === "id") {
+        return json({ steamId: parsed.value, profileName: await steamClient(env).profileName(parsed.value) });
+      }
+      return json(await steamClient(env).resolveVanity(parsed.value));
+    } catch (error) {
+      // A name Steam does not know is a stable answer, so it is cached too.
+      if (error instanceof SteamError && error.reason === "profile.unknown") {
+        return known(404, error.reason, { "Cache-Control": "public, max-age=3600" });
+      }
+      throw error;
+    }
+  });
+}
+
+async function search(url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
+  const query = (url.searchParams.get("q") ?? "").trim();
+  if (query.length < 2) {
+    return problem(400, "Search for at least two characters.");
+  }
+  if (query.length > MAX_QUERY_LENGTH) {
+    return problem(400, `Search for at most ${MAX_QUERY_LENGTH} characters.`);
+  }
+  return cached(key(url, `/api/search?q=${encodeURIComponent(query.toLowerCase())}`, env), false, env, ctx, async () => {
+    const results = await steamClient(env).search(query);
+    return json({ results });
+  });
+}
+
+async function completionTime(
+  appId: string,
+  request: Request,
+  url: URL,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  // Enumerable, and every unseen id spends the IGDB credential.
+  if (!(await withinRate(request, env, "PROFILE"))) {
+    return known(429, "time.tooMany");
+  }
+
+  return cached(key(url, `/api/time/${appId}`, env), false, env, ctx, async () => {
+    const creds = credentials(env);
+    // Inside the producer, so a cache hit skips it. Keys are scoped to the
+    // deployment, so each deploy starts cold and the line is written again.
+    if (!creds) {
+      announceUnconfigured();
+      return json({ completionTime: null });
+    }
+
+    try {
+      const token = await cachedToken(creds, ctx);
+      const lookup = await new IgdbClient(creds.clientId, token).completionTime(Number(appId));
+      // Three different things produce no time; the stage says which.
+      if (lookup.stoppedAt) console.log("igdb completion time", appId, lookup.stoppedAt);
+      return json({ completionTime: lookup.time });
+    } catch (error) {
+      // Not cached, or one failure would hide the game's time for a day.
+      logFailure("igdb completion time failed", error);
+      return json({ completionTime: null }, { headers: { "Cache-Control": "no-store" } });
+    }
+  });
+}
+
+async function gameAchievements(
+  appId: number,
+  request: Request,
+  url: URL,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  const steamId = resolveSteamId(url.searchParams.get("steamid"), env.DEFAULT_STEAM_ID);
+
+  // A personal answer bypasses the cache, so `?steamid=` would otherwise turn
+  // the cache off for four Steam calls a time. Limited on that path only, and
+  // before Steam is reached. A throttle is about the caller, so it is never cached.
+  if (steamId !== null && !(await withinRate(request, env, "PROFILE"))) {
+    return known(429, "profile.tooMany", {
+      "Retry-After": "60",
+      "Cache-Control": "no-store",
+    });
+  }
+
+  return cached(key(url, `/api/game/${appId}`, env), steamId !== null, env, ctx, async () => {
+    try {
+      return json(await steamClient(env).gameAchievements(appId, steamId));
+    } catch (error) {
+      // "Nothing under that id" is stable, so it is cached like an answer.
+      if (unknownGame(error)) {
+        return problem(404, error.message, {
+          "Cache-Control": `public, max-age=${env.CACHE_SECONDS}`,
+        });
+      }
+      throw error;
+    }
+  });
+}
+
+async function howTo(
+  appId: number,
+  rawKey: string,
+  request: Request,
+  url: URL,
+  env: Env,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  // Before validation, so a flooder costs as little as possible.
+  if (!(await withinRate(request, env))) {
+    return known(429, "howto.tooMany", {
+      "Retry-After": "60",
+      "Cache-Control": "no-store",
+    });
+  }
+
+  // The pattern admits `%`, so the key can hold an escape that is not valid UTF-8.
+  let achievementKey: string;
+  try {
+    achievementKey = decodeURIComponent(rawKey);
+  } catch {
+    return problem(400, "That achievement identifier is not valid.");
+  }
+  return cached(
+    key(url, `/api/howto/v${HOWTO_LOGIC_VERSION}/${appId}/${encodeURIComponent(achievementKey)}`, env),
+    false,
+    env,
+    ctx,
+    () => explain(appId, achievementKey, env, ctx),
+  );
 }
