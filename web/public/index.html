@@ -50,13 +50,14 @@
 
       <details class="profile" id="profile">
         <summary>
-          <svg class="profile-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-            <circle cx="12" cy="8" r="4" />
-            <path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7" />
-          </svg>
-          <span data-i18n="profile.title">My profile</span>
+          <span class="cursor" aria-hidden="true"></span>
+          <!-- One of the three shows: no profile, a saved profile without a known name, or its name. -->
+          <span id="profile-anon" data-i18n="profile.title">My profile</span>
+          <span id="profile-player" data-i18n="profile.player" hidden>Player</span>
+          <span class="profile-name" id="profile-name" hidden></span>
         </summary>
-        <div class="profile-body">
+        <div class="profile-body window">
+          <p class="profile-heading pixel-label" data-i18n="profile.heading">Player</p>
           <label for="steamid-input">
             <span data-i18n="profile.prompt">Your Steam profile</span>
             <span class="hint" data-i18n="profile.hint">Stored only in this browser. We use it to mark the achievements you already hold.</span>

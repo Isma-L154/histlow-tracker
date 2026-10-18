@@ -339,14 +339,17 @@ button.ghost {
   flex: none;
 }
 
+/* The top bar's PLAYER entry: a menu item, with the cursor while it is open. */
 .profile summary {
   display: flex;
-  gap: 0.45rem;
+  gap: 0.5rem;
   align-items: center;
-  padding: 0.7rem 0.9rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--panel);
+  min-height: 44px;
+  padding: 0.4rem 0.2rem;
+  color: var(--bright);
+  font-family: var(--pixel);
+  font-size: 0.65rem;
+  text-transform: uppercase;
   cursor: pointer;
   list-style: none;
   user-select: none;
@@ -356,40 +359,43 @@ button.ghost {
   display: none;
 }
 
-.profile summary:hover {
-  border-color: var(--border-strong);
+.profile summary .cursor {
+  visibility: hidden;
 }
 
-.profile[open] summary {
-  border-color: var(--accent);
+.profile summary:hover .cursor,
+.profile summary:focus-visible .cursor,
+.profile[open] summary .cursor {
+  visibility: visible;
 }
 
-.profile-icon {
-  width: 17px;
-  height: 17px;
-  fill: none;
-  stroke: var(--muted);
-  stroke-width: 2;
-  stroke-linecap: round;
+.profile-name {
+  max-width: 14rem;
+  overflow: hidden;
+  color: var(--tier-legendary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-body {
   position: absolute;
   z-index: 10;
-  top: calc(100% + 0.45rem);
+  top: calc(100% + 0.6rem);
   right: 0;
-  width: min(25rem, calc(100vw - 2.5rem));
-  padding: 1rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--panel);
-  box-shadow: var(--shadow);
+  width: min(27rem, calc(100vw - 2.5rem));
+  padding: 1.1rem 1.25rem 1.25rem;
+}
+
+.profile-heading {
+  margin: 0 0 0.9rem;
+  color: var(--bright);
+  font-size: 0.7rem;
 }
 
 .profile-body label {
   display: block;
-  margin-bottom: 0.55rem;
-  font-size: 0.9rem;
+  margin-bottom: 0.75rem;
+  color: var(--bright);
   font-weight: 600;
 }
 
@@ -397,29 +403,86 @@ button.ghost {
   display: block;
   margin-top: 0.25rem;
   color: var(--muted);
-  font-size: 0.8rem;
+  font-size: 0.95rem;
   font-weight: normal;
-  line-height: 1.45;
+  line-height: 1.4;
 }
 
 .profile-row {
   display: flex;
-  gap: 0.4rem;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  align-items: center;
 }
 
 .profile-row input {
-  flex: 1;
+  flex: 1 0 100%;
   min-width: 0;
+  box-shadow: none;
 }
 
-.profile-status {
-  margin: 0.65rem 0 0;
-  color: var(--muted);
-  font-size: 0.82rem;
+/* SAVE and REMOVE are menu items: no box, a cursor on the one in reach. */
+.profile-row button {
+  display: inline-flex;
+  gap: 0.5rem;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.3rem 0;
+  border: 0;
+}
+
+.profile-row button::before {
+  content: "";
+  border-top: 7px solid transparent;
+  border-bottom: 7px solid transparent;
+  border-left: 9px solid transparent;
+}
+
+.profile-row button:hover::before,
+.profile-row button:focus-visible::before {
+  border-left-color: var(--bright);
+}
+
+.profile-row button:disabled {
+  opacity: 0.5;
+}
+
+/* The answer, as a line of dialogue. */
+.profile-status:not(:empty) {
+  margin: 1rem 0 0;
+  padding: 0.6rem 0.8rem;
+  border: 3px solid var(--edge);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.profile-status:empty {
+  margin: 0;
 }
 
 .profile-status.is-error {
+  border-color: var(--danger);
   color: var(--danger);
+}
+
+.profile-help {
+  margin-top: 1rem;
+  color: var(--muted);
+}
+
+.profile-help summary {
+  min-height: 0;
+  padding: 0;
+  color: var(--muted);
+  font-family: var(--read);
+  font-size: 1rem;
+  text-transform: none;
+}
+
+.profile-help ol {
+  margin: 0.5rem 0 0;
+  padding-left: 1.4rem;
 }
 
 /* -- main ---------------------------------------------------------------- */
@@ -1179,8 +1242,8 @@ html {
     padding-block: 1.1rem 1.25rem;
   }
 
-  .profile summary span {
-    display: none;
+  .profile-name {
+    max-width: 9rem;
   }
 
   /* Wrapped, the bar is ~190px: pinned, it would cost a third of a phone screen. */
@@ -1192,7 +1255,7 @@ html {
     top: 0;
   }
 
-  /* The trigger shrinks to its icon, so the panel anchors to the bar instead. */
+  /* The panel is wider than the trigger, so it anchors to the bar instead. */
   .profile {
     position: static;
   }
