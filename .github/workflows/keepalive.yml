@@ -37,6 +37,9 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The one workflow that pushes; the next step needs this token, and runs no third-party code.
+          persist-credentials: true
 
       - name: Commit only if the repository has gone quiet
         env:

@@ -2,12 +2,17 @@ version: 2
 
 # Security alerts arrive without this file; what it adds is routine updates,
 # batched into one pull request a month per ecosystem.
+#
+# Each waits a week after a release is published: long enough for a hijacked
+# release to be caught and pulled first. Security updates do not wait.
 updates:
   # All devDependencies: none of it is bundled into the deployed Worker.
   - package-ecosystem: npm
     directory: /web
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 3
     groups:
       toolchain:
@@ -36,6 +41,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]
@@ -46,6 +53,8 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    cooldown:
+      default-days: 7
     groups:
       dev-tools:
         patterns: ["*"]
