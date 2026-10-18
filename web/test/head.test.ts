@@ -7,17 +7,14 @@
  * and described the generic shell instead.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 import { APP_ID, GAME_NAME, expectBuilt, stubSteam } from "./steam-stub.ts";
 
 const BASE = "https://howtoachieve.cloudils.com";
 
 async function ask(method: string, path: string): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(`${BASE}${path}`, { method }), env, ctx);
-  await waitOnExecutionContext(ctx);
+  const response = await serve(new Request(`${BASE}${path}`, { method }));
   return response;
 }
 
@@ -108,13 +105,9 @@ describe("HEAD", () => {
     // `Response.redirect` produces a null body, and `arrayBuffer()` on one
     // returns zero bytes quite happily, so an unguarded measurement would
     // stamp `Content-Length: 0` on a 301.
-    const ctx = createExecutionContext();
-    const response = await worker.fetch(
+    const response = await serve(
       new Request("https://cazalogros.cloudils.com/game/413150", { method: "HEAD", redirect: "manual" }),
-      env,
-      ctx,
     );
-    await waitOnExecutionContext(ctx);
 
     expect(response.status).toBe(301);
     expect(response.headers.get("Location")).toBe(`${BASE}/game/413150`);

@@ -6,16 +6,13 @@
  * would not have told anyone.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 
 const BASE = "https://example.com";
 
 async function get(path: string, headers: Record<string, string> = {}): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(`${BASE}${path}`, { headers }), env, ctx);
-  await waitOnExecutionContext(ctx);
+  const response = await serve(new Request(`${BASE}${path}`, { headers }));
   return response;
 }
 

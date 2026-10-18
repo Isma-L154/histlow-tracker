@@ -10,9 +10,8 @@
  * the document as it leaves.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 
 const APP = 367520;
 const BASE = "https://howtoachieve.cloudils.com";
@@ -49,9 +48,7 @@ function steam(capsulePresent: boolean) {
 }
 
 async function card(): Promise<Record<string, string>> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(`${BASE}/game/${APP}`), env, ctx);
-  await waitOnExecutionContext(ctx);
+  const response = await serve(new Request(`${BASE}/game/${APP}`));
 
   const html = await response.text();
   const tags: Record<string, string> = {};
@@ -90,9 +87,7 @@ describe("the card a shared game link produces", () => {
     // The shell ships the site's own card. Two `og:image` tags leave the
     // choice to whichever scraper is reading, and they do not agree.
     steam(true);
-    const ctx = createExecutionContext();
-    const response = await worker.fetch(new Request(`${BASE}/game/${APP}`), env, ctx);
-    await waitOnExecutionContext(ctx);
+    const response = await serve(new Request(`${BASE}/game/${APP}`));
 
     const html = await response.text();
     expect([...html.matchAll(/<meta property="og:image" content=/g)]).toHaveLength(1);

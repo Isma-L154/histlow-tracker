@@ -7,17 +7,14 @@
  * URLs for one site means every later decision gets made twice.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 
 const OLD = "https://cazalogros.cloudils.com";
 const NEW = "https://howtoachieve.cloudils.com";
 
 async function get(url: string): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(url, { redirect: "manual" }), env, ctx);
-  await waitOnExecutionContext(ctx);
+  const response = await serve(new Request(url, { redirect: "manual" }));
   return response;
 }
 

@@ -12,16 +12,13 @@
  * import of a stylesheet.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 
 let css: string;
 
 beforeAll(async () => {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request("https://example.com/styles.css"), env, ctx);
-  await waitOnExecutionContext(ctx);
+  const response = await serve(new Request("https://example.com/styles.css"));
   expect(response.status).toBe(200);
   css = await response.text();
 });

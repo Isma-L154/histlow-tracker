@@ -28,7 +28,7 @@
     // pages and redirects the former host, including on paths that match no
     // file - while static files never do. A catch-all with extensions negated,
     // because a list of routes silently missed exactly those fall-through paths.
-    "run_worker_first": ["/*", "!/*.css", "!/*.js", "!/*.png", "!/*.svg", "!/*.ico", "!/*.txt", "!/*.xml"],
+    "run_worker_first": ["/*", "!/*.css", "!/*.js", "!/*.png", "!/*.svg", "!/*.ico", "!/*.txt", "!/*.xml", "!/*.woff2"],
     // The client routes only `/` and `/game/<id>`, both of which exist, so a
     // single-page fallback would only answer a mistyped address with a 200.
     "not_found_handling": "404-page"

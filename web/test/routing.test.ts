@@ -32,7 +32,7 @@ describe("run_worker_first", () => {
   it("keeps static files off the Worker", () => {
     // The bulk of the requests, and none of them can be bookmarked or shared.
     const negated = runWorkerFirst().filter((pattern) => pattern.startsWith("!"));
-    for (const extension of [".css", ".js", ".png"]) {
+    for (const extension of [".css", ".js", ".png", ".woff2"]) {
       expect(negated, `${extension} should be served by the asset runtime`).toContain(`!/*${extension}`);
     }
   });

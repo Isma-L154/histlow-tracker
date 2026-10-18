@@ -6,9 +6,9 @@
  * not against a re-implementation of the regexes.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 import { DICTIONARY } from "../public/i18n.js";
 import { credentials } from "../src/igdb.ts";
 import { storable } from "../src/edge-cache.ts";
@@ -18,9 +18,7 @@ import { SteamError, unknownGame } from "../src/steam.ts";
 const BASE = "https://example.com";
 
 async function get(path: string): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(`${BASE}${path}`), env, ctx);
-  await waitOnExecutionContext(ctx);
+  const response = await serve(new Request(`${BASE}${path}`));
   return response;
 }
 
