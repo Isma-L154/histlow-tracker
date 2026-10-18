@@ -22,7 +22,6 @@ import { gamePage, translated } from "./pages.ts";
 import { explain } from "./explain.ts";
 
 /** Release cards on the home page: one desktop row, keeping the search box on top. */
-const UPCOMING_COUNT = 6;
 
 const COMPLETION_TIME_ROUTE = /^\/api\/time\/(\d{1,10})$/;
 const GAME_ROUTE = /^\/api\/game\/(\d{1,10})$/;
@@ -141,7 +140,7 @@ async function route(
     // Tells an operator why the IGDB sections are missing: two booleans named for
     // what a reader would miss, and nothing about the credentials themselves.
     const igdb = credentials(env) !== null;
-    return json({ ok: true, version: VERSION, features: { completionTime: igdb, upcoming: igdb } });
+    return json({ ok: true, version: VERSION, features: { completionTime: igdb } });
   }
 
   if (url.pathname === "/api/steamid") {
@@ -185,29 +184,6 @@ async function route(
     return cached(key(url, `/api/search?q=${encodeURIComponent(query.toLowerCase())}`, env), false, env, ctx, async () => {
       const results = await steamClient(env).search(query);
       return json({ results });
-    });
-  }
-
-  if (url.pathname === "/api/upcoming") {
-    // One list for everybody, so the cache alone protects it.
-    return cached(key(url, "/api/upcoming", env), false, env, ctx, async () => {
-      const creds = credentials(env);
-      if (!creds) {
-        announceUnconfigured();
-        return json({ releases: [] });
-      }
-
-      try {
-        const token = await cachedToken(creds, ctx);
-        const lookup = await new IgdbClient(creds.clientId, token).upcoming(UPCOMING_COUNT, Date.now());
-        // Which stage came up empty: the difference between a diagnosis and an afternoon.
-        if (lookup.stoppedAt) console.log("igdb upcoming", lookup.stoppedAt);
-        return json({ releases: lookup.releases }, { headers: { "Cache-Control": "public, max-age=21600" } });
-      } catch (error) {
-        // An outage must not be cached as though IGDB had answered.
-        logFailure("igdb upcoming failed", error);
-        return json({ releases: [] }, { headers: { "Cache-Control": "no-store" } });
-      }
     });
   }
 

@@ -30,12 +30,16 @@
 
 ## What it does
 
-- **Ranked by true rarity** — every achievement, rarest first, by Steam's global unlock percentage.
+- **Ranked by true rarity** — every achievement, rarest first, by Steam's global unlock percentage,
+  grouped into five loot tiers: legendary (held by under 5%), epic, rare, uncommon and common.
 - **How each one is earned** — community guides summarised into steps, every source linked. When the
   daily AI allowance runs out, the guide passages themselves are the answer.
 - **Difficulty 1–10 and time to 100%** — the score comes from the rarity distribution; the time from
   IGDB, and is simply absent without IGDB credentials.
-- **What you are missing** — paste a Steam profile and the list splits into held and missing.
+- **What you are missing** — paste a Steam profile and the list splits into held and missing, with your
+  progress and the rarest achievement you hold.
+- **A pixel-art home page** — a party of tribute heroes walks through five rotating worlds, drawn in a
+  canvas by code; it stays still when the system asks for reduced motion.
 - **English content, interface in English or Spanish** — translated on the server, so the first paint
   is already in your language.
 
@@ -189,6 +193,10 @@ setup, iOS Shortcut included, is in [`docs/SETUP.md`](docs/SETUP.md).
 ## Licence
 
 [MIT](LICENSE). Achievement data, artwork and guide text belong to Steam and the players who wrote them;
-nothing is stored, only fetched, briefly cached and attributed. The banner uses the Inter typeface under
-the [SIL Open Font License 1.1](docs/brand/Inter-OFL.txt); regenerate it from
+nothing is stored, only fetched, briefly cached and attributed. The home page's characters and worlds
+are original pixel art drawn as a tribute to the games they evoke, not official material; the
+[Terms](https://howtoachieve.cloudils.com/terms) say so and how to ask for their removal. The site uses
+Press Start 2P and Pixelify Sans, self-hosted under the SIL Open Font License 1.1
+([licences](web/public/fonts/)). The banner uses the Inter typeface under the
+[same licence](docs/brand/Inter-OFL.txt); regenerate it from
 [`docs/brand/banner.html`](docs/brand/banner.html), which carries the command.

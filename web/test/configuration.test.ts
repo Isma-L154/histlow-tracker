@@ -41,14 +41,14 @@ describe("/api/health", () => {
 
     expect(body.ok).toBe(true);
     // Named for what a reader would miss, not for the credential behind it.
-    expect(body.features).toMatchObject({ completionTime: false, upcoming: false });
+    expect(body.features).toEqual({ completionTime: false });
   });
 
   it("reports them available once the credentials are set", async () => {
     const body = (await (await get("/api/health", WITH)).json()) as {
       features: Record<string, boolean>;
     };
-    expect(body.features).toMatchObject({ completionTime: true, upcoming: true });
+    expect(body.features).toEqual({ completionTime: true });
   });
 
   it("still answers the question it answered before", async () => {
@@ -61,8 +61,7 @@ describe("/api/health", () => {
 describe("a completion time that nobody configured", () => {
   it("says so, on the first request that wanted one", async () => {
     // Must be the first test here to reach an IGDB route: `announced` is module
-    // state, and the pool gives each file its own copy. `/api/upcoming` needs
-    // its own file for the same reason, and has one.
+    // state, and the pool gives each file its own copy.
     const said = vi.spyOn(console, "log").mockImplementation(() => {});
 
     await get("/api/time/413150", WITHOUT);
@@ -76,7 +75,7 @@ describe("a completion time that nobody configured", () => {
     const said = vi.spyOn(console, "log").mockImplementation(() => {});
 
     await get("/api/time/292030", WITHOUT);
-    await get("/api/upcoming", WITHOUT);
+    await get("/api/time/620", WITHOUT);
 
     expect(said.mock.calls.flat().join(" ")).not.toContain("not configured");
   });
@@ -84,5 +83,11 @@ describe("a completion time that nobody configured", () => {
   it("leaves the answer the page reads exactly as it was", async () => {
     const body = await (await get("/api/time/413150", WITHOUT)).json();
     expect(body).toEqual({ completionTime: null });
+  });
+});
+
+describe("upcoming releases", () => {
+  it("are no longer served: the home page stopped showing them", async () => {
+    expect((await get("/api/upcoming", WITH)).status).toBe(404);
   });
 });

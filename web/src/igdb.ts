@@ -1,6 +1,5 @@
 /**
- * IGDB, for what Steam does not publish: how long a game takes, and what is
- * coming out next.
+ * IGDB, for what Steam does not publish: how long a game takes.
  *
  * HowLongToBeat disallows automated retrieval; IGDB is official and free. It
  * authenticates through Twitch, and having no credentials is an ordinary state:
@@ -22,17 +21,6 @@ const EXPIRY_MARGIN_SECONDS = 300;
  */
 const EXTERNAL_CATEGORY_STEAM = 1;
 
-/**
- * Platforms matched by name rather than by id, since an id that silently starts
- * meaning another platform is the failure this module avoids. Patterns, so a
- * console revision with a suffixed name still matches.
- */
-const PLATFORM_IS_PC = /microsoft windows/i;
-const PLATFORM_IS_CONSOLE = /^(playstation 5|xbox series)/i;
-
-/** Where IGDB serves cover art. It also needs an entry in the page's CSP. */
-const IMAGE_BASE = "https://images.igdb.com/igdb/image/upload";
-
 /** A lookup's result, and where it stopped if it found nothing, so the logs can tell why. */
 interface Lookup {
   time: CompletionTime | null;
@@ -44,18 +32,6 @@ interface CompletionTime {
   normally: number | null;
   /** Seconds to finish everything, which is what this site is about. */
   completely: number | null;
-}
-
-interface UpcomingLookup {
-  releases: UpcomingRelease[];
-  stoppedAt: string | null;
-}
-
-interface UpcomingRelease {
-  name: string;
-  /** Unix seconds. Only ever a date IGDB marked as exact. */
-  releasedAt: number;
-  coverUrl: string | null;
 }
 
 interface IgdbCredentials {
@@ -88,7 +64,7 @@ let announced = false;
 export function announceUnconfigured(): void {
   if (announced) return;
   announced = true;
-  console.log("igdb not configured: no Twitch credentials, so completion times and upcoming releases are absent");
+  console.log("igdb not configured: no Twitch credentials, so completion times are absent");
 }
 
 /** A client for one request cycle. The token is handed in so the caller can cache it. */
@@ -122,182 +98,6 @@ export class IgdbClient {
       return { time: null, stoppedAt: "times present but empty" };
     }
     return { time, stoppedAt: null };
-  }
-
-  /**
-   * The most anticipated games with an exact release date ahead.
-   *
-   * Ranked across all of IGDB first, by `hypes` on `games`, and dated only
-   * afterwards: ranking the nearest release dates instead would let a wave of
-   * small titles bury the one game everybody is waiting for. `first_release_date`
-   * is set even for a placeholder quarter, so exact dates come from
-   * `release_dates`. Candidates are over-fetched because many have no exact date
-   * yet, and some turn out to reach only PC.
-   */
-  async upcoming(limit: number, now: number): Promise<UpcomingLookup> {
-    const format = await this.exactDateFormat();
-    const exact = format.id;
-    // Nothing rather than a countdown to a guessed date. The formats offered
-    // travel with the reason, so the next attempt reads rather than guesses.
-    if (exact === null) {
-      return {
-        releases: [],
-        stoppedAt: `no full-date format among [${format.saw.join(", ") || "nothing returned"}]`,
-      };
-    }
-
-    const platforms = await this.majorPlatforms();
-    // Without console ids a PC-only indie cannot be told from an anticipated game.
-    if (platforms.consoles.length === 0) {
-      return {
-        releases: [],
-        stoppedAt:
-          `no console platform among ${platforms.total}` +
-          ` (matched [${platforms.saw.join(", ") || "nothing"}])`,
-      };
-    }
-    const wanted = platforms.all.join(",");
-
-    const seconds = Math.floor(now / 1000);
-    const candidates = await this.query<{
-      id?: number;
-      name?: string;
-      cover?: { image_id?: string };
-      platforms?: unknown;
-    }>(
-      "games",
-      `fields id, name, cover.image_id, platforms;` +
-        ` where first_release_date > ${seconds} & platforms = (${wanted}) & hypes != null;` +
-        ` sort hypes desc; limit ${Math.min(500, Math.max(50, limit * 25))};`,
-    );
-
-    // By id rather than name: a demo and its game can share a title.
-    const games = new Map<number, { name: string; coverUrl: string | null }>();
-    const consoles = new Set(platforms.consoles);
-    for (const row of candidates) {
-      if (row === null || typeof row !== "object") continue;
-      const id = identifier(row.id);
-      if (id === null || !row.name) continue;
-      // Here rather than in the query: Apicalypse cannot ask whether a game
-      // touches a console while PC stays in the set its release is dated by.
-      if (!reachesConsole(row.platforms, consoles)) continue;
-      const imageId = row.cover?.image_id;
-      games.set(id, {
-        name: row.name,
-        coverUrl: imageId ? `${IMAGE_BASE}/t_cover_big/${imageId}.jpg` : null,
-      });
-    }
-    if (games.size === 0) {
-      return { releases: [], stoppedAt: `no candidate games (${candidates.length} rows from games)` };
-    }
-
-    const dates = await this.query<{ game?: number; date?: number; date_format?: number }>(
-      "release_dates",
-      `fields game, date, date_format;` +
-        ` where game = (${[...games.keys()].join(",")}) & platform = (${wanted})` +
-        ` & date > ${seconds} & date_format = ${exact};` +
-        ` sort date asc; limit 200;`,
-    );
-
-    // Dates arrive earliest first, so the first one seen per game is the one kept.
-    const earliest = new Map<number, number>();
-    for (const row of dates) {
-      if (row === null || typeof row !== "object") continue;
-      const game = identifier(row.game);
-      const date = positive(row.date);
-      if (game === null || date === null || earliest.has(game)) continue;
-      earliest.set(game, date);
-    }
-
-    // `games` kept the ranked order of `candidates`.
-    const releases: UpcomingRelease[] = [];
-    for (const [id, game] of games) {
-      const releasedAt = earliest.get(id);
-      if (releasedAt === undefined) continue;
-      releases.push({ ...game, releasedAt });
-      if (releases.length === limit) break;
-    }
-
-    return {
-      releases,
-      stoppedAt:
-        releases.length > 0
-          ? null
-          : `${games.size} candidates, ${dates.length} date rows, none exact and ahead`,
-    };
-  }
-
-  /**
-   * The platform ids behind the names. The whole table is read and matched in
-   * memory, because a string filter in the query has already been wrong here once.
-   */
-  private async majorPlatforms(): Promise<{
-    all: number[];
-    consoles: number[];
-    saw: string[];
-    total: number;
-  }> {
-    try {
-      const rows = await this.query<{ id?: number; name?: string }>(
-        "platforms",
-        `fields id, name; limit 500;`,
-      );
-
-      const saw: string[] = [];
-      const consoles: number[] = [];
-      let pc: number | null = null;
-      for (const row of rows) {
-        if (row === null || typeof row !== "object" || typeof row.name !== "string") continue;
-        const id = identifier(row.id);
-        if (id === null) continue;
-        const name = row.name.trim();
-        if (pc === null && PLATFORM_IS_PC.test(name)) {
-          pc = id;
-          saw.push(name);
-        } else if (PLATFORM_IS_CONSOLE.test(name)) {
-          consoles.push(id);
-          saw.push(name);
-        }
-      }
-
-      // PC stays in the queries, so a multiplatform game is found and dated there
-      // too; only `consoles` decides whether a game qualifies.
-      return {
-        all: pc === null ? consoles : [pc, ...consoles],
-        consoles,
-        saw,
-        total: rows.length,
-      };
-    } catch {
-      return { all: [], consoles: [], saw: [], total: 0 };
-    }
-  }
-
-  /**
-   * The `date_formats` row for a full day-month-year date: the one whose format
-   * ends in a day. Filtering on the string in the query returned nothing in
-   * production, and the table has about seven rows.
-   */
-  private async exactDateFormat(): Promise<{ id: number | null; saw: string[] }> {
-    try {
-      const rows = await this.query<{ id?: number; format?: string }>(
-        "date_formats",
-        `fields id, format; limit 50;`,
-      );
-
-      const saw: string[] = [];
-      let id: number | null = null;
-      for (const row of rows) {
-        if (row === null || typeof row !== "object" || typeof row.format !== "string") continue;
-        saw.push(row.format);
-        if (id === null && /dd$/i.test(row.format.replace(/[^A-Za-z]/g, ""))) {
-          id = identifier(row.id);
-        }
-      }
-      return { id, saw };
-    } catch {
-      return { id: null, saw: [] };
-    }
   }
 
   /**
@@ -418,29 +218,12 @@ export async function cachedToken(creds: IgdbCredentials, ctx: ExecutionContext)
   return token.value;
 }
 
-/**
- * Whether a platform list reaches a console. A console, not two platforms: a
- * first-party exclusive ships on one and is as anticipated as anything. IGDB
- * expands `platforms` to ids or to objects depending on the query, so both are read.
- */
-function reachesConsole(platforms: unknown, consoles: Set<number>): boolean {
-  if (!Array.isArray(platforms)) return false;
-  return platforms.some((entry) => {
-    const raw = entry !== null && typeof entry === "object" ? (entry as { id?: unknown }).id : entry;
-    const id = identifier(raw);
-    return id !== null && consoles.has(id);
-  });
-}
-
 /** A finite number above zero, or null. IGDB uses both 0 and absence for "none". */
 function positive(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-/**
- * An identifier, or null. Zero is valid here: reference tables can number from
- * it, and rejecting it once emptied the upcoming list silently.
- */
+/** An identifier, or null. Zero is valid here: reference tables can number from it. */
 function identifier(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
