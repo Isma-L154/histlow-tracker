@@ -23,18 +23,15 @@
  */
 :root {
   --bg: #000;
-  --bg-glow: #000;
   --panel: #000;
   --panel-2: #0d0d0d;
   --panel-hover: #1a1a1a;
   --border: #3a3a3a;
-  --border-strong: #f2ece2;
   --edge: #f2ece2;
   --text: #f2ece2;
   --bright: #fff;
   --muted: #bdbdbd;
   --accent: #fff;
-  --accent-deep: #bdbdbd;
   --unlocked: #5fd06a;
   --danger: #ff8a80;
 
@@ -44,10 +41,6 @@
   --tier-rare: #4fa3f7;
   --tier-uncommon: #5fd06a;
   --tier-common: #a8a8a8;
-  --rarity-legendary: var(--tier-legendary);
-  --rarity-rare: var(--tier-epic);
-  --rarity-uncommon: var(--tier-rare);
-  --rarity-common: var(--tier-common);
 
   --pixel: "Press Start 2P", ui-monospace, monospace;
   --read: "Pixelify Sans", system-ui, sans-serif;
@@ -903,7 +896,7 @@ html {
 }
 
 /* Menu tabs: the active one gets the full edge and the cursor. */
-.chip {
+.tab {
   display: inline-flex;
   gap: 0.5rem;
   align-items: center;
@@ -916,19 +909,19 @@ html {
   text-transform: uppercase;
 }
 
-.chip.is-active {
+.tab.is-active {
   border-color: var(--edge);
   color: var(--bright);
 }
 
-.chip.is-active::before {
+.tab.is-active::before {
   content: "";
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
   border-left: 8px solid var(--bright);
 }
 
-.chip-count {
+.tab-count {
   color: var(--tier-legendary);
 }
 

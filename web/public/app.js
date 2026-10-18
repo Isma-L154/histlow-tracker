@@ -234,7 +234,7 @@ function renderGame(game) {
 
   // Missing and unlocked only mean something once we know what the player already has.
   for (const tab of el.filters.querySelectorAll(".needs-profile")) tab.hidden = game.unlockedCount === null;
-  setActiveChip("all");
+  setActiveTab("all");
 
   el.countAll.textContent = String(game.total);
   el.countMissing.textContent = String(game.achievements.filter((a) => a.unlocked === false).length);
@@ -703,10 +703,10 @@ trackTopbarHeight();
 // -- filtering --------------------------------------------------------------
 
 el.filters.addEventListener("click", (event) => {
-  const chip = event.target.closest("[data-filter]");
-  if (!chip) return;
-  state.filter = chip.dataset.filter;
-  setActiveChip(state.filter);
+  const tab = event.target.closest("[data-filter]");
+  if (!tab) return;
+  state.filter = tab.dataset.filter;
+  setActiveTab(state.filter);
   applyFilter();
 });
 
@@ -718,9 +718,9 @@ function matchesFilter(unlocked) {
   );
 }
 
-function setActiveChip(filter) {
-  for (const chip of el.filters.querySelectorAll("[data-filter]")) {
-    chip.classList.toggle("is-active", chip.dataset.filter === filter);
+function setActiveTab(filter) {
+  for (const tab of el.filters.querySelectorAll("[data-filter]")) {
+    tab.classList.toggle("is-active", tab.dataset.filter === filter);
   }
 }
 

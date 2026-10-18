@@ -30,9 +30,9 @@ describe("adversarial input", () => {
   });
 
   it("void element attribute marker", () => {
-    const out = localise('<img data-i18n-alt="game.cover" alt="cover" src="x.png">', "es");
+    const out = localise('<img data-i18n-alt="profile.prompt" alt="profile" src="x.png">', "es");
     expect(out).toContain('src="x.png"');
-    expect(out).toMatch(/alt="Portada/);
+    expect(out).toMatch(/alt="Tu perfil/);
   });
 
   it("two attribute markers on one tag", () => {
