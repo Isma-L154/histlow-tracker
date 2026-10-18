@@ -78,6 +78,8 @@ const state = {
   profileName: readStoredName(),
   game: null,
   filter: "all",
+  // Tiers opened past their first few rows, kept while the game is redrawn in another language.
+  expanded: new Set(),
 };
 
 /** In-flight requests, aborted when a newer one supersedes them. */
@@ -212,6 +214,7 @@ async function loadGame(appId) {
     const game = await api(`/api/game/${appId}${query}`, gameRequest.signal);
     state.game = game;
     state.filter = "all";
+    state.expanded.clear();
     renderGame(game);
     setStatus("");
   } catch (error) {
@@ -234,7 +237,7 @@ function renderGame(game) {
 
   // Missing and unlocked only mean something once we know what the player already has.
   for (const tab of el.filters.querySelectorAll(".needs-profile")) tab.hidden = game.unlockedCount === null;
-  setActiveTab("all");
+  setActiveTab(state.filter);
 
   el.countAll.textContent = String(game.total);
   el.countMissing.textContent = String(game.achievements.filter((a) => a.unlocked === false).length);
@@ -385,6 +388,7 @@ function renderTier(appId, group) {
   const section = document.createElement("section");
   section.className = `tier rarity-${group.tier}`;
   section.dataset.tier = group.tier;
+  if (state.expanded.has(group.tier)) section.dataset.expanded = "true";
 
   const head = document.createElement("h3");
   head.className = "tier-head";
@@ -409,6 +413,7 @@ function renderTier(appId, group) {
   more.type = "button";
   more.className = "tier-more";
   more.addEventListener("click", () => {
+    state.expanded.add(group.tier);
     section.dataset.expanded = "true";
     applyFilter();
   });
@@ -599,7 +604,9 @@ function renderHowTo(body, data, appId, achievement) {
       note(
         data.passages.length > 0
           ? say("howto.notExplained")
-          : say("howto.noneExplain", { count: data.guidesSearched }),
+          : data.guidesSearched > 0
+            ? say("howto.noneExplain", { count: data.guidesSearched })
+            : say("howto.noGuides"),
       ),
       searchLink(appId, achievement.name),
     );

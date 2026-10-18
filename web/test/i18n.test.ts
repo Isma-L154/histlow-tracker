@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+import app from "../public/app.js?raw";
 import index from "../public/index.html?raw";
 import { DICTIONARY, LANGUAGES, fromAcceptLanguage, pickLanguage, t } from "../public/i18n.js";
 
@@ -61,6 +62,20 @@ describe("the markup and the dictionary agree", () => {
     // Guards the guard: if the attribute were ever renamed, every assertion
     // above would pass against an empty list.
     expect(keysUsedInMarkup().length).toBeGreaterThan(10);
+  });
+});
+
+describe("the script and the dictionary agree", () => {
+  /** Every key the client asks for by name; keys it builds from a template are out of reach. */
+  const keysUsedInScript = () => [...new Set([...app.matchAll(/\bsay\("([^"]+)"/g)].map((m) => m[1]!))];
+
+  it("asks for no key that does not exist", () => {
+    const missing = keysUsedInScript().filter((key) => !(key in DICTIONARY.en));
+    expect(missing, "app.js asks for keys the dictionary does not have").toEqual([]);
+  });
+
+  it("asks for keys at all", () => {
+    expect(keysUsedInScript().length).toBeGreaterThan(10);
   });
 });
 
