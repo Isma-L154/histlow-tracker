@@ -896,7 +896,7 @@ html {
 }
 
 /* Menu tabs: the active one gets the full edge and the cursor. */
-.chip {
+.tab {
   display: inline-flex;
   gap: 0.5rem;
   align-items: center;
@@ -909,19 +909,19 @@ html {
   text-transform: uppercase;
 }
 
-.chip.is-active {
+.tab.is-active {
   border-color: var(--edge);
   color: var(--bright);
 }
 
-.chip.is-active::before {
+.tab.is-active::before {
   content: "";
   border-top: 6px solid transparent;
   border-bottom: 6px solid transparent;
   border-left: 8px solid var(--bright);
 }
 
-.chip-count {
+.tab-count {
   color: var(--tier-legendary);
 }
 
