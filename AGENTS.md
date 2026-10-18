@@ -63,6 +63,9 @@ Spanish.
   - `cached()` keys on a normalised path and ignores the query string, so a
     cache-busting parameter does nothing.
   - `console.log` is swallowed in the workerd test pool. Assert instead.
+  - Working copies on Windows are CRLF. A scripted edit that runs a regex over
+    them can leave lone carriage returns, and git then stores the file as
+    binary (`git ls-files --eol` shows `i/-text`). Normalise to LF first.
 - More detail, with the measurements behind each decision, in
   `docs/superpowers/specs/`.
 
