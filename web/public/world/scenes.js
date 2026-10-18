@@ -3,9 +3,13 @@
  * evoke. Each `build(width, height)` pre-renders its tiling layers once for that
  * size and returns a function that paints a frame at a given time in seconds.
  *
- * Coordinates were drawn on a 300-pixel-wide stage; `at()` maps them onto the
- * real width so a landmark keeps its place on a phone and on a wide screen.
+ * Coordinates were drawn on a 300-pixel-wide, SCENE_HEIGHT-tall stage; `at()`
+ * maps them onto the real width so a landmark keeps its place on a phone and on
+ * a wide screen. A taller stage keeps the scene on its floor and opens more sky
+ * above it, so y = 0 is the top of the drawn scene, and the sky reaches `top`.
  */
+
+export const SCENE_HEIGHT = 150;
 
 /** Seeded, so a world looks the same on every visit. */
 function rng(seed) {
@@ -17,14 +21,30 @@ function rng(seed) {
   };
 }
 
+/** `count` colours evenly along the given ones; the given ones come back unchanged when the counts match. */
+export function shades(colours, count) {
+  if (count <= colours.length) return colours;
+  const rgb = colours.map((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)));
+  return Array.from({ length: count }, (_, i) => {
+    const p = (i * (colours.length - 1)) / (count - 1);
+    const k = Math.min(Math.floor(p), colours.length - 2);
+    const f = p - k;
+    const [r, g, b] = rgb[k].map((c, j) => Math.round(c + (rgb[k + 1][j] - c) * f));
+    return `rgb(${r}, ${g}, ${b})`;
+  });
+}
+
 /** Drawing helpers bound to one stage size. */
 function stage(W, H) {
-  const GY = H - 22;
+  const SH = SCENE_HEIGHT;
+  const DY = H - SH;
+  const stageTop = -DY;
+  const GY = SH - 22;
   const at = (x) => Math.round((x * W) / 300);
 
   function px(g, x, y, colour, w = 1, h = 1) {
     g.fillStyle = colour;
-    g.fillRect(Math.round(x), Math.round(y), w, h);
+    g.fillRect(Math.round(x), Math.round(y) + DY, w, h);
   }
 
   function layer(draw) {
@@ -46,11 +66,21 @@ function stage(W, H) {
     for (const dx of [-W, 0, W]) fn(dx);
   }
 
+  /**
+   * Stepped gradient bands with a dithered seam. A sky that starts at 0 reaches
+   * the top of the stage, however tall, in more bands of the same height,
+   * shaded between the given colours.
+   */
   function bands(g, colours, y0, y1) {
     const h = (y1 - y0) / colours.length;
+    if (y0 === 0) {
+      y0 = stageTop;
+      colours = shades(colours, Math.round((y1 - y0) / h));
+    }
+    const step = (y1 - y0) / colours.length;
     colours.forEach((colour, i) => {
-      const top = Math.round(y0 + i * h);
-      const bottom = Math.round(y0 + (i + 1) * h);
+      const top = Math.round(y0 + i * step);
+      const bottom = Math.round(y0 + (i + 1) * step);
       px(g, 0, top, colour, W, bottom - top);
       if (i < colours.length - 1) for (let x = 0; x < W; x += 2) px(g, x, bottom, colour);
     });
@@ -70,10 +100,10 @@ function stage(W, H) {
       ys[x] = ys[x] * (1 - t) + ys[0] * t;
     }
     return ys.map((v, x) => {
-      const top = Math.round(v);
-      if (fromTop) px(g, x, 0, colour, 1, top);
-      else px(g, x, top, colour, 1, H - top);
-      return top;
+      const edge = Math.round(v);
+      if (fromTop) px(g, x, stageTop, colour, 1, edge);
+      else px(g, x, edge, colour, 1, SH - edge);
+      return edge;
     });
   }
 
@@ -85,7 +115,7 @@ function stage(W, H) {
         base + a1 * Math.sin((2 * Math.PI * f1 * x) / W + phase) + a2 * Math.sin((2 * Math.PI * f2 * x) / W + phase * 2),
       );
       ys.push(y);
-      px(g, x, y, colour, 1, H - y);
+      px(g, x, y, colour, 1, SH - y);
     }
     return ys;
   }
@@ -93,9 +123,9 @@ function stage(W, H) {
   function ground(g, r, top, top2, body, speck) {
     px(g, 0, GY, top, W, 2);
     px(g, 0, GY + 2, top2, W, 1);
-    px(g, 0, GY + 3, body, W, H - GY - 3);
+    px(g, 0, GY + 3, body, W, SH - GY - 3);
     const specks = Math.round((160 * W) / 300);
-    for (let i = 0; i < specks; i++) px(g, Math.floor(r() * W), GY + 4 + Math.floor(r() * (H - GY - 4)), speck);
+    for (let i = 0; i < specks; i++) px(g, Math.floor(r() * W), GY + 4 + Math.floor(r() * (SH - GY - 4)), speck);
   }
 
   function disc(g, cx, cy, radius, colour) {
@@ -113,7 +143,7 @@ function stage(W, H) {
       const y0 = r() * H;
       const speed = 0.6 + r() * 0.8;
       const x = (((x0 + seconds * vx * speed) % W) + W) % W;
-      const y = (((y0 + seconds * vy * speed) % H) + H) % H;
+      const y = ((((y0 + seconds * vy * speed) % H) + H) % H) + stageTop;
       draw(Math.round(x), Math.round(y), i);
     }
   }
@@ -123,17 +153,17 @@ function stage(W, H) {
     ctx.fillStyle = colour;
     for (let y = -radius; y <= radius; y++) {
       const w = Math.round(Math.sqrt(radius * radius - y * y));
-      ctx.fillRect(cx - w, cy + y, w * 2, 1);
+      ctx.fillRect(cx - w, cy + y + DY, w * 2, 1);
     }
   }
 
-  return { GY, at, px, layer, blit, wrap, bands, ridge, hills, ground, disc, particles, glow };
+  return { SH, top: stageTop, GY, at, px, layer, blit, wrap, bands, ridge, hills, ground, disc, particles, glow };
 }
 
 function cityOfTears(W, H) {
   const s = stage(W, H);
   const r = rng(3);
-  const sky = s.layer((g) => s.bands(g, ["#05081a", "#0a1330", "#101d45", "#17295a"], 0, H));
+  const sky = s.layer((g) => s.bands(g, ["#05081a", "#0a1330", "#101d45", "#17295a"], 0, s.SH));
   const towers = s.layer((g) => {
     let x = 0;
     while (x < W) {
@@ -337,9 +367,9 @@ function olympus(W, H) {
   const floor = s.layer((g) => {
     s.px(g, 0, s.GY, "#f2ede1", W, 2);
     s.px(g, 0, s.GY + 2, "#c9a94a", W, 1);
-    s.px(g, 0, s.GY + 3, "#e2dac8", W, H - s.GY - 3);
-    for (let x = 0; x < W; x += 16) s.px(g, x, s.GY + 3, "#c7bda8", 1, H - s.GY - 3);
-    for (let y = s.GY + 10; y < H; y += 8) s.px(g, 0, y, "#c7bda8", W, 1);
+    s.px(g, 0, s.GY + 3, "#e2dac8", W, s.SH - s.GY - 3);
+    for (let x = 0; x < W; x += 16) s.px(g, x, s.GY + 3, "#c7bda8", 1, s.SH - s.GY - 3);
+    for (let y = s.GY + 10; y < s.SH; y += 8) s.px(g, 0, y, "#c7bda8", W, 1);
   });
 
   return (ctx, seconds) => {
@@ -354,7 +384,7 @@ function olympus(W, H) {
       ctx.fillRect(0, 0, W, H);
       const bolt = rng(Math.floor(seconds / 5) + 3);
       let x = s.at(40) + bolt() * s.at(220);
-      let y = 0;
+      let y = s.top;
       while (y < 74) {
         const nx = x + (bolt() - 0.5) * 14;
         const ny = y + 6 + bolt() * 6;

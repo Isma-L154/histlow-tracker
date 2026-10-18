@@ -5,18 +5,25 @@
  */
 
 import { HEROES, drawSprite, heroRows } from "./sprites.js";
-import { WORLDS } from "./scenes.js";
+import { SCENE_HEIGHT, WORLDS } from "./scenes.js";
 
-const HEIGHT = 150;
-const GROUND = HEIGHT - 22;
+const GROUND = SCENE_HEIGHT - 22;
 const ROTATE_SECONDS = 9;
 const FADE_SECONDS = 0.6;
 const FADE_STEPS = 4;
 
-/** The largest whole-number scale from 2 to 4 that keeps the stage at least 300 pixels wide. */
-export function pickScale(containerWidth) {
+/**
+ * The largest whole-number scale from 2 to 4 that keeps the stage at least 300
+ * pixels wide, and the stage size that covers the container at that scale. The
+ * width decides the scale; the height only adds sky.
+ */
+export function pickScale(containerWidth, containerHeight) {
   const scale = Math.min(4, Math.max(2, Math.floor(containerWidth / 300)));
-  return { scale, width: Math.ceil(containerWidth / scale) };
+  return {
+    scale,
+    width: Math.ceil(containerWidth / scale),
+    height: Math.max(SCENE_HEIGHT, Math.ceil(containerHeight / scale)),
+  };
 }
 
 /**
@@ -53,14 +60,15 @@ function partyPositions(width) {
   return HEROES.map((_hero, i) => start + i * spacing);
 }
 
-function drawParty(ctx, width, seconds) {
+function drawParty(ctx, { width, height }, seconds) {
   const step = Math.floor(seconds * 6) % 2;
+  const ground = GROUND + height - SCENE_HEIGHT;
   partyPositions(width).forEach((x, i) => {
     const frame = (step + i) % 2;
     const rows = heroRows(HEROES[i], frame);
     ctx.fillStyle = "rgba(0, 0, 0, 0.35)";
-    ctx.fillRect(x + 3, GROUND + 1, 10, 1);
-    drawSprite(ctx, rows, HEROES[i].palette, x, GROUND - rows.length + frame);
+    ctx.fillRect(x + 3, ground + 1, 10, 1);
+    drawSprite(ctx, rows, HEROES[i].palette, x, ground - rows.length + frame);
   });
 }
 
@@ -84,7 +92,7 @@ export function mountWorld(canvas, dots) {
   markDots();
 
   // Built on first use: five worlds' layers at once would delay the first frame.
-  const painter = (i) => (painters[i] ??= WORLDS[i].build(size.width, HEIGHT));
+  const painter = (i) => (painters[i] ??= WORLDS[i].build(size.width, size.height));
 
   function draw(seconds) {
     shownSince ??= seconds;
@@ -103,25 +111,25 @@ export function mountWorld(canvas, dots) {
     }
 
     painter(current)(ctx, seconds);
-    drawParty(ctx, size.width, seconds);
+    drawParty(ctx, size, seconds);
     if (alpha > 0) {
       ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`;
-      ctx.fillRect(0, 0, size.width, HEIGHT);
+      ctx.fillRect(0, 0, size.width, size.height);
     }
   }
 
   const loop = createLoop({ draw, schedule: requestAnimationFrame, reducedMotion });
 
   function resize() {
-    const container = canvas.parentElement.clientWidth;
-    const next = pickScale(container);
-    if (size && next.width === size.width && next.scale === size.scale) return;
+    const { clientWidth: container, clientHeight } = canvas.parentElement;
+    const next = pickScale(container, clientHeight);
+    if (size && next.width === size.width && next.height === size.height && next.scale === size.scale) return;
     size = next;
     painters = [];
     canvas.width = size.width;
-    canvas.height = HEIGHT;
+    canvas.height = size.height;
     canvas.style.width = `${size.width * size.scale}px`;
-    canvas.style.height = `${HEIGHT * size.scale}px`;
+    canvas.style.height = `${size.height * size.scale}px`;
     // Wider than its container by under one scaled pixel: centre the overhang.
     canvas.style.marginLeft = `${Math.floor((container - size.width * size.scale) / 2)}px`;
     ctx.imageSmoothingEnabled = false;
