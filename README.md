@@ -197,6 +197,6 @@ nothing is stored, only fetched, briefly cached and attributed. The home page's 
 are original pixel art drawn as a tribute to the games they evoke, not official material; the
 [Terms](https://howtoachieve.cloudils.com/terms) say so and how to ask for their removal. The site uses
 Press Start 2P and Pixelify Sans, self-hosted under the SIL Open Font License 1.1
-([licences](web/public/fonts/)). The banner uses the Inter typeface under the
-[same licence](docs/brand/Inter-OFL.txt); regenerate it from
-[`docs/brand/banner.html`](docs/brand/banner.html), which carries the command.
+([licences](web/public/fonts/)), and so does the banner over a frame of the home page's
+desert; regenerate it from [`docs/brand/banner.html`](docs/brand/banner.html), which carries
+the command.
