@@ -6,7 +6,7 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { groupByTier, heldCells, lootTier } from "../public/tiers.js";
+import { VISIBLE_PER_TIER, groupByTier, heldCells, lockedIcon, lootTier } from "../public/tiers.js";
 
 describe("lootTier", () => {
   it.each([
@@ -78,5 +78,21 @@ describe("heldCells", () => {
     [null, 0],
   ] as const)("fills %s%% as %i of 20 cells", (percent, cells) => {
     expect(heldCells(percent)).toBe(cells);
+  });
+});
+
+describe("lockedIcon", () => {
+  it("uses Steam's locked art when there is some", () => {
+    expect(lockedIcon({ icon: "a", iconLocked: "b" })).toEqual({ src: "b", greyed: false });
+  });
+
+  it("greys the normal art when Steam sends no locked art", () => {
+    expect(lockedIcon({ icon: "a", iconLocked: "" })).toEqual({ src: "a", greyed: true });
+  });
+});
+
+describe("VISIBLE_PER_TIER", () => {
+  it("shows the first five of each tier before the rest folds away", () => {
+    expect(VISIBLE_PER_TIER).toBe(5);
   });
 });

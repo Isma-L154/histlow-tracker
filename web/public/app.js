@@ -9,7 +9,8 @@ import { handledInPage } from "./nav.js";
 import { DICTIONARY, pickLanguage, t, translate } from "./i18n.js";
 import { completionDifficulty } from "./difficulty.js";
 import { mountWorld } from "./world/engine.js";
-import { lootTier } from "./tiers.js";
+import { VISIBLE_PER_TIER, groupByTier, heldCells, lockedIcon, lootTier } from "./tiers.js";
+import { HEROES, drawSprite } from "./world/sprites.js";
 import { bannerSources, rarestHeld } from "./art.js";
 
 const SITE_TITLE = "HowToAchieve";
@@ -57,6 +58,9 @@ const el = {
   difficultyTier: document.getElementById("difficulty-tier"),
   links: document.getElementById("game-links"),
   filters: document.getElementById("filters"),
+  countAll: document.getElementById("count-all"),
+  countMissing: document.getElementById("count-missing"),
+  countUnlocked: document.getElementById("count-unlocked"),
   visibleCount: document.getElementById("visible-count"),
   list: document.getElementById("achievements"),
 };
@@ -221,14 +225,15 @@ function renderGame(game) {
   renderLinks(game);
   renderCompletionTime(game.appId);
 
-  // The filters only mean something once we know what the player already has.
-  el.filters.hidden = game.unlockedCount === null;
+  // Missing and unlocked only mean something once we know what the player already has.
+  for (const tab of el.filters.querySelectorAll(".needs-profile")) tab.hidden = game.unlockedCount === null;
   setActiveChip("all");
 
-  el.list.replaceChildren();
-  for (const achievement of game.achievements) {
-    el.list.append(renderAchievement(game.appId, achievement));
-  }
+  el.countAll.textContent = String(game.total);
+  el.countMissing.textContent = String(game.achievements.filter((a) => a.unlocked === false).length);
+  el.countUnlocked.textContent = String(game.achievements.filter((a) => a.unlocked === true).length);
+
+  el.list.replaceChildren(...groupByTier(game.achievements).map((group) => renderTier(game.appId, group)));
   applyFilter();
 
   el.game.hidden = false;
@@ -368,16 +373,41 @@ function renderLinks(game) {
   }
 }
 
-/** A small line-art glyph from a single path, drawn inline to satisfy the CSP. */
-function icon(path) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("aria-hidden", "true");
-  svg.setAttribute("focusable", "false");
-  const shape = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  shape.setAttribute("d", path);
-  svg.append(shape);
-  return svg;
+/** One loot tier: its header, its achievements, and a button for the ones folded away. */
+function renderTier(appId, group) {
+  const section = document.createElement("section");
+  section.className = `tier rarity-${group.tier}`;
+  section.dataset.tier = group.tier;
+
+  const head = document.createElement("h3");
+  head.className = "tier-head";
+  const gem = document.createElement("span");
+  gem.className = "tier-gem";
+  gem.setAttribute("aria-hidden", "true");
+  const name = document.createElement("span");
+  name.className = "tier-name";
+  name.textContent = say(`rarity.${group.tier}`);
+  const range = document.createElement("span");
+  range.className = "tier-range";
+  range.textContent = say(`rarity.range.${group.tier}`);
+  const count = document.createElement("span");
+  count.className = "tier-count";
+  head.append(gem, name, range, count);
+
+  const list = document.createElement("ol");
+  list.className = "achievements";
+  list.append(...group.items.map((achievement) => renderAchievement(appId, achievement)));
+
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "tier-more";
+  more.addEventListener("click", () => {
+    section.dataset.expanded = "true";
+    applyFilter();
+  });
+
+  section.append(head, list, more);
+  return section;
 }
 
 function renderAchievement(appId, achievement) {
@@ -396,56 +426,77 @@ function renderAchievement(appId, achievement) {
   summary.className = "achievement-summary";
   summary.setAttribute("aria-expanded", "false");
 
+  const cursor = document.createElement("span");
+  cursor.className = "cursor";
+  cursor.setAttribute("aria-hidden", "true");
+
+  const slot = document.createElement("span");
+  slot.className = `slot ${tier.className}`;
+  const art = achievement.unlocked === false ? lockedIcon(achievement) : { src: achievement.icon, greyed: false };
+  if (art.greyed) slot.classList.add("is-greyed");
   const icon = document.createElement("img");
   icon.className = "achievement-icon";
-  const art = artwork(
-    achievement.unlocked === false ? achievement.iconLocked || achievement.icon : achievement.icon,
-  );
-  if (art) icon.src = art;
+  const source = artwork(art.src);
+  if (source) icon.src = source;
   icon.alt = "";
   icon.loading = "lazy";
   icon.referrerPolicy = "no-referrer";
-  // Some art is no longer served, and an empty tile beats a broken-image box.
+  // Some art is no longer served, and an empty slot beats a broken-image box.
   icon.addEventListener("error", () => icon.removeAttribute("src"), { once: true });
+  slot.append(icon);
 
+  const text = document.createElement("span");
+  text.className = "achievement-text";
   const name = document.createElement("span");
   name.className = "achievement-name";
   name.textContent = achievement.name;
+  const description = document.createElement("span");
+  description.className = "achievement-description";
+  // Hidden achievements come back with an empty description from Steam.
+  description.textContent = achievement.description || say("achievement.hidden");
+  if (!achievement.description) description.classList.add("is-hidden");
+  text.append(name, description);
 
-  summary.append(icon, name);
+  summary.append(cursor, slot, text);
 
-  if (achievement.unlocked === true) {
-    const badge = document.createElement("span");
-    badge.className = "badge";
-    badge.textContent = achievement.unlockedAt
-      ? `✓ ${formatDate(achievement.unlockedAt)}`
-      : `✓ ${say("achievement.unlocked")}`;
-    summary.append(badge);
+  if (achievement.unlocked !== null) {
+    const status = document.createElement("span");
+    status.className = "achievement-state";
+    status.textContent = say(achievement.unlocked ? "achievement.state.unlocked" : "achievement.state.locked");
+    if (achievement.unlocked && achievement.unlockedAt) {
+      const when = document.createElement("small");
+      when.textContent = formatDate(achievement.unlockedAt);
+      status.append(when);
+    }
+    summary.append(status);
   }
 
-  summary.append(rarityMeter(achievement.globalPercent, tier), chevron());
+  summary.append(heldMeter(achievement.globalPercent, tier));
 
   const detail = document.createElement("div");
   detail.className = "achievement-detail";
   detail.hidden = true;
 
-  const description = document.createElement("p");
-  description.className = "achievement-description";
-  // Hidden achievements come back with an empty description from Steam.
-  description.textContent =
-    achievement.description || say("achievement.hidden");
-  detail.append(description);
-
+  // An RPG dialogue: the black mage from the home page narrates the steps.
   const panel = document.createElement("div");
-  panel.className = "howto";
+  panel.className = "howto window";
   panel.hidden = true;
+  const speech = document.createElement("div");
+  speech.className = "howto-speech";
+  const speaker = document.createElement("p");
+  speaker.className = "howto-speaker pixel-label";
+  speaker.textContent = say("howto.narrator");
+  const body = document.createElement("div");
+  body.className = "howto-body";
+  speech.append(speaker, body);
+  panel.append(narratorPortrait(), speech);
 
   const reveal = document.createElement("button");
   reveal.type = "button";
   reveal.className = "howto-button";
   reveal.textContent = say("achievement.reveal");
   reveal.setAttribute("aria-expanded", "false");
-  reveal.addEventListener("click", () => toggleHowTo(reveal, panel, appId, achievement));
+  reveal.addEventListener("click", () => toggleHowTo(reveal, panel, body, appId, achievement));
 
   // A model call, so it stays a deliberate second action.
   detail.append(reveal, panel);
@@ -461,53 +512,54 @@ function renderAchievement(appId, achievement) {
 }
 
 /**
- * The rarity figure, with a bar for scanning. The bar is decorative: the
- * percentage carries the same value, so colour is never the only signal.
+ * How many players hold it, as a figure and a 20-cell bar. The bar is
+ * decorative: the percentage carries the same value, so colour is never the only signal.
  */
-function rarityMeter(percent, tier) {
+function heldMeter(percent, tier) {
   const wrap = document.createElement("span");
-  wrap.className = "rarity";
+  wrap.className = `held ${tier.className}`;
 
-  const bar = document.createElement("span");
-  bar.className = `rarity-bar ${tier.className}`;
-  bar.setAttribute("aria-hidden", "true");
-  const fill = document.createElement("span");
-  fill.style.width = `${Math.round(rarityWeight(percent) * 100)}%`;
-  bar.append(fill);
-
+  const label = document.createElement("span");
+  label.className = "held-label pixel-label";
+  const caption = document.createElement("span");
+  caption.textContent = say("rarity.heldBy");
   const value = document.createElement("span");
-  value.className = `rarity-percent ${tier.className}`;
+  value.className = "held-value";
   value.textContent = percent === null ? "—" : `${percent.toFixed(1)}%`;
   value.title = `${tier.label}${percent === null ? "" : ` · ${say("rarity.players", { percent: percent.toFixed(1) })}`}`;
+  label.append(caption, value);
 
-  wrap.append(bar, value);
+  const cells = document.createElement("span");
+  cells.className = "cells";
+  cells.setAttribute("aria-hidden", "true");
+  const filled = heldCells(percent);
+  cells.append(
+    ...Array.from({ length: 20 }, (_, i) => {
+      const cell = document.createElement("i");
+      if (i < filled) cell.className = "is-on";
+      return cell;
+    }),
+  );
+
+  wrap.append(label, cells);
   return wrap;
 }
 
-/**
- * How full the bar is, from 0 (everyone has it) to 1 (almost nobody does).
- * Logarithmic, so achievements a few percent apart near the bottom separate.
- */
-function rarityWeight(percent) {
-  if (percent === null || percent <= 0) return 0;
-  const clamped = Math.min(100, Math.max(0.1, percent));
-  return Math.min(1, Math.log10(100 / clamped) / 3);
-}
-
-function chevron() {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("class", "chevron");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", "M6 9l6 6 6-6");
-  svg.append(path);
-  return svg;
+/** The black mage's head and shoulders, drawn at its own 16 pixels and scaled up by CSS. */
+function narratorPortrait() {
+  const canvas = document.createElement("canvas");
+  canvas.className = "narrator";
+  canvas.width = 16;
+  canvas.height = 16;
+  canvas.setAttribute("aria-hidden", "true");
+  const mage = HEROES[1];
+  drawSprite(canvas.getContext("2d"), mage.body, mage.palette, 0, 0);
+  return canvas;
 }
 
 // -- how an achievement is earned -------------------------------------------
 
-async function toggleHowTo(button, panel, appId, achievement) {
+async function toggleHowTo(button, panel, body, appId, achievement) {
   const open = button.getAttribute("aria-expanded") === "true";
   if (open) {
     panel.hidden = true;
@@ -519,26 +571,24 @@ async function toggleHowTo(button, panel, appId, achievement) {
   button.setAttribute("aria-expanded", "true");
   if (panel.dataset.loaded === "true") return;
 
-  panel.replaceChildren(
-    note(say("howto.searching")),
-  );
+  body.replaceChildren(note(say("howto.searching")));
 
   try {
     const data = await api(`/api/howto/${appId}/${encodeURIComponent(achievement.key)}`);
     panel.dataset.loaded = "true";
-    renderHowTo(panel, data, appId, achievement);
+    renderHowTo(body, data, appId, achievement);
   } catch (error) {
     if (error.name === "AbortError") return;
     // Not marked as loaded, so reopening retries what was usually a transient failure.
-    panel.replaceChildren(note(error.message));
+    body.replaceChildren(note(error.message));
   }
 }
 
-function renderHowTo(panel, data, appId, achievement) {
-  panel.replaceChildren();
+function renderHowTo(body, data, appId, achievement) {
+  body.replaceChildren();
 
   if (!data.answered) {
-    panel.append(
+    body.append(
       note(
         data.passages.length > 0
           ? say("howto.notExplained")
@@ -549,7 +599,7 @@ function renderHowTo(panel, data, appId, achievement) {
     return;
   }
 
-  panel.append(renderSteps(data.steps));
+  body.append(renderSteps(data.steps));
 
   if (data.passages.length > 0) {
     const sources = document.createElement("p");
@@ -563,14 +613,14 @@ function renderHowTo(panel, data, appId, achievement) {
       if (seen.size > 1) sources.append(document.createTextNode(" · "));
       sources.append(link(`${passage.guideTitle} — ${passage.author}`, passage.guideUrl));
     }
-    panel.append(sources);
+    body.append(sources);
   }
 
   const disclaimer = document.createElement("p");
   disclaimer.className = "howto-disclaimer";
   disclaimer.textContent =
     say("howto.disclaimer");
-  panel.append(disclaimer);
+  body.append(disclaimer);
 }
 
 /** The model's lead sentence and dashed steps; anything else becomes a paragraph. */
@@ -613,7 +663,6 @@ function searchLink(appId, achievementName) {
       "&browsefilter=toprated&l=english",
   );
   anchor.className = "steam-link";
-  anchor.prepend(icon("M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14M20 20l-3.5-3.5"));
   return anchor;
 }
 
@@ -654,6 +703,14 @@ el.filters.addEventListener("click", (event) => {
   applyFilter();
 });
 
+function matchesFilter(unlocked) {
+  return (
+    state.filter === "all" ||
+    (state.filter === "unlocked" && unlocked === "true") ||
+    (state.filter === "missing" && unlocked === "false")
+  );
+}
+
 function setActiveChip(filter) {
   for (const chip of el.filters.querySelectorAll("[data-filter]")) {
     chip.classList.toggle("is-active", chip.dataset.filter === filter);
@@ -662,14 +719,22 @@ function setActiveChip(filter) {
 
 function applyFilter() {
   let visible = 0;
-  for (const item of el.list.children) {
-    const unlocked = item.dataset.unlocked;
-    const show =
-      state.filter === "all" ||
-      (state.filter === "unlocked" && unlocked === "true") ||
-      (state.filter === "missing" && unlocked === "false");
-    item.hidden = !show;
-    if (show) visible += 1;
+  for (const section of el.list.children) {
+    const items = [...section.querySelectorAll(".achievement")];
+    const matching = items.filter((item) => matchesFilter(item.dataset.unlocked));
+    const expanded = section.dataset.expanded === "true";
+    for (const item of items) item.hidden = true;
+    matching.forEach((item, i) => {
+      item.hidden = !expanded && i >= VISIBLE_PER_TIER;
+    });
+
+    const folded = expanded ? 0 : Math.max(0, matching.length - VISIBLE_PER_TIER);
+    section.hidden = matching.length === 0;
+    section.querySelector(".tier-count").textContent = String(matching.length);
+    const more = section.querySelector(".tier-more");
+    more.hidden = folded === 0;
+    more.textContent = say("tier.more", { count: folded });
+    visible += matching.length;
   }
 
   const total = state.game?.total ?? 0;

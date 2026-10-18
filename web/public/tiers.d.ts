@@ -11,3 +11,7 @@ export declare function groupByTier<T extends { globalPercent: number | null }>(
 ): { tier: Tier; items: T[] }[];
 
 export declare function heldCells(percent: number | null): number;
+
+export declare const VISIBLE_PER_TIER: 5;
+
+export declare function lockedIcon(achievement: { icon: string; iconLocked: string }): { src: string; greyed: boolean };
