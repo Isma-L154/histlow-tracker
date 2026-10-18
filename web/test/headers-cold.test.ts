@@ -8,8 +8,7 @@
 
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 import { policyFrom, secured } from "../src/headers.ts";
 
 /** An env whose asset binding does what the real one is assumed never to do. */
@@ -126,15 +125,12 @@ describe("the funnel", () => {
     // log, and nothing in the response saying what happened. Asserted here
     // because a request that reaches the funnel at all cannot reach this any
     // other way: the binding has to be the thing that breaks.
-    const ctx = createExecutionContext();
-    const response = await worker.fetch(
+    const response = await serve(
       new Request("https://howtoachieve.cloudils.com/privacy"),
       broken(() => {
         throw new Error("asset binding gone");
       }),
-      ctx,
     );
-    await waitOnExecutionContext(ctx);
 
     expect(response.status).toBe(500);
   });

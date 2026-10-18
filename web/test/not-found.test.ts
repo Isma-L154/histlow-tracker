@@ -6,17 +6,14 @@
  * indexed the home page under every address a scraper invented.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 import { DICTIONARY } from "../public/i18n.js";
 
 const BASE = "https://howtoachieve.cloudils.com";
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(`${BASE}${path}`, init), env, ctx);
-  await waitOnExecutionContext(ctx);
+  const response = await serve(new Request(`${BASE}${path}`, init));
   return response;
 }
 

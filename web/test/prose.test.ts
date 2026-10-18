@@ -22,9 +22,8 @@
  * say plainly that they are heuristics.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 import { DICTIONARY, LANGUAGES } from "../public/i18n.js";
 import client from "../public/app.js?raw";
 
@@ -47,13 +46,9 @@ const CHEAP = "/api/howto/367520/%FF%FE";
 
 async function throttled(ip: string): Promise<Response> {
   for (let i = 0; i < 40; i++) {
-    const ctx = createExecutionContext();
-    const response = await worker.fetch(
+    const response = await serve(
       new Request(`${BASE}${CHEAP}`, { headers: { "CF-Connecting-IP": ip } }),
-      env,
-      ctx,
     );
-    await waitOnExecutionContext(ctx);
     if (response.status === 429) return response;
   }
   throw new Error("the limit never tripped, so this test proves nothing");
@@ -124,13 +119,9 @@ describe("a throttled completion-time request", () => {
     // pointing it back at the wrong one passed everything.
     let limited: Response | null = null;
     for (let i = 0; i < 20 && !limited; i++) {
-      const ctx = createExecutionContext();
-      const response = await worker.fetch(
+      const response = await serve(
         new Request(`${BASE}/api/time/${367520 + i}`, { headers: { "CF-Connecting-IP": "203.0.113.60" } }),
-        env,
-        ctx,
       );
-      await waitOnExecutionContext(ctx);
       if (response.status === 429) limited = response;
     }
 
@@ -265,9 +256,7 @@ describe("an address with nothing at it", () => {
     // Steam, or that id does not exist." A Spanish reader who mistyped an API
     // path was told something about their game. Both keys are real, so the key
     // check above is happy either way - only asking the route can tell.
-    const ctx = createExecutionContext();
-    const response = await worker.fetch(new Request(`${BASE}/api/nothing-here`), env, ctx);
-    await waitOnExecutionContext(ctx);
+    const response = await serve(new Request(`${BASE}/api/nothing-here`));
 
     expect(response.status).toBe(404);
     const body = (await response.json()) as { reason?: string };

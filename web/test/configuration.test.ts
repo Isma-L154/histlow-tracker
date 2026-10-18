@@ -9,9 +9,9 @@
  * said once, where somebody asking the question would look.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:test";
 import { describe, expect, it, vi, afterEach } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 
 const BASE = "https://howtoachieve.cloudils.com";
 
@@ -22,9 +22,7 @@ const WITHOUT = env;
 const WITH = { ...env, TWITCH_CLIENT_ID: "id", TWITCH_CLIENT_SECRET: "secret" };
 
 async function get(path: string, using: Env): Promise<Response> {
-  const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(`${BASE}${path}`), using, ctx);
-  await waitOnExecutionContext(ctx);
+  const response = await serve(new Request(`${BASE}${path}`), using);
   return response;
 }
 

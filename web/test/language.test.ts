@@ -7,9 +7,8 @@
  * spelled out rather than assumed.
  */
 
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import worker from "../src/index.ts";
+import { serve } from "./serve.ts";
 import shell from "../public/index.html?raw";
 import { localise, pageCacheKey } from "../src/language.ts";
 import { describeGame } from "../src/preview.ts";
@@ -129,15 +128,11 @@ describe("two languages, one URL", () => {
   afterEach(() => vi.restoreAllMocks());
 
   async function fetchIn(language: string, path: string) {
-    const ctx = createExecutionContext();
-    const response = await worker.fetch(
+    const response = await serve(
       new Request(`https://howtoachieve.cloudils.com${path}`, {
         headers: { "Accept-Language": language },
       }),
-      env,
-      ctx,
     );
-    await waitOnExecutionContext(ctx);
     return response;
   }
 
@@ -239,13 +234,9 @@ describe("translating a document keeps its security headers", () => {
     // inheritance is what keeps `_headers` applied, and it is the sort of thing
     // a later refactor drops without noticing - #58 is open about exactly this
     // class of loss on Worker-built responses.
-    const ctx = createExecutionContext();
-    const response = await worker.fetch(
+    const response = await serve(
       new Request(`https://howtoachieve.cloudils.com${path}`, { headers: { "Accept-Language": "es-ES" } }),
-      env,
-      ctx,
     );
-    await waitOnExecutionContext(ctx);
 
     for (const header of [
       "Content-Security-Policy",

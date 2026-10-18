@@ -523,6 +523,12 @@ function renderAchievement(appId, achievement) {
   return item;
 }
 
+/** The loot tier of a share of players, named in the reader's language. */
+function rarityTier(percent) {
+  const tier = lootTier(percent);
+  return { tier, label: say(`rarity.${tier}`), className: `rarity-${tier}` };
+}
+
 /**
  * How many players hold it, as a figure and a 20-cell bar. The bar is
  * decorative: the percentage carries the same value, so colour is never the only signal.
@@ -686,26 +692,6 @@ function note(message) {
   paragraph.textContent = message;
   return paragraph;
 }
-
-/** The loot tier of a share of players, named in the reader's language. */
-function rarityTier(percent) {
-  const tier = lootTier(percent);
-  return { tier, label: say(`rarity.${tier}`), className: `rarity-${tier}` };
-}
-
-/** Publishes the top bar's height, which wraps on narrow screens, so the toolbar can stick beneath it. */
-function trackTopbarHeight() {
-  const bar = document.querySelector(".topbar");
-  if (!bar) return;
-  const publish = () => {
-    document.documentElement.style.setProperty("--topbar-height", `${bar.offsetHeight}px`);
-  };
-  publish();
-  if ("ResizeObserver" in window) new ResizeObserver(publish).observe(bar);
-  else window.addEventListener("resize", publish);
-}
-
-trackTopbarHeight();
 
 // -- filtering --------------------------------------------------------------
 
@@ -943,6 +929,19 @@ function formatDate(iso) {
     : date.toLocaleDateString(state.language, { year: "numeric", month: "short", day: "numeric" });
 }
 
+/**
+ * Publishes the top bar's height, which wraps on narrow screens, so the game's
+ * toolbar can stick beneath it and the home scene can fill the window below it.
+ */
+function trackTopbarHeight() {
+  const bar = document.querySelector(".topbar");
+  const publish = () => {
+    document.documentElement.style.setProperty("--topbar-height", `${bar.offsetHeight}px`);
+  };
+  publish();
+  new ResizeObserver(publish).observe(bar);
+}
+
 // -- routing ----------------------------------------------------------------
 
 /** Where the search form sits in the top bar, so it can go back after the home page borrows it. */
@@ -1031,5 +1030,6 @@ if (state.steamId) {
   setProfileStatus(say("profile.saved"));
 }
 renderProfileLabel();
+trackTopbarHeight();
 route();
 mountWorld(el.world, el.worldDots);
