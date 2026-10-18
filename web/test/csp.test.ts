@@ -30,4 +30,9 @@ describe("the content security policy", () => {
   it("lets the site load its own fonts", () => {
     expect(directives().get("font-src")).toEqual(["'self'"]);
   });
+
+  it("no longer lets the browser load IGDB images", () => {
+    // The covers only fed the upcoming-releases section, which is gone.
+    expect(directives().get("img-src")).not.toContain("https://images.igdb.com");
+  });
 });
