@@ -122,6 +122,7 @@ export const DICTIONARY = {
     "howto.searching": "Searching community guides… the first lookup for each game takes a few seconds.",
     "howto.notExplained": "The guides that mention this achievement do not explain how to earn it.",
     "howto.noneExplain": "None of the {count} guides checked explains this achievement. Perhaps nobody has written it up yet.",
+    "howto.noGuides": "This game has no community guides yet, so nothing explains this achievement.",
     "howto.sources": "Written from: ",
     "howto.disclaimer":
       "Automatic summary of guides written by other players. If something looks wrong, the link goes to the original.",
@@ -237,6 +238,7 @@ export const DICTIONARY = {
     "howto.notExplained": "Las guías que mencionan este logro no explican cómo conseguirlo.",
     "howto.noneExplain":
       "Ninguna de las {count} guías revisadas explica este logro. Puede que nadie lo haya escrito todavía.",
+    "howto.noGuides": "Este juego todavía no tiene guías de la comunidad, así que nada explica este logro.",
     "howto.sources": "Escrito a partir de: ",
     "howto.disclaimer":
       "Resumen automático de guías escritas por otros jugadores. Si algo no cuadra, el enlace lleva al original.",
