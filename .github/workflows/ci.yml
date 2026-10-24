@@ -97,3 +97,9 @@ jobs:
       - name: Test
         working-directory: web
         run: npm test
+
+      # The bundle deploy-web.yml uploads, built without contacting Cloudflare:
+      # a wrangler or esbuild update that breaks it fails here, before the merge.
+      - name: Bundle the Worker
+        working-directory: web
+        run: npx wrangler deploy --dry-run --outdir "$RUNNER_TEMP/bundle"
