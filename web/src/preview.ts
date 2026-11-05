@@ -5,46 +5,7 @@
 
 import type { GameAchievements } from "./steam.ts";
 import type { Art } from "./art.ts";
-
-/**
- * Escapes text for a double-quoted attribute. Game titles come from Steam and are
- * untrusted, and this is the only place the project builds HTML by hand.
- */
-function attribute(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-/** The document's title element, which holds text rather than an attribute. */
-function text(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-interface Rewrite {
-  html: string;
-  /** Tags the shell no longer contains, so an edited shell cannot fall back silently. */
-  missed: string[];
-}
-
-/**
- * Replaces `pattern` with `tag`, taking the replacement literally.
- *
- * A string replacement reads `$&`, `` $` ``, `$'` and `$1` as instructions, and
- * `attribute()` cannot prevent it: its own `&amp;` supplies the `&` that turns a
- * `$` in a game title into `$&`. A replacer function's result is never scanned.
- */
-function put(into: Rewrite, name: string, pattern: RegExp, tag: string): Rewrite {
-  if (!pattern.test(into.html)) {
-    into.missed.push(name);
-    return into;
-  }
-  into.html = into.html.replace(pattern, () => tag);
-  return into;
-}
+import { escapeAttribute as attribute, escapeText as text, put, type Rewrite } from "./html.ts";
 
 /**
  * Rewrites the shell's metadata to describe one game. Replaces rather than
@@ -66,6 +27,17 @@ export function describeGame(
     `<meta property="og:url" content="${attribute(url)}" />`);
 
   if (!game) return out;
+
+  // `<` is escaped inside the JSON, so a name holding `</script>` cannot end the block.
+  const data = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "VideoGame",
+    name: game.name,
+    url,
+    ...(art ? { image: art.url } : {}),
+  }).replace(/</g, "\\u003c");
+  put(out, "structured data", /<script type="application\/ld\+json">[\s\S]*?<\/script>/,
+    `<script type="application/ld+json">${data}</script>`);
 
   const title = `${game.name} — achievements and how to earn them`;
   const description =

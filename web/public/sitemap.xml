@@ -2,39 +2,40 @@
 <!--
   The home page plus the games it links to, and nothing further.
 
-  Game pages are real paths now, so they can be listed at all - but a crawler
-  only reaches what something links to, and the home page links to these four.
-  Listing Steam's whole catalogue would be inventing URLs nobody can arrive
-  at, and spending the Steam key's quota having them crawled.
+  A crawler only reaches what something links to. The home page links to
+  these games, and each game page links to the others under "More games";
+  test/shell.test.ts keeps this list and those links the same set. Listing
+  Steam's whole catalogue would be inventing URLs nobody can arrive at, and
+  spending the Steam key's quota having them crawled.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://howtoachieve.cloudils.com/</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
     <loc>https://howtoachieve.cloudils.com/game/367520</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://howtoachieve.cloudils.com/game/1245620</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://howtoachieve.cloudils.com/game/782330</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
     <loc>https://howtoachieve.cloudils.com/game/1145360</loc>
-    <lastmod>2026-08-22</lastmod>
+    <lastmod>2026-11-04</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>

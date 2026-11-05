@@ -166,8 +166,10 @@ The seven controls are defined in global rule 10. In this project:
    code 1.
 4. **Sanitize before storage — implemented where it applies.** There is no
    database to parameterise and no upload to inspect. Output is escaped per
-   destination: link previews escape every value from Steam
-   (`web/src/preview.ts`), translations are escaped as they enter the shell
+   destination through `web/src/html.ts`: link previews and server-rendered
+   achievements escape every value from Steam (`web/src/preview.ts`,
+   `web/src/game-body.ts`), JSON-LD escapes `<` so a name cannot close its
+   script, and translations are escaped as they enter the shell
    (`web/src/language.ts`). No file path is built from user input in either
    project.
 5. **Rate limiting — implemented on the Worker.** Per caller, by IP since the
