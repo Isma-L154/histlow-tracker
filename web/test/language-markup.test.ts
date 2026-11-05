@@ -11,7 +11,6 @@
 import { describe, expect, it } from "vitest";
 import { localise } from "../src/language.ts";
 import { DICTIONARY } from "../public/i18n.js";
-import shell from "../public/index.html?raw";
 
 describe("adversarial input", () => {
   it.each([
@@ -64,19 +63,20 @@ describe("adversarial input", () => {
 });
 
 /**
- * The assumption that makes the rest of this safe.
- *
- * These patterns do not know about `<script>` or `<style>`, so a marker written
- * inside one - in a string, or a comment - would be rewritten as though it were
- * markup. There is no inline script or style in the shell, and the CSP forbids
- * inline script anyway, so this cannot happen today. Pinning it means the day
- * someone adds one, this says so rather than the page quietly breaking.
+ * These patterns know nothing of JavaScript or CSS, so a marker written inside
+ * a script or a style - in a string, or a comment - would be rewritten as
+ * though it were markup. The shell carries a JSON-LD block, so they skip both.
  */
-describe("the shell has no inline script or style for the patterns to walk into", () => {
-  it.each([
-    ["script", /<script(?![^>]*\ssrc=)[^>]*>[\s\S]*?<\/script>/i],
-    ["style", /<style[^>]*>[\s\S]*?<\/style>/i],
-  ])("contains no inline %s", (_name, pattern) => {
-    expect(pattern.test(shell), "add script/style skipping to localise first").toBe(false);
+describe("script and style content is not markup", () => {
+  it.each(["script", "style"])("leaves a marker inside a %s alone", (tag) => {
+    const block = `<${tag}>"<span data-i18n="footer.terms">Terms</span>"</${tag}>`;
+    expect(localise(`<p data-i18n="footer.privacy">Privacy</p>${block}`, "es")).toBe(
+      `<p data-i18n="footer.privacy">${DICTIONARY.es["footer.privacy"]}</p>${block}`,
+    );
+  });
+
+  it("still translates what follows the block", () => {
+    const out = localise('<script type="application/ld+json">{}</script><p data-i18n="footer.terms">Terms</p>', "es");
+    expect(out).toContain(DICTIONARY.es["footer.terms"]);
   });
 });
