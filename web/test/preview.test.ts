@@ -171,6 +171,39 @@ describe("describeGame", () => {
     });
   });
 
+  describe("structured data", () => {
+    function graphs(html: string): unknown[] {
+      return [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+        .map((match) => JSON.parse(match[1]!));
+    }
+
+    it("describes the home page as the site", () => {
+      const [data] = graphs(shell) as [{ "@graph": { "@type": string }[] }];
+      expect(data["@graph"].map((node) => node["@type"])).toEqual(["WebSite", "WebApplication"]);
+    });
+
+    it("describes a game page as the game, in place of the site", () => {
+      const all = graphs(described(game()));
+      expect(all).toEqual([{
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        name: "Hollow Knight",
+        url: PAGE,
+        image: game().headerImage,
+      }]);
+    });
+
+    it("leaves the image out when the game has no art", () => {
+      expect(graphs(described(game({ headerImage: null })))[0]).not.toHaveProperty("image");
+    });
+
+    it("cannot be closed early by a game's name", () => {
+      const html = described(game({ name: "</script><script>alert(1)</script>" }));
+      expect(html).not.toContain("<script>alert(1)");
+      expect((graphs(html)[0] as { name: string }).name).toBe("</script><script>alert(1)</script>");
+    });
+  });
+
   it("leaves the page body alone", () => {
     // Only <head> is being rewritten. A pattern loose enough to reach the body
     // would take the brand link with it, and `app.js` looks that up by class.

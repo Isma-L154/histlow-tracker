@@ -69,6 +69,7 @@ const el = {
   countUnlocked: document.getElementById("count-unlocked"),
   visibleCount: document.getElementById("visible-count"),
   list: document.getElementById("achievements"),
+  moreGames: document.querySelectorAll(".more-games [data-appid]"),
 };
 
 const state = {
@@ -205,8 +206,14 @@ async function loadGame(appId) {
   gameRequest?.abort();
   gameRequest = new AbortController();
 
-  setStatus(say("status.loading"));
-  el.game.hidden = true;
+  // The Worker drew this game already, so it stays on screen while the reader's copy loads.
+  const prerendered = el.game.dataset.prerendered === String(appId);
+  delete el.game.dataset.prerendered;
+
+  if (!prerendered) {
+    setStatus(say("status.loading"));
+    el.game.hidden = true;
+  }
   showHero(false);
 
   const query = state.steamId ? `?steamid=${encodeURIComponent(state.steamId)}` : "";
@@ -220,7 +227,9 @@ async function loadGame(appId) {
   } catch (error) {
     if (error.name === "AbortError") return;
     state.game = null;
-    showError(error.message);
+    // What the Worker drew is still right, only without the reader's progress.
+    if (prerendered) flagError(error.message);
+    else showError(error.message);
   }
 }
 
@@ -245,6 +254,8 @@ function renderGame(game) {
 
   el.list.replaceChildren(...groupByTier(game.achievements).map((group) => renderTier(game.appId, group)));
   applyFilter();
+
+  for (const other of el.moreGames) other.parentElement.hidden = other.dataset.appid === String(game.appId);
 
   el.game.hidden = false;
 }
@@ -893,10 +904,14 @@ function setStatus(message) {
   el.status.hidden = message === "";
 }
 
-function showError(message) {
+function flagError(message) {
   el.status.textContent = message;
   el.status.classList.add("is-error");
   el.status.hidden = false;
+}
+
+function showError(message) {
+  flagError(message);
   el.game.hidden = true;
   // The hero gives a dead link somewhere to go.
   showHero(true);
@@ -962,6 +977,7 @@ function showHero(visible) {
 /** Goes to a game in place. A real path, not a fragment, so the server can describe it when shared. */
 function goToGame(appId) {
   history.pushState({ appId }, "", `/game/${appId}`);
+  scrollTo(0, 0);
   route();
 }
 
@@ -995,9 +1011,12 @@ function route() {
 window.addEventListener("popstate", route);
 window.addEventListener("hashchange", route);
 
-el.hero.addEventListener("click", (event) => {
-  const example = event.target.closest("[data-appid]");
-  if (example) goToGame(Number(example.dataset.appid));
+// Real links, so crawlers follow them and a modified click opens a tab; a plain one is routed in place.
+document.addEventListener("click", (event) => {
+  const example = event.target.closest("a[data-appid]");
+  if (!example || !handledInPage(event)) return;
+  event.preventDefault();
+  goToGame(Number(example.dataset.appid));
 });
 
 el.language.addEventListener("click", (event) => {

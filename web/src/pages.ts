@@ -6,6 +6,7 @@
 import { known, logFailure } from "./http.ts";
 import { steamClient, unknownGame, type GameAchievements } from "./steam.ts";
 import { describeGame } from "./preview.ts";
+import { prerenderGame } from "./game-body.ts";
 import { cardArt } from "./art.ts";
 import { localise, pageCacheKey } from "./language.ts";
 
@@ -30,8 +31,9 @@ export async function translated(response: Response, language: string): Promise<
 }
 
 /**
- * One game's page, with the title and art in the HTML for preview bots, which
- * do not run JavaScript. An unknown game still gets the shell; the client
+ * One game's page, with the title, art and achievements in the HTML for
+ * preview bots, which do not run JavaScript, and search engines, which may not
+ * fetch the API. An unknown game still gets the shell; the client
  * reports the problem in the reader's own language.
  *
  * Cached under a key this Worker owns, because the language is part of the
@@ -67,11 +69,13 @@ export async function gamePage(
       env.ASSETS.fetch(new URL("/index.html", url.origin)),
       cardArt(game?.headerImage),
     ]);
-    const rewrite = describeGame(localise(await shell.text(), language), game, page, art);
+    const body = game ? prerenderGame(await shell.text(), game) : { html: await shell.text(), missed: [] };
+    const rewrite = describeGame(localise(body.html, language), game, page, art);
 
     // A pattern that matches nothing changes nothing and says nothing.
-    if (rewrite.missed.length > 0) {
-      logFailure("preview rewrite found no match", `tags: ${rewrite.missed.join(", ")}`);
+    const missed = [...body.missed, ...rewrite.missed];
+    if (missed.length > 0) {
+      logFailure("game page rewrite found no match", `tags: ${missed.join(", ")}`);
     }
     described = rewrite.html;
   } catch (error) {

@@ -534,9 +534,13 @@ html {
   pointer-events: none;
 }
 
+/* A p on a game page, where the game's name is the h1, so it sets its own font. */
 .logo {
   margin: 0;
   color: var(--bright);
+  font-family: var(--pixel);
+  font-weight: 400;
+  line-height: 1.4;
   font-size: clamp(1.1rem, 5vw, 2.6rem);
   letter-spacing: 0.04em;
   text-shadow:
@@ -616,10 +620,17 @@ html {
   color: var(--bright);
 }
 
+/* A link dressed as the site's buttons, at least 44px tall for a fingertip. */
 .example {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.85rem;
   border: 3px solid var(--edge);
+  border-radius: var(--radius-sm);
   background: var(--bg);
   color: var(--bright);
+  text-decoration: none;
 }
 
 .example:hover,
@@ -1461,4 +1472,19 @@ html {
 
 .doc-page .footer a:hover {
   color: var(--accent);
+}
+
+/* -- more games ---------------------------------------------------------- */
+
+.more-games {
+  margin-top: 3rem;
+}
+
+.more-games ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  list-style: none;
 }
