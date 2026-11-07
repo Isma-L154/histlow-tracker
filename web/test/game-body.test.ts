@@ -57,6 +57,22 @@ describe("prerenderGame", () => {
     }
   });
 
+  it("starts the banner art downloading with the page", () => {
+    // The banner is the largest paint on a game page; left to the client, it
+    // waits for every module and for /api/game before it is even requested.
+    const html = rendered();
+    const art = /<img class="banner-art"[^>]*>/.exec(html)?.[0] ?? "";
+    expect(art).toContain('src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/367520/library_hero.jpg"');
+    expect(art).toContain('fetchpriority="high"');
+    expect(art).toContain('referrerpolicy="no-referrer"');
+  });
+
+  it("starts the logo downloading, still hidden until the client knows it exists", () => {
+    const logo = /<img class="banner-logo"[^>]*>/.exec(rendered())?.[0] ?? "";
+    expect(logo).toContain('src="https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/367520/logo.png"');
+    expect(logo).toMatch(/\shidden\b/);
+  });
+
   it("shows how many players hold each one", () => {
     expect(rendered()).toContain('<span class="held-value">62.1%</span>');
   });
