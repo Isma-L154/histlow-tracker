@@ -26,6 +26,17 @@
     <!-- A game page replaces this with the game's own description (src/preview.ts). -->
     <script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"HowToAchieve","url":"https://howtoachieve.cloudils.com/","inLanguage":["en","es"]},{"@type":"WebApplication","name":"HowToAchieve","url":"https://howtoachieve.cloudils.com/","description":"Every achievement in a Steam game, ordered by how rare it really is, and how each one is earned.","applicationCategory":"ReferenceApplication","operatingSystem":"Any","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}]}</script>
     <link rel="stylesheet" href="/styles.css" />
+    <!-- Found otherwise a round trip at a time: fonts once the stylesheet is parsed, modules three imports deep. -->
+    <link rel="preload" href="/fonts/press-start-2p.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/fonts/pixelify-sans.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="modulepreload" href="/nav.js" />
+    <link rel="modulepreload" href="/i18n.js" />
+    <link rel="modulepreload" href="/difficulty.js" />
+    <link rel="modulepreload" href="/tiers.js" />
+    <link rel="modulepreload" href="/art.js" />
+    <link rel="modulepreload" href="/world/engine.js" />
+    <link rel="modulepreload" href="/world/sprites.js" />
+    <link rel="modulepreload" href="/world/scenes.js" />
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2 28 9v14l-12 7L4 23V9z' fill='%23000000' stroke='%23f2ece2' stroke-width='2' stroke-linejoin='round'/%3E%3Cpath d='m11 16 3.5 3.5L22 12' fill='none' stroke='%23f2ece2' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"

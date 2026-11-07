@@ -11,7 +11,8 @@
 
 import { groupByTier, heldCells, lootTier } from "../public/tiers.js";
 import { t } from "../public/i18n.js";
-import { escapeText, put, type Rewrite } from "./html.ts";
+import { bannerSources } from "../public/art.js";
+import { escapeAttribute, escapeText, put, type Rewrite } from "./html.ts";
 import type { Achievement, GameAchievements } from "./steam.ts";
 
 function marked(tag: string, className: string, key: string): string {
@@ -60,6 +61,15 @@ export function prerenderGame(html: string, game: GameAchievements): Rewrite {
   put(out, "hero", /<section class="hero" id="hero">/, `<section class="hero" id="hero" hidden>`);
   put(out, "game", /<section class="game" id="game" hidden>/,
     `<section class="game" id="game" data-prerendered="${game.appId}">`);
+
+  // The banner is the largest paint, so it downloads with the page rather than
+  // after the client's modules and data. The client sets the same addresses and
+  // its fallbacks still run: reassigning a finished image fires load or error again.
+  const { hero, logo } = bannerSources(game.appId, null);
+  put(out, "banner art", /<img class="banner-art" id="banner-art"/,
+    `<img class="banner-art" id="banner-art" src="${escapeAttribute(hero[0]!)}" fetchpriority="high"`);
+  put(out, "banner logo", /<img class="banner-logo" id="banner-logo"/,
+    `<img class="banner-logo" id="banner-logo" src="${escapeAttribute(logo)}"`);
 
   // One h1 per page, and here it is the game. The logo keeps its class, so it looks the same.
   put(out, "logo", /<h1 class="logo">HowToAchieve<\/h1>/, `<p class="logo">HowToAchieve</p>`);

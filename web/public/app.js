@@ -78,6 +78,8 @@ const state = {
   steamId: readStoredSteamId(),
   profileName: readStoredName(),
   game: null,
+  // The pending or settled `/api/time` answer for `game`, kept so a redraw in another language reuses it.
+  completionTime: null,
   filter: "all",
   // Tiers opened past their first few rows, kept while the game is redrawn in another language.
   expanded: new Set(),
@@ -217,9 +219,12 @@ async function loadGame(appId) {
   showHero(false);
 
   const query = state.steamId ? `?steamid=${encodeURIComponent(state.steamId)}` : "";
+  // Asked for alongside the game, which it does not depend on, rather than after it.
+  const time = api(`/api/time/${appId}`).catch(() => null);
   try {
     const game = await api(`/api/game/${appId}${query}`, gameRequest.signal);
     state.game = game;
+    state.completionTime = time;
     state.filter = "all";
     state.expanded.clear();
     renderGame(game);
@@ -242,7 +247,7 @@ function renderGame(game) {
   renderProgress(game);
   renderDifficulty(game);
   renderLinks(game);
-  renderCompletionTime(game.appId);
+  renderCompletionTime(game.appId, state.completionTime);
 
   // Missing and unlocked only mean something once we know what the player already has.
   for (const tab of el.filters.querySelectorAll(".needs-profile")) tab.hidden = game.unlockedCount === null;
@@ -357,19 +362,12 @@ function renderDifficulty(game) {
  * Roughly how long the game takes, when IGDB knows. Fetched apart, so a slow
  * IGDB never holds up the list; a failure is logged by the Worker, not shown.
  */
-async function renderCompletionTime(appId) {
+async function renderCompletionTime(appId, request) {
   el.completionTime.hidden = true;
-  const requested = appId;
-
-  let data;
-  try {
-    data = await api(`/api/time/${appId}`);
-  } catch {
-    return;
-  }
+  const data = await request;
 
   // The reader may have moved on to another game while this was in flight.
-  if (state.game?.appId !== requested) return;
+  if (state.game?.appId !== appId) return;
 
   const seconds = data?.completionTime?.completely ?? data?.completionTime?.normally;
   if (!seconds) return;
@@ -500,29 +498,20 @@ function renderAchievement(appId, achievement) {
   detail.className = "achievement-detail";
   detail.hidden = true;
 
-  // An RPG dialogue: the black mage from the home page narrates the steps.
-  const panel = document.createElement("div");
-  panel.className = "howto window";
-  panel.hidden = true;
-  const speech = document.createElement("div");
-  speech.className = "howto-speech";
-  const speaker = document.createElement("p");
-  speaker.className = "howto-speaker pixel-label";
-  speaker.textContent = say("howto.narrator");
-  const body = document.createElement("div");
-  body.className = "howto-body";
-  speech.append(speaker, body);
-  panel.append(narratorPortrait(), speech);
-
   const reveal = document.createElement("button");
   reveal.type = "button";
   reveal.className = "howto-button";
   reveal.textContent = say("achievement.reveal");
   reveal.setAttribute("aria-expanded", "false");
-  reveal.addEventListener("click", () => toggleHowTo(reveal, panel, body, appId, achievement));
+  // Built on first use: a drawn portrait per row was half the cost of drawing a long list.
+  let howTo = null;
+  reveal.addEventListener("click", () => {
+    howTo ??= howToPanel(detail);
+    toggleHowTo(reveal, howTo.panel, howTo.body, appId, achievement);
+  });
 
   // A model call, so it stays a deliberate second action.
-  detail.append(reveal, panel);
+  detail.append(reveal);
 
   summary.addEventListener("click", () => {
     const open = summary.getAttribute("aria-expanded") === "true";
@@ -572,6 +561,24 @@ function heldMeter(percent, tier) {
 
   wrap.append(label, cells);
   return wrap;
+}
+
+/** An RPG dialogue, appended to the row: the black mage from the home page narrates the steps. */
+function howToPanel(detail) {
+  const panel = document.createElement("div");
+  panel.className = "howto window";
+  panel.hidden = true;
+  const speech = document.createElement("div");
+  speech.className = "howto-speech";
+  const speaker = document.createElement("p");
+  speaker.className = "howto-speaker pixel-label";
+  speaker.textContent = say("howto.narrator");
+  const body = document.createElement("div");
+  body.className = "howto-body";
+  speech.append(speaker, body);
+  panel.append(narratorPortrait(), speech);
+  detail.append(panel);
+  return { panel, body };
 }
 
 /** The black mage's head and shoulders, drawn at its own 16 pixels and scaled up by CSS. */

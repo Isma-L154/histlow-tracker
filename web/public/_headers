@@ -13,3 +13,11 @@
   Referrer-Policy: no-referrer
   Cross-Origin-Opener-Policy: same-origin
   Permissions-Policy: geolocation=(), camera=(), microphone=(), interest-cohort=()
+
+# The fonts never change, so a returning visitor need not revalidate them before
+# drawing text. Everything else keeps the default revalidation: the scripts are
+# not fingerprinted, and a cached old module next to a new one breaks the page.
+# A changed font must get a new file name.
+/fonts/*
+  ! Cache-Control
+  Cache-Control: public, max-age=31536000, immutable
